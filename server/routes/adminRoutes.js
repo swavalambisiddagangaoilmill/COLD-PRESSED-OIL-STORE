@@ -1,5 +1,6 @@
-﻿// Admin route registration.
+// Admin route registration.
 import { Router } from "express";
+import { body, param } from "express-validator";
 import { getStats, getUsers, removeUser, updateRole } from "../controllers/adminController.js";
 import { advanceMockShipmentHandler, getAllOrdersHandler, readyToShipHandler, updateOrderStatusHandler } from "../controllers/orderController.js";
 import { createCategoryHandler, deleteCategoryHandler, updateCategoryHandler } from "../controllers/categoryController.js";
@@ -12,11 +13,17 @@ import { userIdValidator, roleValidator } from "../validators/adminValidators.js
 import { orderIdValidator, updateOrderStatusValidator } from "../validators/orderValidators.js";
 import { categoryIdValidator, categoryValidator } from "../validators/categoryValidators.js";
 import { productIdValidator, productUpdateValidator, productValidator } from "../validators/productValidators.js";
+import * as adminPanelController from "../admin/controllers/adminController.js";
 
 const router = Router();
 router.use(protect, adminOnly);
 router.use(logAdminMutation);
 
+router.get("/gallery", adminPanelController.galleryImages);
+router.post("/gallery", [body("image").custom((value) => Boolean(value?.url || typeof value === "string")).withMessage("Gallery image is required.")], validate, adminPanelController.saveGalleryImage);
+router.put("/gallery/reorder", [body("ids").isArray().withMessage("Gallery order is required.")], validate, adminPanelController.reorderGalleryImages);
+router.put("/gallery/:id", [param("id").isMongoId().withMessage("Valid gallery image id is required.")], validate, adminPanelController.saveGalleryImage);
+router.delete("/gallery/:id", [param("id").isMongoId().withMessage("Valid gallery image id is required.")], validate, adminPanelController.deleteGalleryImage);
 router.get("/stats", getStats);
 router.get("/users", getUsers);
 router.put("/users/:id/role", userIdValidator, roleValidator, validate, updateRole);
@@ -33,5 +40,6 @@ router.put("/categories/:id", categoryIdValidator, categoryValidator, validate, 
 router.delete("/categories/:id", categoryIdValidator, validate, deleteCategoryHandler);
 
 export default router;
+
 
 

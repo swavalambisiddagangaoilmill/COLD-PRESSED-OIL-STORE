@@ -24,10 +24,10 @@ export const adminApi = {
   bulkApply: (payload) => apiRequest(`${base}/products/bulk-price/apply`, { method: "POST", body: JSON.stringify(payload) }),
   inventory: (id, payload) => apiRequest(`${base}/inventory/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
   categories: () => apiRequest(`${base}/categories`),
-  gallery: () => apiRequest(`${base}/gallery`),
-  saveGalleryImage: (payload, id) => apiRequest(id ? `${base}/gallery/${id}` : `${base}/gallery`, { method: id ? "PUT" : "POST", body: JSON.stringify(payload) }),
-  deleteGalleryImage: (id) => apiRequest(`${base}/gallery/${id}`, { method: "DELETE" }),
-  reorderGallery: (ids) => apiRequest(`${base}/gallery/reorder`, { method: "PUT", body: JSON.stringify({ ids }) }),
+  gallery: () => apiRequest("/admin/gallery"),
+  saveGalleryImage: (payload, id) => apiRequest(id ? `/admin/gallery/${id}` : "/admin/gallery", { method: id ? "PUT" : "POST", body: JSON.stringify(payload) }),
+  deleteGalleryImage: (id) => apiRequest(`/admin/gallery/${id}`, { method: "DELETE" }),
+  reorderGallery: (ids) => apiRequest("/admin/gallery/reorder", { method: "PUT", body: JSON.stringify({ ids }) }),
   saveCategory: (payload, id) => apiRequest(id ? `${base}/categories/${id}` : `${base}/categories`, { method: id ? "PUT" : "POST", body: JSON.stringify(payload) }),
   offers: () => apiRequest(`${base}/offers`),
   createOffer: (payload) => promotionChanged(apiRequest(`${base}/offers`, { method: "POST", body: JSON.stringify(payload) })),
@@ -63,5 +63,6 @@ export const adminApi = {
   settings: () => apiRequest(`${base}/settings`),
   saveSettings: (payload) => apiRequest(`${base}/settings`, { method: "PUT", body: JSON.stringify(payload) }),
 };
+
 
 
