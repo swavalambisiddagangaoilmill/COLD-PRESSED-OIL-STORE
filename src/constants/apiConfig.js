@@ -46,6 +46,8 @@ export const API_ENDPOINTS = {
   offers: "/content/offers",
   couponValidate: "/content/coupons/validate",
   faqs: "/content/faqs",
+  gallery: "/content/gallery",
   pageContent: (slug) => `/content/pages/${slug}`,
 };
+
 

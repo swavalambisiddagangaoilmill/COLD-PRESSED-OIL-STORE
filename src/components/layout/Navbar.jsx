@@ -1,4 +1,4 @@
-// Renders the Navbar layout element.
+﻿// Renders the Navbar layout element.
 import { Heart, Menu, Search, ShoppingBag, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -10,13 +10,14 @@ import DesktopMenu from "./DesktopMenu.jsx";
 import MobileDrawer from "./MobileDrawer.jsx";
 import basavannaLogo from "/basavanna.webp";
 import companyLogo from "/logo.webp";
+import drshivkumarswamiji from "/drshivkumarswamiji.webp";
 
 function IconLink({ to, label, children, badge, className = "", onClick }) {
   const content = (
     <>
       {children}
       {badge > 0 && (
-        <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-leaf px-1 text-[11px] font-bold text-white">
+        <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-brand px-1 text-[11px] font-bold text-white">
           {badge}
         </span>
       )}
@@ -102,16 +103,20 @@ export default function Navbar() {
         <div className="border-b border-ink/10">
           <div className="mx-auto grid h-[52px] max-w-screen-2xl grid-cols-[auto_1fr_auto] items-center px-4 sm:px-6 md:h-20 lg:px-8 xl:grid-cols-[1fr_auto_1fr] xl:h-[88px] xl:px-10 2xl:px-12">
             <div className="flex items-center justify-start">
-              <Link to="/" className="flex items-center gap-2 xl:hidden" aria-label="SS Oil Mill home">
+              <Link
+                to="/"
+                className="flex items-center gap-2 xl:hidden"
+                aria-label="Swavalambi Siddaganga Oil Mill home"
+              >
                 <img
                   src={companyLogo}
                   alt="Logo"
-                  className="h-10 w-10 shrink-0 rounded-full bg-white object-cover p-1 shadow-md ring-1 ring-amber-200 sm:h-12 sm:w-12"
+                  className="h-10 w-10 shrink-0 rounded-full bg-white object-cover p-1 shadow-md ring-1 ring-brand/25 sm:h-12 sm:w-12"
                 />
                 <img
                   src={basavannaLogo}
                   alt="Basavanna"
-                  className="h-10 w-10 shrink-0 rounded-full bg-white object-cover p-1 shadow-md ring-1 ring-amber-200 sm:h-12 sm:w-12"
+                  className="h-10 w-10 shrink-0 rounded-full bg-white object-cover p-1 shadow-md ring-1 ring-brand/25 sm:h-12 sm:w-12"
                 />
               </Link>
               <form
@@ -143,20 +148,26 @@ export default function Navbar() {
               <img
                 src={companyLogo}
                 alt="Logo"
-                className="ml-3 hidden h-16 w-16 shrink-0 rounded-full object-cover bg-white p-1 shadow-md ring-1 ring-amber-200 xl:block"
+                className="ml-3 hidden h-16 w-16 shrink-0 rounded-full object-cover bg-white p-1 shadow-md ring-1 ring-brand/25 xl:block"
               />
             </div>
             <Link
               to="/"
-              className="justify-self-center font-serif text-2xl font-semibold tracking-tight sm:text-3xl xl:block"
+              className="min-w-0 justify-self-center px-2 text-center font-serif text-[13px] font-semibold leading-tight tracking-tight sm:text-2xl md:text-3xl xl:block"
             >
-              SS Oil Mill
+              Swavalambi Siddaganga Oil Mill
+              {/* ಸ್ವಾವಲಂಬಿ ಸಿದ್ದಗಂಗಾ ಆಯಿಲ್ ಮಿಲ್ */}
             </Link>
             <div className="flex items-center justify-end gap-3">
               <img
                 src={basavannaLogo}
                 alt="Basavanna"
-                className="ml-3 hidden h-16 w-16 shrink-0 rounded-full object-cover bg-white p-1 shadow-md ring-1 ring-amber-200 xl:block"
+                className="ml-3 hidden h-16 w-16 shrink-0 rounded-full object-cover bg-white p-1 shadow-md ring-1 ring-brand/25 xl:block"
+              />
+              <img
+                src={drshivkumarswamiji}
+                alt="drshivkumarswamiji"
+                className="ml-3 hidden h-16 w-16 shrink-0 rounded-full object-cover bg-white p-1 shadow-md ring-1 ring-brand/25 xl:block"
               />
               <IconLink
                 label="Wishlist"
@@ -212,4 +223,7 @@ export default function Navbar() {
     </>
   );
 }
+
+
+
 

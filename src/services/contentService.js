@@ -1,4 +1,6 @@
-﻿// Serves page content for editorial pages.
+// Serves page content for editorial pages and dynamic public content.
+import { apiRequest } from "../api/apiClient.js";
+import { API_ENDPOINTS } from "../constants/apiConfig.js";
 import {
   brandValuesDetailed,
   faqGroups,
@@ -21,3 +23,9 @@ export function getStoryContent() {
 export function getProcessContent() {
   return { brandValues, processStepsDetailed, qualityStandards, sustainabilityPoints };
 }
+
+export async function fetchGalleryImages() {
+  const response = await apiRequest(API_ENDPOINTS.gallery);
+  return response?.items || response?.data?.items || [];
+}
+

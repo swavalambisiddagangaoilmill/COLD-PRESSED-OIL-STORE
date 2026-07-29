@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import Breadcrumb from "../components/common/Breadcrumb.jsx";
 import CinematicHero, { DEMO_HERO_VIDEO } from "../components/common/CinematicHero.jsx";
+import Gallery from "../components/features/home/Gallery.jsx";
 import PageCta from "../components/common/PageCta.jsx";
 import Button from "../components/ui/Button.jsx";
 import Container from "../components/ui/Container.jsx";
@@ -108,7 +109,9 @@ export default function OurStory() {
         </Container>
       </section>
 
+      <Gallery />
       <PageCta eyebrow="Bring it home" title="Start with oils that make daily cooking feel considered." text="Explore the Swavalambi Siddaganga Oil Mill range and build a calmer, cleaner pantry around cold pressed staples." />
     </>
   );
 }
+

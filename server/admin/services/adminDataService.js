@@ -2,6 +2,7 @@
 import AdminAuditLog from "../../models/AdminAuditLog.js";
 import Category from "../../models/Category.js";
 import ContactMessage from "../../models/ContactMessage.js";
+import GalleryImage from "../../models/GalleryImage.js";
 import Coupon from "../../models/Coupon.js";
 import Offer from "../../models/Offer.js";
 import Order from "../../models/Order.js";
@@ -10,6 +11,7 @@ import StoreSettings from "../../models/StoreSettings.js";
 import User from "../../models/User.js";
 import { createReadyToShipShipment, advanceMockShipment } from "../../services/shiprocketService.js";
 import { createAdminNotification, createInventoryNotifications } from "../../services/adminNotificationService.js";
+import { deleteImage } from "../../services/uploadService.js";
 import { ApiError } from "../../utils/ApiError.js";
 import { slugify } from "../../utils/slugify.js";
 
@@ -162,6 +164,46 @@ export async function updateInventory(id, { mode, quantity }) {
   return product;
 }
 
+
+function normalizeGalleryImage(payload) {
+  const source = payload.image || {};
+  const url = typeof source === "string" ? source : source.url || payload.url;
+  if (!url) throw new ApiError("Gallery image is required.", 400);
+  return { url, publicId: source.publicId || source.public_id || payload.publicId || "", provider: source.provider || payload.provider || "cloudinary" };
+}
+
+export async function listGalleryImages() {
+  return GalleryImage.find().sort({ sortOrder: 1, createdAt: 1 });
+}
+
+export async function saveGalleryImage(payload, id) {
+  const data = { title: payload.title || "", description: payload.description || "", isVisible: payload.isVisible !== false };
+  if (payload.image || payload.url) data.image = normalizeGalleryImage(payload);
+  if (payload.sortOrder !== undefined) data.sortOrder = Number(payload.sortOrder) || 0;
+  if (id) {
+    const image = await GalleryImage.findByIdAndUpdate(id, data, { new: true, runValidators: true });
+    if (!image) throw new ApiError("Gallery image not found.", 404);
+    return image;
+  }
+  if (data.sortOrder === undefined) {
+    const last = await GalleryImage.findOne().sort({ sortOrder: -1 }).select("sortOrder").lean();
+    data.sortOrder = (last?.sortOrder || 0) + 1;
+  }
+  return GalleryImage.create(data);
+}
+
+export async function deleteGalleryImage(id) {
+  const image = await GalleryImage.findByIdAndDelete(id);
+  if (!image) throw new ApiError("Gallery image not found.", 404);
+  if (image.image?.publicId) await deleteImage(image.image.publicId);
+  return image;
+}
+
+export async function reorderGalleryImages(ids = []) {
+  if (!Array.isArray(ids)) throw new ApiError("Gallery order is required.", 400);
+  await GalleryImage.bulkWrite(ids.map((id, index) => ({ updateOne: { filter: { _id: id }, update: { sortOrder: index + 1 } } })));
+  return listGalleryImages();
+}
 export async function listCategories() { return Category.find().sort({ name: 1 }); }
 export async function saveCategory(payload, id) { const data = { name: payload.name, slug: payload.slug || slugify(payload.name), description: payload.description, image: payload.image, isActive: payload.isActive !== false }; return id ? Category.findByIdAndUpdate(id, data, { new: true, runValidators: true }) : Category.create(data); }
 
@@ -200,7 +242,7 @@ export async function updateAdminRole(id, adminRole) { return User.findByIdAndUp
 export async function globalAdminSearch(term, user, hasPermission) {
   const q = String(term || "").trim();
   if (q.length < 2) return { pages: [], products: [], orders: [], customers: [], categories: [] };
-  const pageMap = ["Dashboard", "Orders", "Products", "Inventory", "Categories", "Offers", "Coupons", "Shipping", "Customers", "Payments", "Messages", "Reports", "Admin Users", "Audit Logs", "Settings"];
+  const pageMap = ["Dashboard", "Orders", "Products", "Inventory", "Categories", "Offers", "Coupons", "Shipping", "Customers", "Payments", "Messages", "Gallery", "Reports", "Admin Users", "Audit Logs", "Settings"];
   const pages = pageMap.filter((label) => label.toLowerCase().includes(q.toLowerCase())).slice(0, 5).map((label) => ({ label, path: `/admin/${label.toLowerCase().replaceAll(" ", "-").replace("dashboard", "")}`.replace(/\/$/, "") || "/admin" }));
   const [products, categories, orders, customers] = await Promise.all([
     hasPermission(user, "products.read") ? Product.find({ $or: [{ title: new RegExp(q, "i") }, { sku: new RegExp(q, "i") }] }).select("title sku slug").limit(5) : [],
@@ -210,6 +252,10 @@ export async function globalAdminSearch(term, user, hasPermission) {
   ]);
   return { pages, products, categories, orders, customers };
 }
+
+
+
+
 
 
 

@@ -139,3 +139,34 @@ img {
   background: rgb(43 34 28 / 0.18);
   border-radius: 999px;
 }
+
+.gallery-marquee-track {
+  animation: gallery-marquee 64s linear infinite;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .gallery-marquee:hover .gallery-marquee-track {
+    animation-play-state: paused;
+  }
+
+  .gallery-card:hover {
+    box-shadow: 0 24px 70px rgb(43 34 28 / 0.16);
+  }
+
+  .gallery-card:hover .gallery-card-image {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes gallery-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+

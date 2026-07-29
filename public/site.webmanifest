@@ -1,6 +1,6 @@
-{
+﻿{
   "name": "Swavalambi Siddaganga Oil Mill",
-  "short_name": "SS Oil Mill",
+  "short_name": "Swavalambi Siddaganga Oil Mill",
   "description": "Cold pressed edible oils from Tumakuru. Work is Worship.",
   "start_url": "/",
   "display": "standalone",
@@ -8,3 +8,4 @@
   "theme_color": "#55712f",
   "icons": [{ "src": "/logo.webp", "sizes": "512x512", "type": "image/webp" }]
 }
+

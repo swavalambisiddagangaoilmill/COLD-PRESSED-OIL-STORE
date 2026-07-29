@@ -19,6 +19,10 @@ export const archiveProduct = asyncHandler(async (req, res) => { const product =
 export const bulkPricePreview = asyncHandler(async (req, res) => sendSuccess(res, 200, "Bulk preview generated", await admin.bulkPricePreview(req.body)));
 export const bulkPriceApply = asyncHandler(async (req, res) => { const result = await admin.bulkPriceApply(req.body); await writeAuditLog(req, { action: "product.bulk_price", resourceType: "Product", summary: `${result.updated} products updated`, after: req.body }); sendSuccess(res, 200, "Bulk prices updated", result); });
 export const inventoryUpdate = asyncHandler(async (req, res) => { const product = await admin.updateInventory(req.params.id, req.body); await writeAuditLog(req, { action: "inventory.update", resourceType: "Product", resourceId: product._id, summary: `${product.title} stock is ${product.stock}` }); sendSuccess(res, 200, "Inventory updated", { product }); });
+export const galleryImages = asyncHandler(async (_req, res) => sendSuccess(res, 200, "Gallery fetched", { items: await admin.listGalleryImages() }));
+export const saveGalleryImage = asyncHandler(async (req, res) => { const image = await admin.saveGalleryImage(req.body, req.params.id); await writeAuditLog(req, { action: req.params.id ? "gallery.update" : "gallery.create", resourceType: "GalleryImage", resourceId: image._id, summary: `${image.title || "Gallery image"} saved` }); sendSuccess(res, req.params.id ? 200 : 201, "Gallery image saved", { image }); });
+export const deleteGalleryImage = asyncHandler(async (req, res) => { const image = await admin.deleteGalleryImage(req.params.id); await writeAuditLog(req, { action: "gallery.delete", resourceType: "GalleryImage", resourceId: req.params.id, summary: `${image.title || "Gallery image"} deleted` }); sendSuccess(res, 200, "Gallery image deleted", { image }); });
+export const reorderGalleryImages = asyncHandler(async (req, res) => { const items = await admin.reorderGalleryImages(req.body.ids || []); await writeAuditLog(req, { action: "gallery.reorder", resourceType: "GalleryImage", summary: "Gallery images reordered" }); sendSuccess(res, 200, "Gallery reordered", { items }); });
 export const categories = asyncHandler(async (_req, res) => sendSuccess(res, 200, "Categories fetched", { items: await admin.listCategories() }));
 export const saveCategory = asyncHandler(async (req, res) => { const category = await admin.saveCategory(req.body, req.params.id); await writeAuditLog(req, { action: "category.save", resourceType: "Category", resourceId: category._id, summary: `${category.name} saved` }); sendSuccess(res, 200, "Category saved", { category }); });
 export const offers = asyncHandler(async (_req, res) => sendSuccess(res, 200, "Offers fetched", { items: await admin.listOffers() }));
@@ -102,5 +106,6 @@ export const addRestrictionNoteHandler = asyncHandler(async (req, res) => {
   await writeAuditLog(req, { action: "restriction.note", resourceType: "Restriction", resourceId: req.params.id, summary: `Restriction note added by ${req.user.email}`, after: { reason: req.body.note } });
   sendSuccess(res, 200, "Restriction note saved", { restriction });
 });
+
 
 

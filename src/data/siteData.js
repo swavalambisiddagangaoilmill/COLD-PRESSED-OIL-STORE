@@ -140,3 +140,4 @@ export const brandValues = [
   { icon: ShieldCheck, label: "Purity checked" },
 ];
 
+

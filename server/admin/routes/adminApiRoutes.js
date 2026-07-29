@@ -40,6 +40,11 @@ router.put("/inventory/:id", requireAdminPermission("inventory.update"), control
 router.get("/categories", requireAdminPermission("categories.read"), controller.categories);
 router.post("/categories", requireAdminPermission("categories.manage"), controller.saveCategory);
 router.put("/categories/:id", requireAdminPermission("categories.manage"), controller.saveCategory);
+router.get("/gallery", requireAdminPermission("gallery.read"), controller.galleryImages);
+router.post("/gallery", requireAdminPermission("gallery.manage"), [body("image").custom((value) => Boolean(value?.url || typeof value === "string")).withMessage("Gallery image is required.")], validate, controller.saveGalleryImage);
+router.put("/gallery/reorder", requireAdminPermission("gallery.manage"), [body("ids").isArray().withMessage("Gallery order is required.")], validate, controller.reorderGalleryImages);
+router.put("/gallery/:id", requireAdminPermission("gallery.manage"), [param("id").isMongoId().withMessage("Valid gallery image id is required.")], validate, controller.saveGalleryImage);
+router.delete("/gallery/:id", requireAdminPermission("gallery.manage"), [param("id").isMongoId().withMessage("Valid gallery image id is required.")], validate, controller.deleteGalleryImage);
 router.get("/offers", requireAdminPermission("offers.read"), controller.offers);
 router.post("/offers", requireAdminPermission("offers.manage"), controller.createOffer);
 router.put("/offers/:id", requireAdminPermission("offers.manage"), controller.updateOffer);
@@ -66,6 +71,9 @@ router.get("/settings", requireAdminPermission("settings.read"), controller.sett
 router.put("/settings", requireAdminPermission("settings.manage"), controller.saveSettings);
 
 export default router;
+
+
+
 
 
 

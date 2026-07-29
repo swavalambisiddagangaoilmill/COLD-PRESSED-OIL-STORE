@@ -7,7 +7,7 @@ const rolePermissions = {
   OWNER: ["*"],
   ORDER_MANAGER: ["dashboard.read", "notifications.read", "sessions.read", "orders.read", "orders.update", "orders.ship", "shipping.read", "shipping.manage", "customers.read", "payments.read", "reports.read"],
   PRODUCT_MANAGER: ["dashboard.read", "notifications.read", "sessions.read", "products.read", "products.create", "products.update", "products.archive", "inventory.read", "inventory.update", "categories.read", "categories.manage", "reports.read"],
-  CONTENT_MANAGER: ["dashboard.read", "notifications.read", "sessions.read", "messages.read", "messages.manage"],
+  CONTENT_MANAGER: ["dashboard.read", "notifications.read", "sessions.read", "messages.read", "messages.manage", "gallery.read", "gallery.manage"],
 };
 
 export function getAdminRole(user) {
@@ -33,5 +33,6 @@ export function requireAdminPermission(permission) {
     return next();
   };
 }
+
 
 

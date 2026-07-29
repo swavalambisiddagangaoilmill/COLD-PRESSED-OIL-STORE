@@ -2,6 +2,7 @@
 import ContactMessage from "../models/ContactMessage.js";
 import NewsletterSubscriber from "../models/NewsletterSubscriber.js";
 import SiteContent from "../models/SiteContent.js";
+import GalleryImage from "../models/GalleryImage.js";
 import Offer from "../models/Offer.js";
 import { createAdminNotification } from "../services/adminNotificationService.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -50,7 +51,16 @@ export const getFaqs = asyncHandler(async (_req, res) => {
   sendSuccess(res, 200, "FAQs fetched successfully", { groups: faqs });
 });
 
+export const getGalleryImages = asyncHandler(async (_req, res) => {
+  const images = await GalleryImage.find({ isVisible: true }).sort({ sortOrder: 1, createdAt: 1 }).lean();
+  const items = images.map((item) => ({ id: item._id, _id: item._id, title: item.title, description: item.description, image: item.image?.url, alt: item.title || item.description || "Swavalambi Siddaganga Oil Mill gallery image", sortOrder: item.sortOrder }));
+  sendSuccess(res, 200, "Gallery fetched successfully", { items });
+});
+
 export const getPageContent = asyncHandler(async (req, res) => {
   const content = await SiteContent.findOne({ key: req.params.slug });
   sendSuccess(res, 200, "Page content fetched successfully", { slug: req.params.slug, sections: content?.value?.sections || [], value: content?.value || null });
 });
+
+
+
