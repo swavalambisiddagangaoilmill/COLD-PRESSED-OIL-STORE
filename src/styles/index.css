@@ -124,7 +124,7 @@ img {
 
 .admin-notification-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgb(43 34 28 / 0.18) transparent;
+  scrollbar-color: rgb(64 46 32 / 0.18) transparent;
 }
 
 .admin-notification-scroll::-webkit-scrollbar {
@@ -136,7 +136,7 @@ img {
 }
 
 .admin-notification-scroll::-webkit-scrollbar-thumb {
-  background: rgb(43 34 28 / 0.18);
+  background: rgb(64 46 32 / 0.18);
   border-radius: 999px;
 }
 
@@ -152,7 +152,7 @@ img {
   }
 
   .gallery-card:hover {
-    box-shadow: 0 24px 70px rgb(43 34 28 / 0.16);
+    box-shadow: 0 24px 70px rgb(64 46 32 / 0.16);
   }
 
   .gallery-card:hover .gallery-card-image {
@@ -168,5 +168,6 @@ img {
     transform: translate3d(-50%, 0, 0);
   }
 }
+
 
 

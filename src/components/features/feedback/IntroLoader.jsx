@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 const EASE_OUT = [0.16, 1, 0.3, 1];
@@ -15,8 +15,8 @@ const splashImages = [
 function Background() {
   return (
     <div className="absolute inset-0 bg-cream">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,248,239,0.98)_0%,rgba(248,242,230,0.96)_58%,rgba(230,215,185,0.82)_100%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(255,153,51,0.14)_0%,rgba(255,153,51,0.05)_36%,transparent_70%)]" />
+      <div className="absolute inset-0 bg-gradient-to-br from-brand-background via-cream to-brand-section" />
+      <div className="absolute left-1/2 top-1/2 h-[44rem] w-[44rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-accent/10 blur-3xl" />
     </div>
   );
 }
@@ -53,7 +53,7 @@ function IntroScreen({ reduced }) {
       >
         <p className="font-serif text-4xl font-semibold leading-tight text-ink sm:text-5xl lg:text-6xl">
           Swavalambi Siddaganga Oil Mill
-          {/* ಸ್ವಾವಲಂಬಿ ಸಿದ್ದಗಂಗಾ ಆಯಿಲ್ ಮಿಲ್ */}
+          {/* ????????? ????????? ????? ???? */}
         </p>
         <p className="mt-4 text-xs font-bold uppercase tracking-[0.34em] text-brand sm:text-sm">WORK IS WORSHIP</p>
         <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.3em] text-ink/45 sm:text-xs">ESTD. 2024</p>
@@ -123,3 +123,4 @@ export default function IntroLoader({ children }) {
     </>
   );
 }
+

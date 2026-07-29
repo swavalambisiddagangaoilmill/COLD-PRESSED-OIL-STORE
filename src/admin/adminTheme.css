@@ -1,17 +1,16 @@
-﻿/* Admin-only theme tokens. Change --admin-primary here to update the admin panel brand colour. */
+/* Admin-only theme tokens. Mirrors the Kesari brand palette where appropriate. */
 :root {
-  --admin-primary: #4f6b2f;
-  --admin-primary-hover: #3f5526;
-  --admin-primary-soft: rgba(79, 107, 47, 0.12);
+  --admin-primary: #FF9933;
+  --admin-primary-hover: #E67E22;
+  --admin-primary-soft: rgba(255, 153, 51, 0.14);
   --admin-primary-foreground: #ffffff;
-  --admin-bg: #f7f2e8;
+  --admin-bg: #FFF4E6;
   --admin-surface: #ffffff;
-  --admin-border: rgba(45, 32, 25, 0.1);
-  --admin-text: #2d2019;
-  --admin-muted: rgba(45, 32, 25, 0.58);
-  --admin-success: #4f6b2f;
-  --admin-warning: #a2632f;
-  --admin-error: #b84a3a;
-  --admin-info: #426d8f;
+  --admin-border: rgba(64, 46, 32, 0.12);
+  --admin-text: #402E20;
+  --admin-muted: rgba(64, 46, 32, 0.58);
+  --admin-success: #E67E22;
+  --admin-warning: #C96F1F;
+  --admin-error: #B23A2B;
+  --admin-info: #9C6B30;
 }
-

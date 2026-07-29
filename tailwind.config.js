@@ -1,21 +1,26 @@
-﻿/** @type {import('tailwindcss').Config} */
+/** @type {import('tailwindcss').Config} */
 export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     extend: {
       colors: {
-        // Global brand accent color. Replace this value later to update brand highlights site-wide.
+        // Swavalambi Siddaganga Oil Mill Theme
+        // Change these values here to update the entire website theme.
         brand: {
           DEFAULT: "#FF9933",
+          accent: "#FF9933",
+          background: "#FFF4E6",
+          section: "#FFE8CC",
+          hover: "#E67E22",
         },
-        cream: "#F8F2E6",
-        linen: "#E6D7B9",
+        cream: "#FFF4E6",
+        linen: "#FFE8CC",
+        surface: "#FFF9F2",
+        footer: "#FFE8CC",
         ink: "#402E20",
-        clay: "#C97C2B",
-        leaf: "#556B2F",
+        clay: "#FF9933",
+        leaf: "#E67E22",
         olive: "#9C6B30",
-        surface: "#FFF8EF",
-        footer: "#E9DEC8",
         danger: "#B23A2B",
         white: "#FFFFFF",
         transparent: "transparent",
@@ -25,7 +30,7 @@ export default {
         serif: ["Cormorant Garamond", "Georgia", "serif"],
       },
       boxShadow: {
-        soft: "0 24px 70px rgba(36, 31, 23, 0.10)",
+        soft: "0 24px 70px rgba(64, 46, 32, 0.11)",
       },
     },
   },

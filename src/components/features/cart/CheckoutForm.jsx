@@ -178,7 +178,7 @@ export default function CheckoutForm() {
         description: "Cold pressed oil order",
         order_id: payment.id,
         prefill: orderPayload.customer,
-        theme: { color: "#55712f" },
+        theme: { color: "#FF9933" },
         handler: async (response) => {
           if (settled) return;
           settled = true;
@@ -301,6 +301,7 @@ export default function CheckoutForm() {
     </form>
   );
 }
+
 
 
 
