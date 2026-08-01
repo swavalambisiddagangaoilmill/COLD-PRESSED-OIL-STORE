@@ -1,4 +1,4 @@
-﻿// Renders the homepage Testimonials section.
+// Renders the homepage Testimonials section.
 import { testimonials } from "../../../data/siteData.js";
 import TestimonialCarousel from "../../common/TestimonialCarousel.jsx";
 import Container from "../../ui/Container.jsx";

@@ -93,7 +93,7 @@ export async function listProducts(query) {
 }
 
 export async function saveProduct(payload, id) {
-  const allowed = ["title", "description", "sku", "price", "discountPrice", "stock", "category", "images", "featured", "bestSeller", "newArrival", "codEnabled", "onlinePaymentEnabled", "returnEligible", "exchangeEligible", "isActive", "weight", "dimensions"];
+  const allowed = ["title", "description", "benefits", "sku", "price", "discountPrice", "stock", "category", "images", "featured", "bestSeller", "newArrival", "codEnabled", "onlinePaymentEnabled", "returnEligible", "exchangeEligible", "isActive", "weight", "dimensions"];
   const data = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
   if (data.title) data.slug = slugify(data.title);
   return id ? Product.findByIdAndUpdate(id, data, { new: true, runValidators: true }) : Product.create(data);
@@ -252,6 +252,7 @@ export async function globalAdminSearch(term, user, hasPermission) {
   ]);
   return { pages, products, categories, orders, customers };
 }
+
 
 
 

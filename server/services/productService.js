@@ -169,3 +169,4 @@ export async function deleteProduct(id) {
   if (!product) throw new ApiError("Product not found.", 404);
   return product;
 }
+

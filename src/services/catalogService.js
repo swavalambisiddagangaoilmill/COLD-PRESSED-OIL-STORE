@@ -83,3 +83,4 @@ export async function getEssentialOilProducts() {
   return [...data.products, ...fallback.products.filter((item) => !data.products.some((existing) => existing.id === item.id))].slice(0, 5);
 }
 
+

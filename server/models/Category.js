@@ -1,4 +1,4 @@
-﻿// Product category model.
+// Product category model.
 import mongoose from "mongoose";
 
 const categorySchema = new mongoose.Schema(
@@ -13,4 +13,5 @@ const categorySchema = new mongoose.Schema(
 );
 
 export default mongoose.model("Category", categorySchema);
+
 

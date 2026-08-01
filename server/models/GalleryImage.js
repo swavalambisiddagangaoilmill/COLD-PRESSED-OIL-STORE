@@ -19,3 +19,4 @@ const galleryImageSchema = new mongoose.Schema(
 galleryImageSchema.index({ isVisible: 1, sortOrder: 1 });
 
 export default mongoose.model("GalleryImage", galleryImageSchema);
+

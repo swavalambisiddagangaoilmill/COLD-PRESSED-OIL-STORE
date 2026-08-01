@@ -6,6 +6,7 @@ const productSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true },
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
     description: { type: String, required: true, trim: true },
+    benefits: [{ type: String, trim: true }],
     sku: { type: String, trim: true, uppercase: true },
     tags: [{ type: String, trim: true, lowercase: true }],
     price: { type: Number, required: true, min: 0 },
@@ -36,4 +37,5 @@ productSchema.index({ newArrival: 1, isActive: 1, createdAt: -1 });
 productSchema.index({ stock: 1, isActive: 1 });
 
 export default mongoose.model("Product", productSchema);
+
 

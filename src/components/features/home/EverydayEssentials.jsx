@@ -1,4 +1,4 @@
-﻿// Renders the homepage EverydayEssentials section.
+// Renders the homepage EverydayEssentials section.
 import { useEffect, useState } from "react";
 import ProductCard from "../product/ProductCard.jsx";
 import Container from "../../ui/Container.jsx";

@@ -1,4 +1,4 @@
-﻿// Renders the Navbar layout element.
+// Renders the Navbar layout element.
 import { Heart, Menu, Search, ShoppingBag, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -141,7 +141,7 @@ export default function Navbar() {
                   }
                   onChange={handleSearchChange}
                   placeholder="Search oils"
-                  aria-label="Search products"
+                  aria-label="Search oils"
                   className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-ink/70 placeholder:text-ink/50 outline-none"
                 />
               </form>
@@ -223,6 +223,7 @@ export default function Navbar() {
     </>
   );
 }
+
 
 
 

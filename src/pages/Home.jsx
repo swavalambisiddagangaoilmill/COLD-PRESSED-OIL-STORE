@@ -18,12 +18,12 @@ export default function Home() {
     <>
       <h1 className="sr-only">Swavalambi Siddaganga Oil Mill cold pressed edible oils</h1>
       <Hero />
+      <EverydayEssentials />
+      <FeaturedProducts />
       <Container className="pt-6"><OfferBanner /></Container>
       <BrandStrip />
-      <EverydayEssentials />
       <StorySection />
       <ExtractionProcess />
-      <FeaturedProducts />
       <section className="section-padding bg-surface">
         <Container className="grid items-center gap-8 lg:grid-cols-[0.9fr_1.1fr]">
           <div>
@@ -56,6 +56,3 @@ export default function Home() {
     </>
   );
 }
-
-
-

@@ -1,4 +1,4 @@
-﻿// Renders ProductCard for product catalog surfaces.
+// Renders ProductCard for product catalog surfaces.
 import { Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -59,6 +59,3 @@ export default function ProductCard({ product, variant = "catalog" }) {
   if (variant === "premium") return <PremiumProductCard product={product} />;
   return <CatalogProductCard product={product} />;
 }
-
-
-
