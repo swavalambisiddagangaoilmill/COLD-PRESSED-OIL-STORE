@@ -15,7 +15,6 @@ import { assignRequestId, preventParameterPollution, sanitizeRequest } from "./m
 import { restrictionGuard } from "./middleware/restrictionGuard.js";
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
-import adminCarouselRoutes from "./routes/adminCarouselRoutes.js";
 import adminApiRoutes from "./admin/routes/adminApiRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
@@ -78,7 +77,6 @@ app.get("/api/health", (_req, res) => res.status(200).json({ success: true, mess
 app.get("/api/service-status", (_req, res) => res.status(200).json({ success: true, message: "Service status fetched", data: getServiceStatus() }));
 app.get("/api/carousel", getActiveCarousel);
 app.use("/api/auth", authRoutes);
-app.use("/api/admin/carousel", adminCarouselRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/admin-panel", adminApiRoutes);
 app.use("/api/ai", aiRoutes);

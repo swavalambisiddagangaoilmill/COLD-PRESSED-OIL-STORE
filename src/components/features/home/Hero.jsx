@@ -1,24 +1,17 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { getActiveCarousel } from "../../../services/carouselService.js";
+
+const STATIC_SLIDES = [
+  { _id: "static-carousel-1", imageUrl: "/carousel/image1.png" },
+  { _id: "static-carousel-2", imageUrl: "/carousel/image2.png" },
+  { _id: "static-carousel-3", imageUrl: "/carousel/image3.jpeg" },
+  { _id: "static-carousel-4", imageUrl: "/carousel/image4.jpeg" },
+];
 
 export default function Hero() {
-  const [slides, setSlides] = useState([]);
+  const [slides, setSlides] = useState(STATIC_SLIDES);
   const [active, setActive] = useState(0);
   const [touchStart, setTouchStart] = useState(null);
-
-  useEffect(() => {
-    let mounted = true;
-    const load = () => getActiveCarousel().then((items) => {
-      if (!mounted) return;
-      setSlides(items);
-      setActive((current) => Math.min(current, Math.max(items.length - 1, 0)));
-    }).catch(() => mounted && setSlides([]));
-    load();
-    const timer = window.setInterval(load, 30000);
-    window.addEventListener("ss-oil-mill-promotions-changed", load);
-    return () => { mounted = false; window.clearInterval(timer); window.removeEventListener("ss-oil-mill-promotions-changed", load); };
-  }, []);
 
   useEffect(() => {
     if (slides.length < 2) return undefined;
