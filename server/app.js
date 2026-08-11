@@ -19,7 +19,6 @@ import adminCarouselRoutes from "./routes/adminCarouselRoutes.js";
 import adminApiRoutes from "./admin/routes/adminApiRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
-import carouselRoutes from "./routes/carouselRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
 import contentRoutes from "./routes/contentRoutes.js";
@@ -31,6 +30,7 @@ import shiprocketRoutes from "./routes/shiprocketRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import wishlistRoutes from "./routes/wishlistRoutes.js";
 import { razorpayWebhook } from "./controllers/paymentController.js";
+import { getActiveCarousel } from "./controllers/carouselController.js";
 import { getServiceStatus } from "./services/serviceStatusService.js";
 
 const app = express();
@@ -76,6 +76,7 @@ app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 150, standardHeaders: true,
 
 app.get("/api/health", (_req, res) => res.status(200).json({ success: true, message: "API is healthy", data: { uptime: process.uptime(), serviceStatus: getServiceStatus() } }));
 app.get("/api/service-status", (_req, res) => res.status(200).json({ success: true, message: "Service status fetched", data: getServiceStatus() }));
+app.get("/api/carousel", getActiveCarousel);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin/carousel", adminCarouselRoutes);
 app.use("/api/admin", adminRoutes);
@@ -85,7 +86,6 @@ app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/cart", cartRoutes);
-app.use("/api/carousel", carouselRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/upload", uploadRoutes);
