@@ -6,6 +6,7 @@ import ErrorBoundary from "./components/features/feedback/ErrorBoundary.jsx";
 import GuestSessionNotice from "./components/features/feedback/GuestSessionNotice.jsx";
 import NetworkStatusBanner from "./components/features/feedback/NetworkStatusBanner.jsx";
 import RouteTransitionLoader from "./components/features/feedback/RouteTransitionLoader.jsx";
+import InstallAppPrompt from "./components/features/feedback/InstallAppPrompt.jsx";
 import ScrollToTop from "./components/features/feedback/ScrollToTop.jsx";
 import SecurityAwareness from "./components/features/feedback/SecurityAwareness.jsx";
 import ChatWidget from "./components/features/widgets/ChatWidget.jsx";
@@ -39,6 +40,7 @@ export default function App() {
         </main>
         {!authPage && !adminPage && <Footer />}
         <GuestSessionNotice />
+        {!authPage && !adminPage && <InstallAppPrompt />}
         {!adminPage && <CookieConsentBanner />}
         {!authPage && !adminPage && <WishlistWidget />}
         {!authPage && !adminPage && <ChatWidget />}
@@ -46,6 +48,5 @@ export default function App() {
     </div>
   );
 }
-
 
 
