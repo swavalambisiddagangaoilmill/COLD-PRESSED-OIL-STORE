@@ -38,7 +38,7 @@ export default function Hero() {
       setTouchStart(null);
     }}>
       {slides.map((slide, index) => (
-        <motion.img key={slide._id} src={slide.imageUrl} alt={slide.altText || slide.title || "Homepage promotion"} loading={index === 0 ? "eager" : "lazy"} draggable="false" className="absolute inset-0 h-full w-full select-none object-contain" initial={false} animate={{ opacity: index === active ? 1 : 0 }} transition={{ duration: 0.55, ease: "easeOut" }} />
+        <motion.img key={slide._id} src={slide.imageUrl} alt="" loading={index === 0 ? "eager" : "lazy"} draggable="false" onError={() => { setSlides((current) => current.filter((item) => item._id !== slide._id)); setActive(0); }} className="absolute inset-0 h-full w-full select-none object-contain" initial={false} animate={{ opacity: index === active ? 1 : 0 }} transition={{ duration: 0.55, ease: "easeOut" }} />
       ))}
       {slides.length > 1 && <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 bg-white/75 p-1.5 backdrop-blur-sm">
         {slides.map((slide, index) => <button key={slide._id} type="button" aria-label={`Show promotion ${index + 1}`} onClick={() => goTo(index)} className={`h-1 w-6 transition-colors ${index === active ? "bg-brand" : "bg-ink/20"}`} />)}
