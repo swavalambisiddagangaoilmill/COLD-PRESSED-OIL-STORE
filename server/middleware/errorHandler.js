@@ -27,23 +27,6 @@ export function errorHandler(error, req, res, next) {
     message = "Authentication token expired.";
   }
 
-  // DEBUG: Remove after Google OAuth issue is resolved
-  console.error("[Express Error Debug]", { name: error.name, message: error.message, stack: error.stack, statusCode, route: req.originalUrl });
-  if (error.isOperational) {
-    // DEBUG: Remove after Google OAuth issue is resolved
-    console.error("[Express Error Debug] ApiError", { status: statusCode, message, errors });
-  }
-
-  if (req.originalUrl === "/api/auth/google") {
-    return res.status(statusCode).json({
-      success: false,
-      stage: error.debugStage || "controller",
-      error: message,
-      details: error.debugDetails || message,
-      errors,
-    });
-  }
-
   if (statusCode >= 500 && !error.isOperational) {
     message = "Service is temporarily unavailable. Please try again shortly.";
     errors = [];
@@ -55,4 +38,3 @@ export function errorHandler(error, req, res, next) {
 
   return sendError(res, statusCode, message, errors);
 }
-

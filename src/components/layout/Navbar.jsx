@@ -1,6 +1,6 @@
 // Renders the Navbar layout element.
-import { Heart, Menu, Search, ShoppingBag, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Heart, Menu, Search, ShoppingBag, UserRound, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { usePopup } from "../../context/PopupContext.jsx";
@@ -8,6 +8,7 @@ import { useCart } from "../../hooks/useCart.jsx";
 import { useWishlist } from "../../context/WishlistContext.jsx";
 import DesktopMenu from "./DesktopMenu.jsx";
 import MobileDrawer from "./MobileDrawer.jsx";
+import MobileSearchPanel from "./MobileSearchPanel.jsx";
 import basavannaLogo from "/basavanna.webp";
 import companyLogo from "/logo.webp";
 import drshivkumarswamiji from "/drshivkumarswamiji.webp";
@@ -53,6 +54,9 @@ export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [searchValue, setSearchValue] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const mobileSearchInputRef = useRef(null);
+  const desktopSearchInputRef = useRef(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { items } = useCart();
@@ -81,11 +85,46 @@ export default function Navbar() {
     navigate(`/shop?${params.toString()}`, { replace });
   };
 
-  const handleSearchChange = (event) => {
+  const focusActiveSearchInput = () => {
+    const input = window.innerWidth >= 1280 ? desktopSearchInputRef.current : mobileSearchInputRef.current;
+    input?.focus();
+  };
+
+  const openMobileSearch = () => {
+    if (mobileSearchOpen) return;
+    setMobileSearchOpen(true);
+    window.history.pushState({ mobileSearch: true }, "");
+    window.setTimeout(focusActiveSearchInput, 50);
+  };
+
+  const homeSearchOverlay = location.pathname === "/";
+
+  const handleDesktopSearchChange = (event) => {
     const value = event.target.value;
     setSearchValue(value);
+    if (homeSearchOverlay) {
+      if (!mobileSearchOpen) openMobileSearch();
+      return;
+    }
     navigateToShopSearch(value, location.pathname === "/shop");
   };
+
+  const closeMobileSearch = () => {
+    if (!mobileSearchOpen) return;
+    if (window.history.state?.mobileSearch) window.history.back();
+    else setMobileSearchOpen(false);
+  };
+
+  const finishMobileSearchNavigation = () => {
+    setMobileSearchOpen(false);
+    if (window.history.state?.mobileSearch) window.history.replaceState({}, "");
+  };
+
+  useEffect(() => {
+    const handlePopState = () => setMobileSearchOpen(false);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 8);
     handleScroll();
@@ -96,78 +135,68 @@ export default function Navbar() {
   return (
     <>
       <header
-        className={`sticky top-0 z-40 bg-cream/96 backdrop-blur transition duration-300 ${
-          scrolled ? "shadow-soft" : "shadow-none"
+        className={`sticky top-0 z-40 bg-white/98 backdrop-blur transition duration-300 ${
+          scrolled ? "border-b border-ink/10" : ""
         }`}
       >
         <div className="border-b border-ink/10">
-          <div className="mx-auto grid h-[52px] max-w-screen-2xl grid-cols-[auto_1fr_auto] items-center px-4 sm:px-6 md:h-20 lg:px-8 xl:grid-cols-[1fr_auto_1fr] xl:h-[88px] xl:px-10 2xl:px-12">
+          <div className="mx-auto grid h-[58px] max-w-screen-2xl grid-cols-[auto_1fr_auto] items-center px-4 sm:px-6 md:h-20 lg:px-8 xl:grid-cols-[1fr_auto_1fr] xl:h-[88px] xl:px-10 2xl:px-12">
             <div className="flex items-center justify-start">
               <Link
                 to="/"
-                className="flex items-center gap-2 xl:hidden"
+                className="flex items-center xl:hidden"
                 aria-label="Swavalambi Siddaganga Oil Mill home"
               >
                 <img
                   src={companyLogo}
                   alt="Logo"
-                  className="h-10 w-10 shrink-0 rounded-full bg-white object-cover p-1 shadow-md ring-1 ring-brand/25 sm:h-12 sm:w-12"
-                />
-                <img
-                  src={basavannaLogo}
-                  alt="Basavanna"
-                  className="h-10 w-10 shrink-0 rounded-full bg-white object-cover p-1 shadow-md ring-1 ring-brand/25 sm:h-12 sm:w-12"
+                  className="h-10 w-10 shrink-0 object-cover sm:h-12 sm:w-12"
                 />
               </Link>
               <form
                 role="search"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  navigateToShopSearch(
-                    searchValue,
-                    location.pathname === "/shop",
-                  );
+                  if (homeSearchOverlay) openMobileSearch();
+                  else navigateToShopSearch(searchValue, location.pathname === "/shop");
                 }}
-                className="hidden h-11 min-w-0 items-center gap-3 rounded-full bg-white px-5 text-sm font-semibold text-ink/70 shadow-sm transition duration-200 hover:scale-[1.02] hover:bg-linen focus-within:outline-none focus-within:ring-2 focus-within:ring-leaf xl:inline-flex xl:w-[220px] 2xl:w-[260px]"
+                className="hidden h-11 min-w-0 items-center gap-3 rounded-md border border-ink/15 bg-white px-4 text-sm font-medium text-ink/70 transition duration-200 focus-within:border-leaf focus-within:outline-none xl:inline-flex xl:w-[220px] 2xl:w-[260px]"
               >
                 <Search size={18} className="shrink-0" />
                 <input
+                  ref={desktopSearchInputRef}
                   value={searchValue}
-                  onFocus={() =>
-                    navigateToShopSearch(
-                      searchValue,
-                      location.pathname === "/shop",
-                    )
-                  }
-                  onChange={handleSearchChange}
+                  onFocus={() => homeSearchOverlay ? openMobileSearch() : navigateToShopSearch(searchValue, location.pathname === "/shop")}
+                  onChange={handleDesktopSearchChange}
                   placeholder="Search oils"
                   aria-label="Search oils"
                   className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-ink/70 placeholder:text-ink/50 outline-none"
                 />
+                {homeSearchOverlay && mobileSearchOpen && <button type="button" aria-label={searchValue ? "Clear search" : "Close search"} onClick={() => searchValue ? setSearchValue("") : closeMobileSearch()} className="grid h-8 w-8 shrink-0 place-items-center text-ink/55 hover:text-leaf"><X size={17} /></button>}
               </form>
               <img
                 src={companyLogo}
                 alt="Logo"
-                className="ml-3 hidden h-16 w-16 shrink-0 rounded-full object-cover bg-white p-1 shadow-md ring-1 ring-brand/25 xl:block"
+                className="ml-3 hidden h-16 w-16 shrink-0 object-cover xl:block"
               />
             </div>
             <Link
               to="/"
-              className="min-w-0 justify-self-center px-2 text-center font-serif text-[13px] font-semibold leading-tight tracking-tight sm:text-2xl md:text-3xl xl:block"
+              className="hidden min-w-0 justify-self-center px-2 text-center font-serif text-3xl font-semibold leading-tight tracking-tight xl:block"
             >
               Swavalambi Siddaganga Oil Mill
               {/* ಸ್ವಾವಲಂಬಿ ಸಿದ್ದಗಂಗಾ ಆಯಿಲ್ ಮಿಲ್ */}
             </Link>
-            <div className="flex items-center justify-end gap-3">
+            <div className="flex items-center justify-end gap-0.5 sm:gap-1 xl:gap-3">
               <img
                 src={basavannaLogo}
                 alt="Basavanna"
-                className="ml-3 hidden h-16 w-16 shrink-0 rounded-full object-cover bg-white p-1 shadow-md ring-1 ring-brand/25 xl:block"
+                className="ml-3 hidden h-16 w-16 shrink-0 object-cover xl:block"
               />
               <img
                 src={drshivkumarswamiji}
                 alt="drshivkumarswamiji"
-                className="ml-3 hidden h-16 w-16 shrink-0 rounded-full object-cover bg-white p-1 shadow-md ring-1 ring-brand/25 xl:block"
+                className="ml-3 hidden h-16 w-16 shrink-0 object-cover xl:block"
               />
               <IconLink
                 label="Wishlist"
@@ -177,6 +206,9 @@ export default function Navbar() {
               >
                 <Heart size={19} />
               </IconLink>
+              <Link to={accountPath} aria-label="Account" className="grid h-9 w-9 place-items-center text-ink transition hover:text-leaf xl:hidden"><UserRound size={18} fill={authenticated ? "currentColor" : "none"} /></Link>
+              <button type="button" aria-label="Wishlist" data-popup-trigger="wishlist" onClick={() => togglePopup("wishlist")} className="relative grid h-9 w-9 place-items-center text-ink transition hover:text-leaf xl:hidden"><Heart size={18} />{wishlistItems.length > 0 && <span className="absolute right-0 top-0 grid h-4 min-w-4 place-items-center bg-brand px-0.5 text-[9px] font-bold text-white">{wishlistItems.length}</span>}</button>
+              <Link to="/cart" aria-label="Cart" className="relative grid h-9 w-9 place-items-center text-ink transition hover:text-leaf xl:hidden"><ShoppingBag size={18} />{count > 0 && <span className="absolute right-0 top-0 grid h-4 min-w-4 place-items-center bg-brand px-0.5 text-[9px] font-bold text-white">{count}</span>}</Link>
               <div className="hidden items-center gap-2 xl:flex">
                 <IconLink to={accountPath} label="Account" className="grid">
                   <UserRound
@@ -201,7 +233,7 @@ export default function Navbar() {
               <button
                 type="button"
                 aria-label="Open menu"
-                className="grid h-10 w-10 place-items-center rounded-full bg-white text-ink shadow-sm transition duration-200 hover:scale-105 hover:bg-linen focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf xl:hidden"
+                className="grid h-10 w-10 place-items-center bg-white text-ink transition duration-200 hover:bg-linen focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-leaf xl:hidden"
                 onClick={() => setOpen(true)}
               >
                 <Menu size={20} />
@@ -209,8 +241,16 @@ export default function Navbar() {
             </div>
           </div>
         </div>
+        <div className="border-t border-ink/10 px-4 py-2.5 xl:hidden">
+          <form role="search" onSubmit={(event) => { event.preventDefault(); openMobileSearch(); }} className="mx-auto flex h-10 max-w-2xl items-center gap-3 rounded-md border border-ink/30 bg-white px-3 focus-within:border-leaf">
+            <Search size={17} className="text-ink/50" />
+            <input ref={mobileSearchInputRef} value={searchValue} onFocus={openMobileSearch} onChange={(event) => { setSearchValue(event.target.value); if (!mobileSearchOpen) openMobileSearch(); }} placeholder="Search For" aria-label="Search products" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink/40" />
+            {mobileSearchOpen && <button type="button" aria-label={searchValue ? "Clear search" : "Close search"} onClick={() => searchValue ? setSearchValue("") : closeMobileSearch()} className="grid h-8 w-8 place-items-center text-ink/55 hover:text-leaf"><X size={17} /></button>}
+          </form>
+        </div>
         <DesktopMenu />
       </header>
+      <MobileSearchPanel open={mobileSearchOpen} query={searchValue} onQueryChange={(value) => { setSearchValue(value); window.setTimeout(focusActiveSearchInput, 0); }} onClose={finishMobileSearchNavigation} />
       <MobileDrawer
         open={open}
         onClose={() => setOpen(false)}

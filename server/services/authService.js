@@ -2,6 +2,7 @@
 import crypto from "crypto";
 import User from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
+import { normalizeIndianPhone } from "../utils/phone.js";
 import { signRefreshToken, signToken, verifyToken } from "../utils/jwt.js";
 import { assertAdminSessionCapacity, attachRefreshToken, createAdminSession } from "./adminSessionService.js";
 import { createAdminNotification } from "./adminNotificationService.js";
@@ -69,7 +70,7 @@ export async function registerUser(payload, req) {
   await verifyTurnstile(payload.turnstileToken, req);
   const exists = await User.findOne({ email: payload.email });
   if (exists) throw new ApiError("Email is already registered.", 409);
-  const user = new User({ name: payload.name, email: payload.email, phone: payload.phone, password: payload.password, emailVerified: false });
+  const user = new User({ name: payload.name, email: payload.email, phone: payload.phone ? normalizeIndianPhone(payload.phone) : undefined, password: payload.password, emailVerified: false });
   await createEmailVerification(user);
   if (req) {
     trustDevice(user, req);
@@ -120,33 +121,17 @@ export async function loginUser(email, password, req, options = {}) {
 }
 
 export async function googleLogin(idToken, req, remember = true) {
-  // DEBUG: Remove after Google OAuth issue is resolved
-  console.log("[Google OAuth Debug] googleLogin:start", { credentialReceived: Boolean(idToken), remember: Boolean(remember) });
-  let profile;
-  try {
-    profile = await verifyGoogleIdToken(idToken);
-  } catch (error) {
-    // DEBUG: Remove after Google OAuth issue is resolved
-    console.error("[Google OAuth Debug] googleLogin:verify_failed", { name: error.name, message: error.message, stage: error.debugStage, details: error.debugDetails });
-    error.debugStage = error.debugStage || "googleLogin";
-    throw error;
-  }
-  // DEBUG: Remove after Google OAuth issue is resolved
-  console.log("[Google OAuth Debug] googleLogin:profile", { emailPresent: Boolean(profile.email), emailVerified: Boolean(profile.emailVerified), providerIdPresent: Boolean(profile.providerId) });
+  const profile = await verifyGoogleIdToken(idToken);
   let user;
   try {
     user = await User.findOne({ email: profile.email }).select("+oauthProviders.providerId +sessions.refreshTokenHash");
-    // DEBUG: Remove after Google OAuth issue is resolved
-    console.log("[Google OAuth Debug] googleLogin:database_lookup", { userFound: Boolean(user) });
     if (!user) {
-      user = new User({ name: profile.name, email: profile.email, emailVerified: profile.emailVerified, oauthProviders: [{ provider: "google", providerId: profile.providerId, email: profile.email }] });
-      // DEBUG: Remove after Google OAuth issue is resolved
-      console.log("[Google OAuth Debug] googleLogin:validation", { decision: "create_new_user" });
+      user = new User({ name: profile.name, email: profile.email, emailVerified: profile.emailVerified, role: "user", oauthProviders: [{ provider: "google", providerId: profile.providerId, email: profile.email }] });
+    } else if (user.role === "admin") {
+      throw new ApiError("Use admin login for this account.", 403);
     } else if (!(user.oauthProviders || []).some((item) => item.provider === "google")) {
       user.oauthProviders.push({ provider: "google", providerId: profile.providerId, email: profile.email });
       if (profile.emailVerified) user.emailVerified = true;
-      // DEBUG: Remove after Google OAuth issue is resolved
-      console.log("[Google OAuth Debug] googleLogin:validation", { decision: "link_google_provider" });
     }
     if (user.isDisabled) throw new ApiError("This account is disabled.", 403);
     if (req && !isKnownDevice(user, req)) {
@@ -155,27 +140,10 @@ export async function googleLogin(idToken, req, remember = true) {
     }
     if (req) pushLoginHistory(user, req, "google_login");
     await user.save({ validateBeforeSave: false });
-    // DEBUG: Remove after Google OAuth issue is resolved
-    console.log("[Google OAuth Debug] googleLogin:database_save_complete", { userIdPresent: Boolean(user._id) });
   } catch (error) {
-    // DEBUG: Remove after Google OAuth issue is resolved
-    console.error("[Google OAuth Debug] googleLogin:database_or_email_failed", { name: error.name, message: error.message, stack: error.stack });
-    error.debugStage = error.debugStage || "database";
-    error.debugDetails = error.debugDetails || error.message;
     throw error;
   }
-  try {
-    const session = await issueSession(user, undefined, req, remember);
-    // DEBUG: Remove after Google OAuth issue is resolved
-    console.log("[Google OAuth Debug] googleLogin:jwt_session_success", { userIdPresent: Boolean(user._id) });
-    return session;
-  } catch (error) {
-    // DEBUG: Remove after Google OAuth issue is resolved
-    console.error("[Google OAuth Debug] googleLogin:jwt_session_failed", { name: error.name, message: error.message, stack: error.stack });
-    error.debugStage = error.debugStage || "jwt";
-    error.debugDetails = error.debugDetails || error.message;
-    throw error;
-  }
+  return issueSession(user, undefined, req, remember);
 }
 
 export async function refreshUserSession(refreshToken, req) {
@@ -203,9 +171,9 @@ export async function logoutUser(userId, sessionId) {
 export async function updateUserProfile(userId, payload) {
   const allowed = ["name", "phone"];
   const updates = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
+  if (updates.phone) updates.phone = normalizeIndianPhone(updates.phone);
   return User.findByIdAndUpdate(userId, updates, { new: true, runValidators: true });
 }
-
 export async function changeUserPassword(user, currentPassword, nextPassword, otpCode) {
   const account = await User.findById(user._id).select("+password +refreshToken +sessions.refreshTokenHash +otpRecords.codeHash");
   if (!(await account.comparePassword(currentPassword))) throw new ApiError("Current password is incorrect.", 400);
@@ -287,22 +255,24 @@ export async function revokeUserSession(userId, sessionId) {
 export async function addAddress(userId, address) {
   const user = await User.findById(userId);
   if (!user) throw new ApiError("User not found.", 404);
-  if (address.isDefault) user.addresses.forEach((item) => { item.isDefault = false; });
-  user.addresses.push(address);
+  const cleanAddress = { ...address };
+  if (cleanAddress.phone) cleanAddress.phone = normalizeIndianPhone(cleanAddress.phone);
+  if (cleanAddress.isDefault) user.addresses.forEach((item) => { item.isDefault = false; });
+  user.addresses.push(cleanAddress);
   await user.save();
   return user.addresses;
 }
-
 export async function updateAddress(userId, addressId, address) {
   const user = await User.findById(userId);
   const existing = user?.addresses.id(addressId);
   if (!existing) throw new ApiError("Address not found.", 404);
-  if (address.isDefault) user.addresses.forEach((item) => { item.isDefault = item._id.toString() === addressId; });
-  existing.set(address);
+  const cleanAddress = { ...address };
+  if (cleanAddress.phone) cleanAddress.phone = normalizeIndianPhone(cleanAddress.phone);
+  if (cleanAddress.isDefault) user.addresses.forEach((item) => { item.isDefault = item._id.toString() === addressId; });
+  existing.set(cleanAddress);
   await user.save();
   return user.addresses;
 }
-
 export async function deleteAddress(userId, addressId) {
   const user = await User.findById(userId);
   const existing = user?.addresses.id(addressId);

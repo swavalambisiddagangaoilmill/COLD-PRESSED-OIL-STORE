@@ -5,6 +5,7 @@ import { clearAuthCookies, setAuthCookie, setRefreshCookie } from "../utils/jwt.
 import { logSecurityEvent } from "../services/securityEventService.js";
 import { continuePendingAdminLogin, attachRefreshToken, revokeAdminSessions } from "../services/adminSessionService.js";
 import { createAdminNotification } from "../services/adminNotificationService.js";
+import { requestCustomerOtp, resendCustomerOtp, verifyCustomerOtp } from "../services/customerOtpService.js";
 import { precheckAdminLogin, recordAdminLoginFailure, recordAdminLoginSuccess } from "../services/adminLoginProtectionService.js";
 import {
   addAddress,
@@ -58,22 +59,28 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const google = asyncHandler(async (req, res) => {
-  // DEBUG: Remove after Google OAuth issue is resolved
-  console.log("[Google OAuth Debug] controller:start", { bodyKeys: Object.keys(req.body || {}), credentialReceived: Boolean(req.body.credential || req.body.idToken) });
-  try {
-    const { user, token, refreshToken } = await googleLogin(req.body.credential || req.body.idToken, req, req.body.remember !== false);
-    // DEBUG: Remove after Google OAuth issue is resolved
-    console.log("[Google OAuth Debug] controller:success", { userIdPresent: Boolean(user?._id), tokenCreated: Boolean(token), refreshTokenCreated: Boolean(refreshToken) });
-    setSession(res, token, refreshToken);
-    sendSuccess(res, 200, "Google login successful", { user, token, refreshToken });
-  } catch (error) {
-    // DEBUG: Remove after Google OAuth issue is resolved
-    console.error("[Google OAuth Debug] controller:error", { name: error.name, message: error.message, stage: error.debugStage, details: error.debugDetails, stack: error.stack });
-    error.debugStage = error.debugStage || "controller";
-    throw error;
-  }
+  const { user, token, refreshToken } = await googleLogin(req.body.credential || req.body.idToken, req, req.body.remember !== false);
+  setSession(res, token, refreshToken);
+  sendSuccess(res, 200, "Google login successful", { user, token, refreshToken });
 });
 
+
+export const requestCustomerOtpHandler = asyncHandler(async (req, res) => {
+  const data = await requestCustomerOtp(req.body, req);
+  sendSuccess(res, 200, "If the number is eligible, an OTP has been sent.", data);
+});
+
+export const resendCustomerOtpHandler = asyncHandler(async (req, res) => {
+  const data = await resendCustomerOtp(req.body, req);
+  sendSuccess(res, 200, "If the number is eligible, an OTP has been sent.", data);
+});
+
+export const verifyCustomerOtpHandler = asyncHandler(async (req, res) => {
+  const data = await verifyCustomerOtp(req.body, req);
+  if (data.nameRequired) return sendSuccess(res, 202, "Phone verified. Please enter your name.", data);
+  setSession(res, data.token, data.refreshToken);
+  sendSuccess(res, 200, "Logged in successfully", data);
+});
 export const continueAdminLogin = asyncHandler(async (req, res) => {
   const { admin, session } = await continuePendingAdminLogin(req, req.body.pendingToken, req.body.revokeSessionIds || []);
   const { user, token, refreshToken } = await issueSession(admin, session.sessionId, req, true);

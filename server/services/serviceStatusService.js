@@ -9,6 +9,7 @@ const MESSAGE = {
   shiprocket: "Shipping integration is temporarily unavailable.",
   ai: "AI assistant is temporarily unavailable.",
   turnstile: "Human verification is temporarily unavailable.",
+  msg91: "OTP service is temporarily unavailable.",
 };
 
 let services = {};
@@ -35,6 +36,7 @@ export function computeServiceStatus() {
         : status("shiprocket", "offline"),
     ai: status("ai", "online"),
     turnstile: env.turnstile.secretKey ? status("turnstile", "online") : status("turnstile", "limited", "Human verification is not configured."),
+    msg91: env.otp.msg91AuthKey && env.otp.msg91TemplateId ? status("msg91", "online") : status("msg91", env.isProduction ? "offline" : "limited", "OTP service is using development fallback."),
   };
   lastCheckedAt = new Date().toISOString();
   return services;

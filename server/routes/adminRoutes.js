@@ -14,10 +14,25 @@ import { orderIdValidator, updateOrderStatusValidator } from "../validators/orde
 import { categoryIdValidator, categoryValidator } from "../validators/categoryValidators.js";
 import { productIdValidator, productUpdateValidator, productValidator } from "../validators/productValidators.js";
 import * as adminPanelController from "../admin/controllers/adminController.js";
+import { createCarousel, deleteCarousel, listCarousel, reorderCarousel, updateCarousel, updateCarouselStatus } from "../controllers/carouselAdminController.js";
 
 const router = Router();
 router.use(protect, adminOnly);
 router.use(logAdminMutation);
+
+const carouselPayload = [
+  body("imageUrl").isString().notEmpty().withMessage("Carousel image is required."),
+  body("title").optional().isString().isLength({ max: 120 }),
+  body("altText").optional().isString().isLength({ max: 180 }),
+  body("order").optional().isInt({ min: 0 }).withMessage("Order must be zero or greater."),
+  body("isActive").optional().isBoolean(),
+];
+router.get("/carousel", listCarousel);
+router.post("/carousel", carouselPayload, validate, createCarousel);
+router.put("/carousel/reorder", [body("ids").isArray({ min: 1 }).withMessage("Carousel order is required.")], validate, reorderCarousel);
+router.put("/carousel/:id", [param("id").isMongoId().withMessage("Valid carousel id is required."), ...carouselPayload], validate, updateCarousel);
+router.patch("/carousel/:id/status", [param("id").isMongoId().withMessage("Valid carousel id is required."), body("isActive").isBoolean()], validate, updateCarouselStatus);
+router.delete("/carousel/:id", [param("id").isMongoId().withMessage("Valid carousel id is required.")], validate, deleteCarousel);
 
 router.get("/gallery", adminPanelController.galleryImages);
 router.post("/gallery", [body("image").custom((value) => Boolean(value?.url || typeof value === "string")).withMessage("Gallery image is required.")], validate, adminPanelController.saveGalleryImage);

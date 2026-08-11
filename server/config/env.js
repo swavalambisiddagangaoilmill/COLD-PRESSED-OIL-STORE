@@ -23,6 +23,12 @@ export const env = {
   turnstile: {
     secretKey: process.env.TURNSTILE_SECRET_KEY || "",
   },
+  otp: {
+    provider: process.env.OTP_PROVIDER || "msg91",
+    msg91AuthKey: process.env.MSG91_AUTH_KEY || "",
+    msg91TemplateId: process.env.MSG91_TEMPLATE_ID || "",
+    msg91SenderId: process.env.MSG91_SENDER_ID || "",
+  },
   email: {
     provider: process.env.EMAIL_PROVIDER || "resend",
     from: process.env.EMAIL_FROM || "",
@@ -56,6 +62,10 @@ export const env = {
 
 if (isProduction && (env.jwtSecret === "development_only_change_me" || env.jwtSecret.length < 32)) {
   throw new Error("JWT_SECRET must be a strong secret in production.");
+}
+
+if (isProduction && (!process.env.MSG91_AUTH_KEY || !process.env.MSG91_TEMPLATE_ID)) {
+  throw new Error("MSG91 OTP configuration is required in production.");
 }
 
 if (isProduction && process.env.SHIPROCKET_MOCK === "true") {

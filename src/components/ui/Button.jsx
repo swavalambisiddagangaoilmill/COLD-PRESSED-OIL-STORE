@@ -8,7 +8,7 @@ const variants = {
 };
 
 export default function Button({ children, to, type = "button", variant = "primary", className = "", loading = false, ...props }) {
-  const classes = `inline-flex h-[52px] items-center justify-center gap-2 rounded-xl px-6 text-sm font-semibold transition duration-300 ${variants[variant]} ${className}`;
+  const classes = `inline-flex h-[52px] items-center justify-center gap-2 border border-transparent px-6 text-sm font-semibold transition duration-300 ${variants[variant]} ${className}`;
   const content = loading ? "Please wait" : children;
 
   if (to) {

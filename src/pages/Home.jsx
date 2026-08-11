@@ -45,7 +45,7 @@ export default function Home() {
             src="https://images.unsplash.com/photo-1606787366850-de6330128bfc?auto=format&fit=crop&w=1400&q=85"
             alt="Premium pantry ingredients"
             loading="lazy"
-            className="aspect-[16/10] w-full rounded-3xl object-cover shadow-soft"
+            className="aspect-[16/10] w-full object-cover"
           />
         </Container>
       </section>

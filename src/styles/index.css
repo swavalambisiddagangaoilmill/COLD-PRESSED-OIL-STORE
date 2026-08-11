@@ -17,7 +17,7 @@ body {
   margin: 0;
   min-width: 320px;
   overflow-x: hidden;
-  @apply bg-cream font-serif;
+  @apply bg-white font-sans text-ink;
 }
 h1,
 h2,
@@ -31,6 +31,17 @@ img {
   max-width: 100%;
 }
 
+/* A restrained micro-radius keeps controls tactile without returning to the
+   previous pill-and-card visual language. Circular category imagery remains
+   the single stronger-radius exception. */
+[class*="rounded-"] {
+  border-radius: 6px !important;
+}
+
+.category-icon {
+  border-radius: 9999px !important;
+}
+
 ::selection {
   @apply bg-leaf text-white;
 }
@@ -39,12 +50,17 @@ img {
   animation: marquee 24s linear infinite;
 }
 
-.hero-progress {
-  animation: hero-progress 5.6s linear forwards;
+.hero-banner {
+  aspect-ratio: 1672 / 941;
 }
 
-.hero-banner {
-  height: 280px;
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 @keyframes marquee {
@@ -56,14 +72,6 @@ img {
   }
 }
 
-@keyframes hero-progress {
-  from {
-    width: 0%;
-  }
-  to {
-    width: 100%;
-  }
-}
 
 @keyframes loader-pop {
   0% {
@@ -96,30 +104,6 @@ img {
 
 .section-padding {
   @apply py-16 md:py-20 xl:py-24;
-}
-
-@media (min-width: 640px) {
-  .hero-banner {
-    height: 300px;
-  }
-}
-
-@media (min-width: 768px) {
-  .hero-banner {
-    height: 420px;
-  }
-}
-
-@media (min-width: 1024px) {
-  .hero-banner {
-    height: 560px;
-  }
-}
-
-@media (min-width: 1280px) {
-  .hero-banner {
-    height: 620px;
-  }
 }
 
 .admin-notification-scroll {

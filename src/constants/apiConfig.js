@@ -12,7 +12,10 @@ export const API_ENDPOINTS = {
     profile: "/auth/profile",
     changePassword: "/auth/change-password",
     resendVerification: "/auth/resend-verification",
-    requestOtp: "/auth/otp/request",
+    requestOtp: "/auth/otp/security-code",
+    otpRequest: "/auth/otp/request",
+    otpResend: "/auth/otp/resend",
+    otpVerify: "/auth/otp/verify",
     security: "/auth/security",
     sessions: "/auth/sessions",
     session: (id) => `/auth/sessions/${id}`,
@@ -47,6 +50,7 @@ export const API_ENDPOINTS = {
   couponValidate: "/content/coupons/validate",
   faqs: "/content/faqs",
   gallery: "/content/gallery",
+  carousel: "/carousel",
   pageContent: (slug) => `/content/pages/${slug}`,
 };
 

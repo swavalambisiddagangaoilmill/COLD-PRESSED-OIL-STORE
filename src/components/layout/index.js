@@ -6,5 +6,6 @@ export { default as Footer } from './Footer.jsx';
 export { default as MegaMenu } from './MegaMenu.jsx';
 export { default as MenuItem } from './MenuItem.jsx';
 export { default as MobileDrawer } from './MobileDrawer.jsx';
+export { default as MobileSearchPanel } from './MobileSearchPanel.jsx';
 export { default as Navbar } from './Navbar.jsx';
 

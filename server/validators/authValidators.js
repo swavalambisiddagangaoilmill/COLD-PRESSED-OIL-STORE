@@ -26,6 +26,22 @@ export const loginValidator = [
 ];
 
 export const googleValidator = [body("credential").optional().trim(), body("idToken").optional().trim(), body().custom((value) => { if (!value.credential && !value.idToken) throw new Error("Google credential is required."); return true; })];
+export const customerOtpRequestValidator = [
+  body("phone").trim().notEmpty().withMessage("Phone number is required."),
+  body("turnstileToken").optional().trim(),
+];
+
+export const customerOtpVerifyValidator = [
+  body("phone").optional().trim(),
+  body("otp").optional().trim().matches(/^\d{6}$/).withMessage("OTP must be exactly 6 digits."),
+  body("signupToken").optional().trim(),
+  body("name").optional().trim().isLength({ min: 2, max: 80 }).withMessage("Enter your full name."),
+  body().custom((value) => {
+    if (value.signupToken && value.name) return true;
+    if (value.phone && value.otp) return true;
+    throw new Error("Phone and OTP are required.");
+  }),
+];
 
 export const updateProfileValidator = [
   body("name").optional().trim().notEmpty().withMessage("Name cannot be empty."),

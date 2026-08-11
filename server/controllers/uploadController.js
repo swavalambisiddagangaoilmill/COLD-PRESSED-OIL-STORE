@@ -6,7 +6,8 @@ import { deleteImage, uploadImage } from "../services/uploadService.js";
 
 export const uploadSingleImage = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError("Image file is required.", 400);
-  const image = await uploadImage(req.file);
+  if (req.body.folder === "carousel" && !["image/jpeg", "image/png", "image/webp"].includes(req.file.mimetype)) throw new ApiError("Carousel images must be JPEG, PNG, or WebP.", 400);
+  const image = await uploadImage(req.file, req.body.folder);
   sendSuccess(res, 201, "Image uploaded successfully", { image });
 });
 

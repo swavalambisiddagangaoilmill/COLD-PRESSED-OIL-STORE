@@ -93,9 +93,10 @@ const loginHistorySchema = new mongoose.Schema(
 const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required() { return !(this.oauthProviders || []).length; }, minlength: 6, select: false },
-    phone: { type: String, trim: true },
+    email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
+    password: { type: String, required() { return this.role === "admin" && !(this.oauthProviders || []).length; }, minlength: 6, select: false },
+    phone: { type: String, unique: true, sparse: true, trim: true },
+    phoneVerified: { type: Boolean, default: false },
     role: { type: String, enum: ["user", "admin"], default: "user" },
     adminRole: { type: String, enum: ["OWNER", "ORDER_MANAGER", "PRODUCT_MANAGER", "CONTENT_MANAGER"] },
     isDisabled: { type: Boolean, default: false },

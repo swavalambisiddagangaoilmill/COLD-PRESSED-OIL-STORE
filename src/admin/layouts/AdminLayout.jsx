@@ -11,7 +11,7 @@ const roleModules = {
   OWNER: ["*"],
   ORDER_MANAGER: ["Dashboard", "Orders", "Shipping", "Customers", "Payments", "Reports", "Notifications"],
   PRODUCT_MANAGER: ["Dashboard", "Products", "Inventory", "Categories", "Reports", "Notifications"],
-  CONTENT_MANAGER: ["Dashboard", "Gallery", "Messages", "Notifications"],
+  CONTENT_MANAGER: ["Dashboard", "Homepage Carousel", "Gallery", "Messages", "Notifications"],
 };
 
 const BellIcon = Bell;
@@ -24,6 +24,7 @@ const navItems = [
   { label: "Categories", to: "/admin/categories", icon: Home },
   { label: "Offers", to: "/admin/offers", icon: Megaphone, group: "Marketing" },
   { label: "Coupons", to: "/admin/coupons", icon: Percent, group: "Marketing" },
+  { label: "Homepage Carousel", to: "/admin/carousel", icon: ImageIcon, group: "Marketing" },
   { label: "Gallery", to: "/admin/gallery", icon: ImageIcon, group: "Marketing" },
   { label: "Shipping", to: "/admin/shipping", icon: Truck },
   { label: "Customers", to: "/admin/customers", icon: Users },

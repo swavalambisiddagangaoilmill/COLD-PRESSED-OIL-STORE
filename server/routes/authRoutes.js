@@ -14,7 +14,10 @@ import {
   logout,
   refresh,
   register,
+  requestCustomerOtpHandler,
   requestOtpHandler,
+  resendCustomerOtpHandler,
+  verifyCustomerOtpHandler,
   resendVerificationHandler,
   resetPasswordHandler,
   revokeAllSessionsHandler,
@@ -25,6 +28,7 @@ import {
 } from "../controllers/authController.js";
 import { protect } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
+import { normalizeIndianPhone } from "../utils/phone.js";
 import {
   addressIdValidator,
   addressValidator,
@@ -33,6 +37,8 @@ import {
   forgotPasswordValidator,
   googleValidator,
   loginValidator,
+  customerOtpRequestValidator,
+  customerOtpVerifyValidator,
   otpRequestValidator,
   registerValidator,
   refreshValidator,
@@ -44,33 +50,31 @@ import {
 
 const router = Router();
 
-// DEBUG: Remove after auth routing issue is resolved
-console.log("Auth router loaded");
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many authentication attempts.", errors: [] } });
 const sensitiveLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many security attempts.", errors: [] } });
+const otpPhoneKey = (req) => {
+  try { return normalizeIndianPhone(req.body?.phone); } catch { return req.ip; }
+};
+const otpRequestIpLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 12, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many OTP requests. Please wait and try again.", errors: [] } });
+const otpVerifyIpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many OTP attempts. Please wait and try again.", errors: [] } });
+const otpPhoneLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, keyGenerator: otpPhoneKey, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many OTP requests for this number. Please try later.", errors: [] } });
 
-router.use((req, _res, next) => {
-  // DEBUG: Remove after auth routing issue is resolved
-  console.log("Auth router request", req.method, req.originalUrl);
-  next();
-});
 
 router.post("/register", authLimiter, registerValidator, validate, register);
 router.post("/login", authLimiter, loginValidator, validate, login);
-router.post("/google", authLimiter, (req, _res, next) => {
-  // DEBUG: Remove after Google OAuth issue is resolved
-  console.log("[Google OAuth Debug] POST /api/auth/google received", { bodyKeys: Object.keys(req.body || {}), credentialReceived: Boolean(req.body?.credential || req.body?.idToken) });
-  next();
-}, googleValidator, validate, google);
+router.post("/google", authLimiter, googleValidator, validate, google);
 router.post("/admin-login/continue", authLimiter, continueAdminLoginValidator, validate, continueAdminLogin);
 router.post("/refresh", authLimiter, refreshValidator, validate, refresh);
+router.post("/otp/request", otpRequestIpLimiter, otpPhoneLimiter, customerOtpRequestValidator, validate, requestCustomerOtpHandler);
+router.post("/otp/resend", otpRequestIpLimiter, otpPhoneLimiter, customerOtpRequestValidator, validate, resendCustomerOtpHandler);
+router.post("/otp/verify", otpVerifyIpLimiter, otpPhoneLimiter, customerOtpVerifyValidator, validate, verifyCustomerOtpHandler);
 router.post("/logout", protect, logout);
 router.post("/forgot-password", sensitiveLimiter, forgotPasswordValidator, validate, forgotPassword);
 router.post("/reset-password/:token", sensitiveLimiter, resetPasswordValidator, validate, resetPasswordHandler);
 router.get("/verify-email/:token", verifyEmailValidator, validate, verifyEmailHandler);
 router.post("/resend-verification", protect, resendVerificationHandler);
-router.post("/otp/request", protect, sensitiveLimiter, otpRequestValidator, validate, requestOtpHandler);
+router.post("/otp/security-code", protect, sensitiveLimiter, otpRequestValidator, validate, requestOtpHandler);
 router.get("/profile", protect, getProfile);
 router.put("/profile", protect, updateProfileValidator, validate, updateProfile);
 router.get("/security", protect, getSecurityHandler);
