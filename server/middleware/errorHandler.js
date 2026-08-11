@@ -27,6 +27,11 @@ export function errorHandler(error, req, res, next) {
     message = "Authentication token expired.";
   }
 
+  if (error.name === "MulterError") {
+    statusCode = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+    message = error.code === "LIMIT_FILE_SIZE" ? "Image must be 3 MB or smaller." : "The image upload is invalid.";
+  }
+
   if (statusCode >= 500 && !error.isOperational) {
     message = "Service is temporarily unavailable. Please try again shortly.";
     errors = [];

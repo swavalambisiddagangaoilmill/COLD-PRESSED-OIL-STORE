@@ -22,10 +22,14 @@ export const adminApi = {
     return apiRequest("/upload/image", { method: "POST", body: form });
   },
   carousel: () => apiRequest("/admin/carousel"),
-  saveCarousel: (payload, id) => promotionChanged(apiRequest(id ? `/admin/carousel/${id}` : "/admin/carousel", { method: id ? "PUT" : "POST", body: JSON.stringify(payload) })),
+  createCarousel: (file) => {
+    const form = new FormData();
+    form.append("image", file);
+    return promotionChanged(apiRequest("/admin/carousel", { method: "POST", body: form }));
+  },
   carouselStatus: (id, isActive) => promotionChanged(apiRequest(`/admin/carousel/${id}/status`, { method: "PATCH", body: JSON.stringify({ isActive }) })),
   deleteCarousel: (id) => promotionChanged(apiRequest(`/admin/carousel/${id}`, { method: "DELETE" })),
-  reorderCarousel: (ids) => promotionChanged(apiRequest("/admin/carousel/reorder", { method: "PUT", body: JSON.stringify({ ids }) })),
+  reorderCarousel: (ids) => promotionChanged(apiRequest("/admin/carousel/reorder", { method: "PATCH", body: JSON.stringify({ ids }) })),
   bulkPreview: (payload) => apiRequest(`${base}/products/bulk-price/preview`, { method: "POST", body: JSON.stringify(payload) }),
   bulkApply: (payload) => apiRequest(`${base}/products/bulk-price/apply`, { method: "POST", body: JSON.stringify(payload) }),
   inventory: (id, payload) => apiRequest(`${base}/inventory/${id}`, { method: "PUT", body: JSON.stringify(payload) }),

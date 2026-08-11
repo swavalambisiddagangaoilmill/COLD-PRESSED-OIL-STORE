@@ -42,9 +42,9 @@ export const env = {
     webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
   },
   cloudinary: {
-    cloudName: process.env.CLOUDINARY_NAME || "",
-    apiKey: process.env.CLOUDINARY_KEY || "",
-    apiSecret: process.env.CLOUDINARY_SECRET || "",
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_NAME || "",
+    apiKey: process.env.CLOUDINARY_API_KEY || process.env.CLOUDINARY_KEY || "",
+    apiSecret: process.env.CLOUDINARY_API_SECRET || process.env.CLOUDINARY_SECRET || "",
   },
   shiprocket: {
     mock: !isProduction && process.env.SHIPROCKET_MOCK === "true",

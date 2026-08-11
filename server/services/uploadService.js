@@ -18,6 +18,7 @@ function hasValidImageSignature(file) {
 }
 
 export async function uploadImage(file, folder = "products") {
+  if (folder === "carousel" && !["image/jpeg", "image/png", "image/webp"].includes(file?.mimetype)) throw new ApiError("Carousel images must be JPEG, PNG, or WebP.", 400);
   if (!hasValidImageSignature(file)) throw new ApiError("Uploaded file is not a valid image.", 400);
   if (!isServiceAvailable("cloudinary")) throw new ApiError("Image uploads are temporarily unavailable.", 503);
   const dataUri = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;

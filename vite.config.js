@@ -19,7 +19,7 @@ function readBackendEnv() {
 
 function backendProxyTarget() {
   const env = readBackendEnv();
-  const target = env.BACKEND_PUBLIC_URL || `http://localhost:${env.PORT || 5000}`;
+  const target = env.VITE_API_PROXY_TARGET || `http://localhost:${env.PORT || 5000}`;
   return target.replace(/\/+$/, "").replace(/\/api$/, "");
 }
 
