@@ -5,7 +5,6 @@ import { clearAuthCookies, setAuthCookie, setRefreshCookie } from "../utils/jwt.
 import { logSecurityEvent } from "../services/securityEventService.js";
 import { continuePendingAdminLogin, attachRefreshToken, revokeAdminSessions } from "../services/adminSessionService.js";
 import { createAdminNotification } from "../services/adminNotificationService.js";
-import { requestCustomerOtp, resendCustomerOtp, verifyCustomerOtp } from "../services/customerOtpService.js";
 import { precheckAdminLogin, recordAdminLoginFailure, recordAdminLoginSuccess } from "../services/adminLoginProtectionService.js";
 import {
   addAddress,
@@ -65,22 +64,6 @@ export const google = asyncHandler(async (req, res) => {
 });
 
 
-export const requestCustomerOtpHandler = asyncHandler(async (req, res) => {
-  const data = await requestCustomerOtp(req.body, req);
-  sendSuccess(res, 200, "If the number is eligible, an OTP has been sent.", data);
-});
-
-export const resendCustomerOtpHandler = asyncHandler(async (req, res) => {
-  const data = await resendCustomerOtp(req.body, req);
-  sendSuccess(res, 200, "If the number is eligible, an OTP has been sent.", data);
-});
-
-export const verifyCustomerOtpHandler = asyncHandler(async (req, res) => {
-  const data = await verifyCustomerOtp(req.body, req);
-  if (data.nameRequired) return sendSuccess(res, 202, "Phone verified. Please enter your name.", data);
-  setSession(res, data.token, data.refreshToken);
-  sendSuccess(res, 200, "Logged in successfully", data);
-});
 export const continueAdminLogin = asyncHandler(async (req, res) => {
   const { admin, session } = await continuePendingAdminLogin(req, req.body.pendingToken, req.body.revokeSessionIds || []);
   const { user, token, refreshToken } = await issueSession(admin, session.sessionId, req, true);

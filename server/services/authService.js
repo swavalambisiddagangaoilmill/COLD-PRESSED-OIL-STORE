@@ -96,18 +96,29 @@ export async function loginUser(email, password, req, options = {}) {
   }
   if (user.isDisabled) throw new ApiError("This account is disabled.", 403);
 
-  const skipAdminEmailVerification = process.env.NODE_ENV !== "production" && user.role === "admin";
-  if (req && !isKnownDevice(user, req)) {
-    if (!skipAdminEmailVerification && !options.otpCode) {
+  if (req && user.role === "admin") {
+    // Admin authentication never trusts a remembered device; existing entries
+    // are cleared and every fresh login must complete the emailed OTP step.
+    user.trustedDevices = [];
+    if (!options.otpCode) {
+      await createOtp(user, "new_device");
+      pushLoginHistory(user, req, "admin_otp_required", { pendingOtp: true });
+      await sendNewDeviceEmail(user, getDeviceDetails(req));
+      await user.save({ validateBeforeSave: false });
+      return { otpRequired: true, reason: "NEW_DEVICE", message: "Security code sent to your email." };
+    }
+    verifyOtp(user, "new_device", options.otpCode);
+  } else if (req && !isKnownDevice(user, req)) {
+    if (!options.otpCode) {
       await createOtp(user, "new_device");
       pushLoginHistory(user, req, "new_device_login", { pendingOtp: true });
       await sendNewDeviceEmail(user, getDeviceDetails(req));
       await user.save({ validateBeforeSave: false });
       return { otpRequired: true, reason: "NEW_DEVICE", message: "Security code sent to your email." };
     }
-    if (!skipAdminEmailVerification) verifyOtp(user, "new_device", options.otpCode);
+    verifyOtp(user, "new_device", options.otpCode);
     trustDevice(user, req);
-  } else if (req) {
+  } else if (req && user.role !== "admin") {
     trustDevice(user, req);
   }
 
@@ -115,7 +126,7 @@ export async function loginUser(email, password, req, options = {}) {
   const adminSession = req && user.role === "admin" ? await createAdminSession(req, user) : null;
   resetLoginProtection(user);
   if (req) pushLoginHistory(user, req, "login");
-  const issued = await issueSession(user, adminSession?.sessionId, req, Boolean(options.remember));
+  const issued = await issueSession(user, adminSession?.sessionId, req, user.role === "admin" ? false : Boolean(options.remember));
   if (adminSession) await attachRefreshToken(adminSession.sessionId, issued.refreshToken);
   return { ...issued, adminSession };
 }

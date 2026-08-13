@@ -13,21 +13,6 @@ export async function googleLoginAccount(payload) {
   setAuthTokens(data.token, data.refreshToken);
   return data;
 }
-
-
-export function requestLoginOtp(payload) {
-  return apiRequest(API_ENDPOINTS.auth.otpRequest, { method: "POST", body: JSON.stringify(payload) });
-}
-
-export function resendLoginOtp(payload) {
-  return apiRequest(API_ENDPOINTS.auth.otpResend, { method: "POST", body: JSON.stringify(payload) });
-}
-
-export async function verifyLoginOtp(payload) {
-  const data = await apiRequest(API_ENDPOINTS.auth.otpVerify, { method: "POST", body: JSON.stringify(payload) });
-  if (data.token) setAuthTokens(data.token, data.refreshToken);
-  return data;
-}
 export async function continueAdminLogin(payload) {
   const data = await apiRequest(API_ENDPOINTS.auth.continueAdminLogin, { method: "POST", body: JSON.stringify(payload) });
   setAuthTokens(data.token, data.refreshToken);

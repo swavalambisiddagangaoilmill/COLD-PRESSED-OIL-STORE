@@ -1,7 +1,7 @@
 // Provides reactive authentication state across the storefront.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { clearAuthTokens, getAuthToken, setAuthTokens } from "../api/apiClient.js";
-import { getProfile, googleLoginAccount, loginAccount, logoutAccount, registerAccount, requestLoginOtp, resendLoginOtp, verifyLoginOtp } from "../services/authService.js";
+import { getProfile, googleLoginAccount, loginAccount, logoutAccount, registerAccount } from "../services/authService.js";
 
 const AuthContext = createContext(null);
 
@@ -68,27 +68,13 @@ export function AuthProvider({ children }) {
     setUser(data.user || null);
     return data;
   }, []);
-
-
-  const requestOtp = useCallback((payload) => requestLoginOtp(payload), []);
-  const resendOtp = useCallback((payload) => resendLoginOtp(payload), []);
-
-  const verifyOtp = useCallback(async (payload) => {
-    const data = await verifyLoginOtp(payload);
-    if (data.token) {
-      setAuthTokens(data.token, data.refreshToken);
-      setToken(data.token || getAuthToken());
-      setUser(data.user || null);
-    }
-    return data;
-  }, []);
   const logout = useCallback(async () => {
     await logoutAccount();
     setToken(null);
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ token, user, loading, authenticated: Boolean(token), login, loginWithGoogle, register, requestOtp, resendOtp, verifyOtp, logout, refreshAuth: refreshState }), [token, user, loading, login, loginWithGoogle, register, requestOtp, resendOtp, verifyOtp, logout, refreshState]);
+  const value = useMemo(() => ({ token, user, loading, authenticated: Boolean(token), login, loginWithGoogle, register, logout, refreshAuth: refreshState }), [token, user, loading, login, loginWithGoogle, register, logout, refreshState]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
