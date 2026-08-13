@@ -13,6 +13,7 @@ const couponSchema = new mongoose.Schema(
     expiryDate: { type: Date, required: true },
     usageLimit: { type: Number, default: 0, min: 0 },
     usedCount: { type: Number, default: 0, min: 0 },
+    consumedOrderIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Order", select: false }],
     perCustomerUsageLimit: { type: Number, default: 1, min: 0 },
     scope: { type: String, enum: ["ALL", "CATEGORY", "PRODUCTS"], default: "ALL" },
     categories: [{ type: mongoose.Schema.Types.ObjectId, ref: "Category" }],

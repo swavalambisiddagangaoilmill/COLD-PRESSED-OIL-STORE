@@ -7,7 +7,7 @@ import Product from "../models/Product.js";
 import { createOrder as createStoreOrder } from "./orderService.js";
 import { ApiError } from "../utils/ApiError.js";
 import { createAdminNotification } from "./adminNotificationService.js";
-import { calculateCheckoutTotals, validateCouponForItems } from "./couponService.js";
+import { calculateCheckoutTotals, consumeCouponUsageForOrder, validateCouponForItems } from "./couponService.js";
 import { isServiceAvailable, logExternalFailure } from "./serviceStatusService.js";
 
 const PAYMENT_UNAVAILABLE = "Online payments are temporarily unavailable.";
@@ -84,6 +84,7 @@ export async function verifyPaymentAndCreateOrder(userId, payload) {
 export async function markOrderPayment(orderId, payload) {
   const order = await Order.findByIdAndUpdate(orderId, payload, { new: true, runValidators: true });
   if (!order) throw new ApiError("Order not found.", 404);
+  if (payload.paymentStatus === "paid") await consumeCouponUsageForOrder(order);
   if (payload.paymentStatus === "failed") await createAdminNotification({ category: "payments", type: "payment_failed", title: "Payment Failed", description: `Payment failed for order ${order._id}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/payments" } });
   if (payload.paymentStatus === "refunded") await createAdminNotification({ category: "payments", type: "payment_refunded", title: "Payment Refunded", description: `Payment refunded for order ${order._id}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/payments" } });
   return order;
@@ -215,6 +216,7 @@ export async function processRazorpayWebhook(rawBody, signature) {
     existingOrder.paymentStatus = payment.status === "captured" ? "paid" : existingOrder.paymentStatus;
     existingOrder.razorpayPaymentId = existingOrder.razorpayPaymentId || payment.id;
     await existingOrder.save();
+    await consumeCouponUsageForOrder(existingOrder);
     return { processed: true, order: existingOrder, status: existingOrder.paymentStatus };
   }
   const checkout = await PaymentCheckout.findOne({ $or: [{ razorpayPaymentId: payment.id }, { razorpayQrId: payment.qr_code_id }] });

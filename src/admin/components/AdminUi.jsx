@@ -5,9 +5,9 @@ const statusStyles = {
   Active: "bg-leaf/10 text-leaf",
   Paid: "bg-leaf/10 text-leaf",
   Delivered: "bg-leaf/10 text-leaf",
-  New: "bg-clay/10 text-clay",
-  Scheduled: "bg-clay/10 text-clay",
-  Pending: "bg-clay/10 text-clay",
+  New: "bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]",
+  Scheduled: "bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]",
+  Pending: "bg-amber-100 text-amber-800",
   Processing: "bg-ink/10 text-ink",
   Confirmed: "bg-ink/10 text-ink",
   COD: "bg-ink/10 text-ink",
@@ -16,7 +16,7 @@ const statusStyles = {
   Cancelled: "bg-danger/10 text-danger",
   Failed: "bg-danger/10 text-danger",
   Expired: "bg-danger/10 text-danger",
-  "Low Stock": "bg-clay/10 text-clay",
+  "Low Stock": "bg-amber-100 text-amber-800",
   "Out of Stock": "bg-danger/10 text-danger",
   "In Stock": "bg-leaf/10 text-leaf",
 };
@@ -26,12 +26,12 @@ export function AdminButton({ children, variant = "primary", className = "", loa
     ? "border border-ink/10 bg-white text-ink hover:border-leaf hover:text-leaf"
     : variant === "danger"
       ? "bg-danger text-white hover:bg-danger/90"
-      : "bg-ink text-white hover:bg-leaf";
+      : "bg-[var(--admin-primary)] text-white hover:bg-[var(--admin-primary-hover)]";
   return <button disabled={disabled || loading} className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${styles} ${className}`} {...props}>{loading && <Loader2 size={14} className="animate-spin" />}{children}</button>;
 }
 
 export function AdminBadge({ children }) {
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${statusStyles[children] || "bg-linen text-ink/70"}`}>{children}</span>;
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${statusStyles[children] || "bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]"}`}>{children}</span>;
 }
 
 export function AdminCard({ title, value, note, children }) {

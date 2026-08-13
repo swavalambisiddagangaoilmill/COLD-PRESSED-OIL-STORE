@@ -16,6 +16,14 @@ export async function verifyTurnstile(token, req) {
   }
   const payload = await response.json().catch(() => ({}));
   if (!payload.success) throw new ApiError("Human verification failed.", 400, [{ code: "TURNSTILE_FAILED" }]);
+  if (env.isProduction) {
+    const allowedHostnames = new Set(env.clientUrls.map((url) => {
+      try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
+    }).filter(Boolean));
+    if (!payload.hostname || !allowedHostnames.has(String(payload.hostname).toLowerCase())) {
+      throw new ApiError("Human verification failed.", 400, [{ code: "TURNSTILE_HOSTNAME_MISMATCH" }]);
+    }
+  }
   return payload;
 }
 

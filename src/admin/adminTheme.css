@@ -1,16 +1,16 @@
-/* Admin-only theme tokens. Mirrors the Kesari brand palette where appropriate. */
+/* Admin-only operational palette: forest controls on warm neutral surfaces. */
 :root {
-  --admin-primary: #FF9933;
-  --admin-primary-hover: #E67E22;
-  --admin-primary-soft: rgba(255, 153, 51, 0.14);
+  --admin-primary: #174A36;
+  --admin-primary-hover: #0F3A2A;
+  --admin-primary-soft: rgba(23, 74, 54, 0.12);
   --admin-primary-foreground: #ffffff;
-  --admin-bg: #FFF4E6;
-  --admin-surface: #ffffff;
-  --admin-border: rgba(64, 46, 32, 0.12);
-  --admin-text: #402E20;
-  --admin-muted: rgba(64, 46, 32, 0.58);
-  --admin-success: #E67E22;
-  --admin-warning: #C96F1F;
-  --admin-error: #B23A2B;
-  --admin-info: #9C6B30;
+  --admin-bg: #F6F3EA;
+  --admin-surface: #FFFEFA;
+  --admin-border: rgba(21, 55, 42, 0.15);
+  --admin-text: #173228;
+  --admin-muted: rgba(23, 50, 40, 0.62);
+  --admin-success: #26734F;
+  --admin-warning: #9A6B20;
+  --admin-error: #A63D32;
+  --admin-info: #315E52;
 }

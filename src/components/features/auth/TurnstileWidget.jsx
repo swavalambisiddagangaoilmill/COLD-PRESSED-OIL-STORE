@@ -38,6 +38,6 @@ export default function TurnstileWidget({ onVerify, className = "" }) {
     };
   }, [onVerify]);
 
-  if (!siteKey) return null;
+  if (!siteKey) return <div role="alert" className={`${className} rounded-xl border border-danger/20 bg-danger/5 p-3 text-sm font-semibold text-danger`}>Human verification is temporarily unavailable. Please try again shortly.</div>;
   return <div className={className} ref={ref} />;
 }

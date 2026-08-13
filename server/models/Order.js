@@ -61,6 +61,7 @@ const orderSchema = new mongoose.Schema(
     totalAmount: { type: Number, required: true, min: 0 },
     couponCode: { type: String, trim: true, uppercase: true },
     couponDiscount: { type: Number, default: 0, min: 0 },
+    couponUsageConsumedAt: { type: Date },
     shiprocketOrderId: { type: String },
     shiprocketShipmentId: { type: String },
     awbCode: { type: String },

@@ -2,16 +2,18 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import Coupon from "../models/Coupon.js";
 import Order from "../models/Order.js";
-import { calculateCheckoutTotals, consumeCouponUsage, COUPON_REASONS, validateCouponForItems } from "../services/couponService.js";
+import { calculateCheckoutTotals, consumeCouponUsage, consumeCouponUsageForOrder, COUPON_REASONS, validateCouponForItems } from "../services/couponService.js";
 
 const originalCouponFindOne = Coupon.findOne;
 const originalCouponUpdateOne = Coupon.updateOne;
 const originalOrderCount = Order.countDocuments;
+const originalOrderUpdateOne = Order.updateOne;
 
 afterEach(() => {
   Coupon.findOne = originalCouponFindOne;
   Coupon.updateOne = originalCouponUpdateOne;
   Order.countDocuments = originalOrderCount;
+  Order.updateOne = originalOrderUpdateOne;
 });
 
 function coupon(overrides = {}) {
@@ -115,4 +117,39 @@ test("successful order consumption increments usage atomically once", async () =
 test("exhausted coupon cannot be consumed by a concurrent order", async () => {
   Coupon.updateOne = async () => ({ modifiedCount: 0 });
   await expectCouponError(consumeCouponUsage(coupon()), COUPON_REASONS.USAGE_LIMIT, "This coupon has reached its usage limit.");
+});
+
+test("successful order increments 0/1 usage once and duplicate callbacks are idempotent", async () => {
+  const order = { _id: "64b000000000000000000005", couponCode: "SAVE", paymentMethod: "razorpay", paymentStatus: "paid" };
+  let usageWrites = 0;
+  Coupon.updateOne = async (filter, update) => {
+    usageWrites += 1;
+    assert.equal(filter.code, "SAVE");
+    assert.deepEqual(filter.consumedOrderIds, { $ne: order._id });
+    assert.deepEqual(update.$inc, { usedCount: 1 });
+    assert.deepEqual(update.$addToSet, { consumedOrderIds: order._id });
+    return { modifiedCount: 1 };
+  };
+  Order.updateOne = async () => ({ modifiedCount: 1 });
+  assert.equal(await consumeCouponUsageForOrder(order), true);
+  assert.ok(order.couponUsageConsumedAt instanceof Date);
+  assert.equal(await consumeCouponUsageForOrder(order), false);
+  assert.equal(usageWrites, 1);
+});
+
+test("pending or failed online orders never consume coupon usage", async () => {
+  let usageWrites = 0;
+  Coupon.updateOne = async () => { usageWrites += 1; return { modifiedCount: 1 }; };
+  assert.equal(await consumeCouponUsageForOrder({ _id: "64b000000000000000000006", couponCode: "SAVE", paymentMethod: "razorpay", paymentStatus: "pending" }), false);
+  assert.equal(await consumeCouponUsageForOrder({ _id: "64b000000000000000000007", couponCode: "SAVE", paymentMethod: "razorpay", paymentStatus: "failed" }), false);
+  assert.equal(usageWrites, 0);
+});
+
+test("0/1 coupon becomes unavailable after its successful order consumes usage", async () => {
+  const current = coupon({ usageLimit: 1, usedCount: 0, consumedOrderIds: [] });
+  const order = { _id: "64b000000000000000000008", couponCode: "SAVE", paymentMethod: "cod", paymentStatus: "pending" };
+  Coupon.updateOne = async () => { current.usedCount = 1; current.consumedOrderIds.push(order._id); return { modifiedCount: 1 }; };
+  Order.updateOne = async () => ({ modifiedCount: 1 });
+  await consumeCouponUsageForOrder(order);
+  await expectCouponError(validate(current), COUPON_REASONS.USAGE_LIMIT, "This coupon has reached its usage limit.");
 });

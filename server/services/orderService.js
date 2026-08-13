@@ -3,7 +3,7 @@ import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
 import { createAdminNotification, createInventoryNotifications } from "./adminNotificationService.js";
-import { calculateCheckoutTotals, consumeCouponUsage, normalizeCouponCode, validateCouponForItems } from "./couponService.js";
+import { calculateCheckoutTotals, consumeCouponUsageForOrder, normalizeCouponCode, validateCouponForItems } from "./couponService.js";
 
 function normalizeOrderProducts(products = []) {
   const merged = new Map();
@@ -53,7 +53,7 @@ export async function createOrder(userId, payload) {
     const totals = calculateCheckoutTotals(orderItems, couponResult.discountAmount);
     const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: payload.paymentStatus || "pending", razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount });
     try {
-      await consumeCouponUsage(couponResult.coupon);
+      await consumeCouponUsageForOrder(order);
     } catch (error) {
       await Order.findByIdAndDelete(order._id);
       throw error;

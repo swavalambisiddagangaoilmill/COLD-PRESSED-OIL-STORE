@@ -101,7 +101,7 @@ export async function validateCouponForItems({ code, userId, items = [], subtota
     if (existingOrders > 0) throw couponError(COUPON_REASONS.FIRST_ORDER_ONLY, "This coupon is available only on your first order.");
   }
   if (coupon.perCustomerUsageLimit > 0 && userId) {
-    const customerUses = await Order.countDocuments({ user: userId, couponCode });
+    const customerUses = await Order.countDocuments({ user: userId, couponCode, couponUsageConsumedAt: { $exists: true } });
     if (customerUses >= coupon.perCustomerUsageLimit) throw couponError(COUPON_REASONS.ALREADY_USED, "You have already used this coupon.");
   }
 
@@ -124,6 +124,27 @@ export async function consumeCouponUsage(coupon) {
   if (coupon.usageLimit > 0) filter.usedCount = { $lt: coupon.usageLimit };
   const result = await Coupon.updateOne(filter, { $inc: { usedCount: 1 } });
   if (result.modifiedCount !== 1) throw couponError(COUPON_REASONS.USAGE_LIMIT, "This coupon has reached its usage limit.");
+}
+
+export async function consumeCouponUsageForOrder(order) {
+  if (!order?.couponCode || order.couponUsageConsumedAt) return false;
+  if (order.paymentMethod !== "cod" && order.paymentStatus !== "paid") return false;
+  const code = normalizeCouponCode(order.couponCode);
+  const filter = {
+    code,
+    isActive: true,
+    consumedOrderIds: { $ne: order._id },
+    $or: [{ usageLimit: 0 }, { $expr: { $lt: ["$usedCount", "$usageLimit"] } }],
+  };
+  const result = await Coupon.updateOne(filter, { $inc: { usedCount: 1 }, $addToSet: { consumedOrderIds: order._id } });
+  if (result.modifiedCount !== 1) {
+    const existing = await Coupon.findOne({ code }).select("usageLimit usedCount consumedOrderIds");
+    if (existing?.consumedOrderIds?.some((id) => id.toString() === order._id.toString())) return false;
+    throw couponError(COUPON_REASONS.USAGE_LIMIT, "This coupon has reached its usage limit.");
+  }
+  order.couponUsageConsumedAt = new Date();
+  await Order.updateOne({ _id: order._id }, { $set: { couponUsageConsumedAt: order.couponUsageConsumedAt } }).catch(() => {});
+  return true;
 }
 
 export async function validateCouponPayload({ code, userId, products = [] }) {

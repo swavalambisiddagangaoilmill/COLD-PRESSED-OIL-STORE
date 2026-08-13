@@ -349,11 +349,18 @@ function CouponForm({ open, coupon, categories, products, onClose, onSaved }) {
 }
 
 export function CouponsPage() {
-  const { data, loading, error, setData } = useAdminData(adminApi.coupons);
+  const { data, loading, error, reload, setData } = useAdminData(adminApi.coupons);
   const { data: catData } = useAdminData(adminApi.categories);
   const { data: productData } = useAdminData(() => adminApi.products("?limit=100"));
   const { pending, run } = useAdminAction();
   const [editing, setEditing] = useState(null);
+  useAdminRefresh(reload, ["coupons", "orders", "payments"]);
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === "visible") reload(); };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); };
+  }, []);
   const items = data?.items || [];
   const saveRow = (coupon) => setData((current) => current ? { ...current, items: current.items?.some((item) => item._id === coupon._id) ? current.items.map((item) => item._id === coupon._id ? { ...item, ...coupon } : item) : [coupon, ...(current.items || [])] } : current);
   const remove = async (coupon) => { const result = await run(`coupon:delete:${coupon._id}`, () => adminApi.deleteCoupon(coupon._id), "Coupon deleted."); if (result) updateItemList(setData, coupon._id, coupon, true); };
