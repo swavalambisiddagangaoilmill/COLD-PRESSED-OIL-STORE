@@ -1,41 +1,234 @@
-import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-const STATIC_SLIDES = [
-  { _id: "static-carousel-1", imageUrl: "/carousel/image1.png" },
-  { _id: "static-carousel-2", imageUrl: "/carousel/image2.png" },
-  { _id: "static-carousel-3", imageUrl: "/carousel/image3.jpeg" },
-  { _id: "static-carousel-4", imageUrl: "/carousel/image4.jpeg" },
+const AUTOPLAY_DELAY = 6000;
+const SWIPE_THRESHOLD = 52;
+
+const CAROUSEL_SLIDES = [
+  { id: "badam", name: "Cold pressed almond oil", desktop: "/carousel/badam-desktop.png", mobile: "/carousel/badam-mobile.png" },
+  { id: "flaxseed", name: "Cold pressed flaxseed oil", desktop: "/carousel/flaxseed-desktop.png", mobile: "/carousel/flaxseed-mobile.png" },
+  { id: "herbal", name: "Herbal oil", desktop: "/carousel/herbal-desktop.png", mobile: "/carousel/herbal-mobile.png" },
+  { id: "sunflower", name: "Cold pressed sunflower oil", desktop: "/carousel/sunflower-desktop.png", mobile: null },
 ];
 
 export default function Hero() {
-  const [slides, setSlides] = useState(STATIC_SLIDES);
-  const [active, setActive] = useState(0);
-  const [touchStart, setTouchStart] = useState(null);
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
+  const slides = useMemo(
+    () => (isDesktop ? CAROUSEL_SLIDES : CAROUSEL_SLIDES.filter((slide) => slide.mobile)),
+    [isDesktop],
+  );
+  const slideCount = slides.length;
+  const renderedSlides = useMemo(
+    () => [slides[slideCount - 1], ...slides, slides[0]],
+    [slideCount, slides],
+  );
+  const [trackIndex, setTrackIndex] = useState(1);
+  const [transitioning, setTransitioning] = useState(true);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [interactionCycle, setInteractionCycle] = useState(0);
+  const [paused, setPaused] = useState({ hover: false, focus: false, hidden: false, outside: false, drag: false });
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const rootRef = useRef(null);
+  const pointerRef = useRef(null);
+
+  const activeIndex = (trackIndex - 1 + slideCount) % slideCount;
+  const isPaused = reducedMotion || Object.values(paused).some(Boolean);
+
+  const updatePause = useCallback((reason, value) => {
+    setPaused((current) => (current[reason] === value ? current : { ...current, [reason]: value }));
+  }, []);
+
+  const moveBy = useCallback((amount, manual = true) => {
+    setTransitioning(!reducedMotion);
+    setTrackIndex((current) => current + amount);
+    if (manual) setInteractionCycle((cycle) => cycle + 1);
+  }, [reducedMotion]);
+
+  const goTo = useCallback((index) => {
+    setTransitioning(!reducedMotion);
+    setTrackIndex(index + 1);
+    setInteractionCycle((cycle) => cycle + 1);
+  }, [reducedMotion]);
 
   useEffect(() => {
-    if (slides.length < 2) return undefined;
-    const timer = window.setInterval(() => setActive((current) => (current + 1) % slides.length), 5000);
-    return () => window.clearInterval(timer);
-  }, [slides.length]);
+    const desktopMedia = window.matchMedia("(min-width: 1024px)");
+    const syncDesktop = () => setIsDesktop(desktopMedia.matches);
+    syncDesktop();
+    desktopMedia.addEventListener("change", syncDesktop);
+    return () => desktopMedia.removeEventListener("change", syncDesktop);
+  }, []);
 
-  if (!slides.length) return null;
-  const goTo = (index) => setActive((index + slides.length) % slides.length);
+  useEffect(() => {
+    setTransitioning(false);
+    setTrackIndex(1);
+  }, [isDesktop]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncPreference = () => setReducedMotion(media.matches);
+    syncPreference();
+    media.addEventListener("change", syncPreference);
+    return () => media.removeEventListener("change", syncPreference);
+  }, []);
+
+  useEffect(() => {
+    const onVisibilityChange = () => updatePause("hidden", document.hidden);
+    onVisibilityChange();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [updatePause]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => updatePause("outside", !entry.isIntersecting),
+      { threshold: 0.2 },
+    );
+    if (rootRef.current) observer.observe(rootRef.current);
+    return () => observer.disconnect();
+  }, [updatePause]);
+
+  useEffect(() => {
+    if (isPaused || slideCount < 2) return undefined;
+    const timer = window.setTimeout(() => moveBy(1, false), AUTOPLAY_DELAY);
+    return () => window.clearTimeout(timer);
+  }, [activeIndex, interactionCycle, isPaused, moveBy, slideCount]);
+
+  const handleTransitionEnd = () => {
+    if (trackIndex === 0) {
+      setTransitioning(false);
+      setTrackIndex(slideCount);
+    } else if (trackIndex === slideCount + 1) {
+      setTransitioning(false);
+      setTrackIndex(1);
+    }
+  };
+
+  const handlePointerDown = (event) => {
+    if (event.button !== undefined && event.button !== 0) return;
+    pointerRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, horizontal: false };
+    updatePause("drag", true);
+  };
+
+  const handlePointerMove = (event) => {
+    const pointer = pointerRef.current;
+    if (!pointer || pointer.id !== event.pointerId) return;
+    const deltaX = event.clientX - pointer.x;
+    const deltaY = event.clientY - pointer.y;
+    if (!pointer.horizontal && Math.abs(deltaX) > 8 && Math.abs(deltaX) > Math.abs(deltaY) * 1.25) {
+      pointer.horizontal = true;
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    }
+    if (!pointer.horizontal) return;
+    event.preventDefault();
+    setTransitioning(false);
+    setDragOffset(deltaX * 0.82);
+  };
+
+  const finishPointer = (event) => {
+    const pointer = pointerRef.current;
+    if (!pointer || pointer.id !== event.pointerId) return;
+    const distance = event.clientX - pointer.x;
+    pointerRef.current = null;
+    setDragOffset(0);
+    updatePause("drag", false);
+    if (pointer.horizontal && Math.abs(distance) >= SWIPE_THRESHOLD) moveBy(distance < 0 ? 1 : -1);
+    else setTransitioning(true);
+  };
 
   return (
-    <section className="hero-banner group relative mx-3 my-3 overflow-hidden bg-white sm:mx-5 md:mx-6" aria-label="Homepage promotions" onTouchStart={(event) => slides.length > 1 && setTouchStart(event.touches[0].clientX)} onTouchEnd={(event) => {
-      if (touchStart === null || slides.length < 2) return;
-      const distance = touchStart - event.changedTouches[0].clientX;
-      if (distance > 48) goTo(active + 1);
-      if (distance < -48) goTo(active - 1);
-      setTouchStart(null);
-    }}>
-      {slides.map((slide, index) => (
-        <motion.img key={slide._id} src={slide.imageUrl} alt="" loading={index === 0 ? "eager" : "lazy"} draggable="false" onError={() => { setSlides((current) => current.filter((item) => item._id !== slide._id)); setActive(0); }} className="absolute inset-0 h-full w-full select-none object-contain" initial={false} animate={{ opacity: index === active ? 1 : 0 }} transition={{ duration: 0.55, ease: "easeOut" }} />
-      ))}
-      {slides.length > 1 && <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 bg-white/75 p-1.5 backdrop-blur-sm">
-        {slides.map((slide, index) => <button key={slide._id} type="button" aria-label={`Show promotion ${index + 1}`} onClick={() => goTo(index)} className={`h-1 w-6 transition-colors ${index === active ? "bg-brand" : "bg-ink/20"}`} />)}
-      </div>}
+    <section
+      ref={rootRef}
+      className="hero-carousel"
+      aria-label="Homepage promotions"
+      aria-roledescription="carousel"
+      onMouseEnter={() => updatePause("hover", true)}
+      onMouseLeave={() => updatePause("hover", false)}
+      onFocusCapture={() => updatePause("focus", true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) updatePause("focus", false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") { event.preventDefault(); moveBy(-1); }
+        if (event.key === "ArrowRight") { event.preventDefault(); moveBy(1); }
+      }}
+    >
+      <div
+        className="hero-carousel__viewport"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={finishPointer}
+        onPointerCancel={finishPointer}
+      >
+          <div
+            className="hero-carousel__track"
+            onTransitionEnd={handleTransitionEnd}
+            style={{
+              transform: `translate3d(calc(${-trackIndex * 100}% + ${dragOffset}px), 0, 0)`,
+              transitionDuration: transitioning ? undefined : "0ms",
+            }}
+          >
+            {renderedSlides.map((slide, index) => {
+            const realIndex = (index - 1 + slideCount) % slideCount;
+            const isCurrent = index === trackIndex;
+            const isPrioritySlide = index === 1;
+            return (
+              <div
+                key={`${slide.id}-${index}`}
+                className="hero-carousel__slide"
+                role="group"
+                aria-roledescription="slide"
+                aria-label={`Slide ${realIndex + 1} of ${slideCount}`}
+                aria-hidden={!isCurrent}
+              >
+                <picture>
+                  {slide.mobile && <source media="(max-width: 1023px)" srcSet={slide.mobile} />}
+                  <img
+                    src={slide.desktop}
+                    alt={slide.name}
+                    width="1672"
+                    height="941"
+                    loading={isPrioritySlide ? "eager" : "lazy"}
+                    fetchPriority={isPrioritySlide ? "high" : "auto"}
+                    draggable="false"
+                  />
+                </picture>
+              </div>
+            );
+            })}
+          </div>
+
+          {slideCount > 1 && (
+            <>
+              <button className="hero-carousel__arrow hero-carousel__arrow--previous" type="button" aria-label="Previous slide" onClick={() => moveBy(-1)}>
+                <ChevronLeft aria-hidden="true" />
+              </button>
+              <button className="hero-carousel__arrow hero-carousel__arrow--next" type="button" aria-label="Next slide" onClick={() => moveBy(1)}>
+                <ChevronRight aria-hidden="true" />
+              </button>
+            </>
+          )}
+
+        <div className="hero-carousel__pagination" aria-label="Choose a promotion">
+          {slides.map((slide, index) => (
+          <button
+            key={slide.id}
+            type="button"
+            aria-label={`Go to slide ${index + 1}`}
+            aria-current={index === activeIndex ? "true" : undefined}
+            onClick={() => goTo(index)}
+            className="hero-carousel__dot-button"
+          >
+            <span className="hero-carousel__dot">
+              {index === activeIndex && !isPaused && (
+                <svg key={`${activeIndex}-${interactionCycle}`} className="hero-carousel__progress" viewBox="0 0 20 20" aria-hidden="true">
+                  <circle cx="10" cy="10" r="8" />
+                </svg>
+              )}
+            </span>
+          </button>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }

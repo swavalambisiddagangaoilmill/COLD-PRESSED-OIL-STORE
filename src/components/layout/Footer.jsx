@@ -1,23 +1,15 @@
 // Renders the premium footer layout element.
 import {
-  Facebook,
-  Instagram,
   Mail,
   MapPin,
   Phone,
   ShieldCheck,
-  Youtube,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 import Container from "../ui/Container.jsx";
 import gloraLogo from "/glora-black.webp";
-
-const socialLinks = [
-  { label: "Instagram", icon: Instagram, href: "/contact" },
-  { label: "Facebook", icon: Facebook, href: "/contact" },
-  { label: "YouTube", icon: Youtube, href: "/contact" },
-];
+import { socialLinks } from "../../data/socialLinks.js";
 
 export default function Footer() {
   const { authenticated } = useAuth();
@@ -155,14 +147,16 @@ export default function Footer() {
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
                 {socialLinks.map(({ label, icon: Icon, href }) => (
-                  <Link
+                  <a
                     key={label}
-                    to={href}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     aria-label={label}
                     className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white transition hover:-translate-y-1 hover:bg-white hover:text-ink"
                   >
                     <Icon size={18} />
-                  </Link>
+                  </a>
                 ))}
               </div>
             </div>

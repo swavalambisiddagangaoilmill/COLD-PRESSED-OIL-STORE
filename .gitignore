@@ -16,6 +16,7 @@ build/
 .vite/
 .cache/
 coverage/
+public/carousel-old/
 
 # Logs
 *.log
