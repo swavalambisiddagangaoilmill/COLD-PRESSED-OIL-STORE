@@ -7,6 +7,7 @@ export const productSlugValidator = [param("slug").trim().notEmpty().withMessage
 export const productQueryValidator = [
   query("page").optional().isInt({ min: 1 }).withMessage("Page must be positive."),
   query("limit").optional().isInt({ min: 1, max: 100 }).withMessage("Limit must be between 1 and 100."),
+  query("all").optional().isBoolean().withMessage("All products flag must be boolean."),
   query("minPrice").optional().isFloat({ min: 0 }).withMessage("Minimum price must be positive."),
   query("maxPrice").optional().isFloat({ min: 0 }).withMessage("Maximum price must be positive."),
 ];

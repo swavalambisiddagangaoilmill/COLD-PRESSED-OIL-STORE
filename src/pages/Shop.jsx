@@ -9,8 +9,6 @@ import SectionHeading from "../components/ui/SectionHeading.jsx";
 import OfferBanner from "../components/features/feedback/OfferBanner.jsx";
 import { getCategories, getProducts } from "../services/catalogService.js";
 
-const perPage = 6;
-
 export default function Shop() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([{ name: "All" }]);
@@ -19,8 +17,6 @@ export default function Shop() {
   const [sort, setSort] = useState("featured");
   const [search, setSearch] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -37,28 +33,26 @@ export default function Shop() {
     const loadProducts = (showLoading = false) => {
       if (showLoading) setSearchLoading(true);
       const categoryId = categories.find((item) => item.name === category)?.id;
-      return getProducts({ page, limit: perPage, search, category: category === "All" ? undefined : categoryId, sort: sort === "featured" ? "featured" : sort === "price-low" ? "priceAsc" : sort === "price-high" ? "priceDesc" : "newest" })
-        .then((data) => { if (!active) return; setProducts(data.products); setPagination(data.pagination || null); })
+      return getProducts({ all: true, search, category: category === "All" ? undefined : categoryId, sort: sort === "featured" ? "featured" : sort === "price-low" ? "priceAsc" : sort === "price-high" ? "priceDesc" : "newest" })
+        .then((data) => { if (!active) return; setProducts(data.products); })
         .catch(() => active && setProducts([]))
         .finally(() => active && showLoading && setSearchLoading(false));
     };
     const timer = window.setTimeout(() => loadProducts(true), search ? 300 : 0);
     const refreshTimer = window.setInterval(() => loadProducts(false), 20000);
     return () => { active = false; window.clearTimeout(timer); window.clearInterval(refreshTimer); };
-  }, [categories, categoriesReady, category, invalidSearch, page, search, sort]);
+  }, [categories, categoriesReady, category, invalidSearch, search, sort]);
 
   useEffect(() => {
     const nextSearch = searchParams.get("q") || "";
     setSearch((current) => (current === nextSearch ? current : nextSearch));
     if (nextSearch) setCategory("All");
-    setPage(1);
   }, [searchParams]);
 
   useEffect(() => {
     if (!location.state?.resetShop) return;
     setCategory("All");
     setSort("featured");
-    setPage(1);
     if (!searchParams.get("q")) setSearch("");
     navigate({ pathname: "/shop", search: searchParams.toString() ? `?${searchParams}` : "" }, { replace: true, state: null });
   }, [location.key]);
@@ -69,7 +63,6 @@ export default function Shop() {
 
   const updateSearch = (value) => {
     setSearch(value);
-    setPage(1);
     const nextParams = new URLSearchParams(searchParams);
     if (value) nextParams.set("q", value);
     else nextParams.delete("q");
@@ -78,11 +71,8 @@ export default function Shop() {
   };
 
   const visible = useMemo(() => products.filter(() => !invalidSearch), [invalidSearch, products]);
-  const totalPages = Math.max(1, pagination?.pages || page);
-
   const changeCategory = (next) => {
     setCategory(next);
-    setPage(1);
   };
 
   return (
@@ -111,11 +101,6 @@ export default function Shop() {
             {visible.map((product) => <ProductCard key={product.id} product={product} />)}
           </div>
           {visible.length === 0 && !searchLoading && <p className="rounded-3xl bg-white p-10 text-center text-ink/60">No oils match your search.</p>}
-          <div className="mt-10 flex justify-center gap-2">
-            {Array.from({ length: totalPages }, (_, index) => (
-              <button key={index + 1} type="button" onClick={() => setPage(index + 1)} className={`h-11 w-11 rounded-full text-sm font-bold transition ${page === index + 1 ? "bg-ink text-white" : "bg-white hover:bg-linen"}`}>{index + 1}</button>
-            ))}
-          </div>
         </Container>
       </section>
     </>

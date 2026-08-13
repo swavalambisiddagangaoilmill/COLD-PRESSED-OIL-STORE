@@ -96,6 +96,7 @@ function buildSort(sort = "newest") {
 export async function listProducts(query) {
   const page = Math.max(Number(query.page) || 1, 1);
   const limit = Math.min(Math.max(Number(query.limit) || 12, 1), 100);
+  const includeAll = query.all === true || query.all === "true";
   const search = normalizeSearch(query.search);
   const pipeline = [
     { $match: buildBaseMatch(query) },
@@ -104,16 +105,16 @@ export async function listProducts(query) {
   ];
   const keywordMatch = buildKeywordMatch(search);
   if (keywordMatch) pipeline.push({ $match: keywordMatch }, { $addFields: { searchRank: buildSearchRank(search) } });
+  const itemPipeline = [
+    ...(includeAll ? [] : [{ $skip: (page - 1) * limit }, { $limit: limit }]),
+    { $addFields: { category: { _id: "$categoryDoc._id", name: "$categoryDoc.name", slug: "$categoryDoc.slug" } } },
+    { $project: { categoryDoc: 0, searchRank: 0 } },
+  ];
   pipeline.push(
     { $sort: keywordMatch ? { searchRank: -1, ...buildSort(query.sort) } : buildSort(query.sort) },
     {
       $facet: {
-        items: [
-          { $skip: (page - 1) * limit },
-          { $limit: limit },
-          { $addFields: { category: { _id: "$categoryDoc._id", name: "$categoryDoc.name", slug: "$categoryDoc.slug" } } },
-          { $project: { categoryDoc: 0, searchRank: 0 } },
-        ],
+        items: itemPipeline,
         total: [{ $count: "count" }],
       },
     }
@@ -121,7 +122,7 @@ export async function listProducts(query) {
   const [result] = await Product.aggregate(pipeline);
   const items = result?.items || [];
   const total = result?.total?.[0]?.count || 0;
-  return { items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
+  return { items, pagination: { page: includeAll ? 1 : page, limit: includeAll ? total : limit, total, pages: includeAll ? (total ? 1 : 0) : Math.ceil(total / limit) } };
 }
 
 export async function getFeaturedProducts() {
