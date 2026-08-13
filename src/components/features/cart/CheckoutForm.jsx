@@ -24,14 +24,27 @@ function loadRazorpayCheckout() {
   });
 }
 
-function formatOrderForSuccess(order, shippingAddress, items, total) {
+function formatOrderForSuccess(order, shippingAddress, items, total, profile) {
   return {
+    _id: order?._id || `VEL-${Date.now().toString().slice(-6)}`,
     id: order?._id || `VEL-${Date.now().toString().slice(-6)}`,
+    createdAt: order?.createdAt || new Date().toISOString(),
     date: new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(order?.createdAt || Date.now())),
     paymentStatus: order?.paymentStatus || "pending",
-    address: `${shippingAddress.street}, ${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.postalCode}`,
+    paymentMethod: order?.paymentMethod || "cod",
+    customerName: profile?.name || shippingAddress.fullName,
+    customerEmail: profile?.email || "",
+    customerPhone: profile?.phone || shippingAddress.phone,
+    user: profile ? { name: profile.name, email: profile.email, phone: profile.phone } : undefined,
+    shippingAddress,
+    billingAddress: shippingAddress,
     items,
+    products: order?.products || items,
+    subtotal: items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0),
+    shippingAmount: Number(order?.shippingAmount || 0),
+    couponDiscount: Number(order?.couponDiscount || 0),
     total: order?.totalAmount || total,
+    totalAmount: order?.totalAmount || total,
     estimatedDelivery: "2-5 business days",
   };
 }
@@ -145,7 +158,7 @@ export default function CheckoutForm() {
   const finishOrder = (order, shippingAddress) => {
     writeGuestSession({ checkoutDraft: {} });
     clearCart();
-    navigate("/order/success", { state: { order: formatOrderForSuccess(order, shippingAddress, items, totals.total) } });
+    navigate("/order/success", { state: { order: formatOrderForSuccess(order, shippingAddress, items, totals.total, profile) } });
   };
 
   const submitCodOrder = async (orderPayload) => {

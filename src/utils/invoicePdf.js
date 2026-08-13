@@ -1,7 +1,7 @@
 // Generates a structured one-page invoice PDF without capturing webpage UI.
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
-const MARGIN = 34;
+const MARGIN = 42;
 const COMPANY = {
   name: "Swavalambi Siddaganga Oil Mill",
   address: "SIDDAGANGA OIL MILL, Near Small City Club Road, Sira Gate, TUDA Layout, Tumakuru, Karnataka 572106",
@@ -72,7 +72,9 @@ function normalizeItems(order) {
     const variant = item.variant || item.volume || product.volume || item.weight || "-";
     const quantity = Number(item.quantity || 1);
     const unitPrice = Number(item.price || item.unitPrice || product.discountPrice || product.price || 0);
-    return { name, variant, quantity, unitPrice, total: unitPrice * quantity };
+    const listPrice = Number(item.originalPrice || item.listPrice || product.originalPrice || unitPrice);
+    const discount = Math.max(0, listPrice - unitPrice);
+    return { name, variant, quantity, unitPrice, listPrice, discount, total: unitPrice * quantity };
   });
 }
 
@@ -102,7 +104,7 @@ function wrapText(value, maxChars) {
   return lines.length ? lines : ["-"];
 }
 
-function buildContent(order, hasLogo) {
+function buildContent(order, hasLogo, pageInfo = { page: 1, pages: 1, last: true }) {
   const commands = [];
   const orderNumber = getOrderNumber(order);
   const invoiceNumber = getInvoiceNumber(order, orderNumber);
@@ -130,6 +132,8 @@ function buildContent(order, hasLogo) {
   rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, true);
   fill(1, 1, 1);
   rect(MARGIN, 34, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - 68, true);
+  stroke(0.33, 0.44, 0.18);
+  rect(MARGIN, 34, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - 68, false);
 
   if (hasLogo) commands.push(`q 48 0 0 48 ${MARGIN} 760 cm /Logo Do Q`);
   else {
@@ -146,7 +150,7 @@ function buildContent(order, hasLogo) {
   text(`Email: ${COMPANY.email}`, 92, 743, 8, "F1");
   if (COMPANY.gst) text(`GST: ${COMPANY.gst}`, 92, 732, 8, "F1");
 
-  text("TAX INVOICE", 430, 802, 16, "F2");
+  text("TAX INVOICE", 421, 802, 16, "F2");
   const meta = [
     ["Invoice No", invoiceNumber],
     ["Order No", orderNumber],
@@ -161,7 +165,9 @@ function buildContent(order, hasLogo) {
   });
   line(MARGIN, 724, PAGE_WIDTH - MARGIN, 724, 0.8);
 
+  fill(0.33, 0.44, 0.18);
   text("CUSTOMER DETAILS", MARGIN, 704, 10, "F2");
+  fill(0.18, 0.14, 0.11);
   text("Customer Name", MARGIN, 686, 8, "F2");
   text(customer.name, 126, 686, 8, "F1");
   text("Email", MARGIN, 673, 8, "F2");
@@ -179,50 +185,55 @@ function buildContent(order, hasLogo) {
   line(MARGIN, 612, PAGE_WIDTH - MARGIN, 612, 0.8);
 
   const tableTop = 590;
-  const col = { product: MARGIN + 8, variant: 260, qty: 346, unit: 420, total: PAGE_WIDTH - MARGIN - 8 };
+  const col = { product: MARGIN + 8, qty: 286, list: 350, discount: 423, unit: 486, total: PAGE_WIDTH - MARGIN - 8 };
   fill(0.94, 0.91, 0.84);
   rect(MARGIN, tableTop - 18, PAGE_WIDTH - MARGIN * 2, 22, true);
   fill(0.18, 0.14, 0.11);
   text("Product", col.product, tableTop - 10, 8, "F2");
-  text("Variant", col.variant, tableTop - 10, 8, "F2");
   text("Qty", col.qty, tableTop - 10, 8, "F2");
-  rightText("Unit Price", col.unit + 46, tableTop - 10, 8, "F2");
+  rightText("List", col.list, tableTop - 10, 8, "F2");
+  rightText("Discount", col.discount, tableTop - 10, 8, "F2");
+  rightText("Unit", col.unit, tableTop - 10, 8, "F2");
   rightText("Total", col.total, tableTop - 10, 8, "F2");
   line(MARGIN, tableTop - 20, PAGE_WIDTH - MARGIN, tableTop - 20, 0.6);
 
   let y = tableTop - 39;
-  items.slice(0, 12).forEach((item) => {
-    const name = wrapText(item.name, 34)[0];
+  items.forEach((item) => {
+    const name = wrapText(`${item.name}${item.variant && item.variant !== "-" ? ` (${item.variant})` : ""}`, 38)[0];
     text(name, col.product, y, bodyFont, "F1");
-    text(item.variant, col.variant, y, bodyFont, "F1");
     text(String(item.quantity), col.qty + 8, y, bodyFont, "F1");
-    rightText(money(item.unitPrice), col.unit + 46, y, bodyFont, "F1");
+    rightText(money(item.listPrice), col.list, y, bodyFont, "F1");
+    rightText(item.discount > 0 ? money(item.discount) : "-", col.discount, y, bodyFont, "F1");
+    rightText(money(item.unitPrice), col.unit, y, bodyFont, "F1");
     rightText(money(item.total), col.total, y, bodyFont, "F2");
     line(MARGIN, y - 8, PAGE_WIDTH - MARGIN, y - 8, 0.3);
     y -= rowHeight;
   });
-  if (items.length > 12) text(`+ ${items.length - 12} additional item(s) listed in order record`, col.product, y, 7.5, "F1");
-
-  const totalsX = 360;
-  const totalsY = Math.max(122, y - 8);
-  const rows = [
-    ["Subtotal", money(total.subtotal)],
-    ["Discount", `- ${money(total.discount)}`],
-    ["Shipping", money(total.shipping)],
-    ["Tax", money(total.tax)],
-  ];
-  rows.forEach(([label, value], index) => {
-    const rowY = totalsY - index * 16;
-    text(label, totalsX, rowY, 8.5, "F1");
-    rightText(value, PAGE_WIDTH - MARGIN - 8, rowY, 8.5, "F1");
-  });
-  line(totalsX, totalsY - 54, PAGE_WIDTH - MARGIN, totalsY - 54, 0.8);
-  text("Grand Total", totalsX, totalsY - 72, 11, "F2");
-  rightText(money(total.grandTotal), PAGE_WIDTH - MARGIN - 8, totalsY - 72, 11, "F2");
+  if (pageInfo.last) {
+    const totalsX = 360;
+    const totalsY = Math.max(122, y - 8);
+    const rows = [
+      ["Subtotal", money(total.subtotal)],
+      ["Discount", `- ${money(total.discount)}`],
+      ["Shipping", money(total.shipping)],
+      ["Tax", money(total.tax)],
+    ];
+    rows.forEach(([label, value], index) => {
+      const rowY = totalsY - index * 16;
+      text(label, totalsX, rowY, 8.5, "F1");
+      rightText(value, PAGE_WIDTH - MARGIN - 8, rowY, 8.5, "F1");
+    });
+    line(totalsX, totalsY - 54, PAGE_WIDTH - MARGIN, totalsY - 54, 0.8);
+    text("Grand Total", totalsX, totalsY - 72, 11, "F2");
+    rightText(money(total.grandTotal), PAGE_WIDTH - MARGIN - 8, totalsY - 72, 11, "F2");
+  } else {
+    text("Items continue on the next page.", MARGIN + 8, Math.max(118, y - 4), 8.5, "F2");
+  }
 
   line(MARGIN, 72, PAGE_WIDTH - MARGIN, 72, 0.6);
   text("This is a computer-generated invoice and does not require a signature.", 142, 54, 8, "F1");
   text("Thank you for shopping with Swavalambi Siddaganga Oil Mill.", 150, 40, 8, "F2");
+  rightText(`Page ${pageInfo.page} of ${pageInfo.pages}`, PAGE_WIDTH - MARGIN - 8, 40, 7.5, "F1");
   return commands.join("\n");
 }
 
@@ -267,7 +278,9 @@ function concatBytes(chunks) {
   return output;
 }
 
-function buildPdf(content, logo) {
+function buildPdf(contents, logo) {
+  const pageContents = Array.isArray(contents) ? contents : [contents];
+  const pageCount = pageContents.length;
   const objects = [];
   const add = (chunks) => {
     objects.push(Array.isArray(chunks) ? chunks : [asciiBytes(chunks)]);
@@ -275,20 +288,23 @@ function buildPdf(content, logo) {
   };
 
   const catalogId = add("<< /Type /Catalog /Pages 2 0 R >>");
-  add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
-  const resources = logo ? "<< /Font << /F1 4 0 R /F2 5 0 R >> /XObject << /Logo 6 0 R >> >>" : "<< /Font << /F1 4 0 R /F2 5 0 R >> >>";
-  add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources ${resources} /Contents ${logo ? 7 : 6} 0 R >>`);
+  const pageIds = pageContents.map((_, index) => index + 3);
+  const fontRegularId = pageCount + 3;
+  const fontBoldId = pageCount + 4;
+  const logoId = logo ? pageCount + 5 : null;
+  const firstContentId = pageCount + (logo ? 6 : 5);
+  add(`<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageCount} >>`);
+  const resources = logo ? `<< /Font << /F1 ${fontRegularId} 0 R /F2 ${fontBoldId} 0 R >> /XObject << /Logo ${logoId} 0 R >> >>` : `<< /Font << /F1 ${fontRegularId} 0 R /F2 ${fontBoldId} 0 R >> >>`;
+  pageContents.forEach((_, index) => add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources ${resources} /Contents ${firstContentId + index} 0 R >>`));
   add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
   add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
-  let contentId;
   if (logo) {
     add([asciiBytes(`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logo.bytes.length} >>\nstream\n`), logo.bytes, asciiBytes("\nendstream")]);
-    const stream = asciiBytes(content);
-    contentId = add([asciiBytes(`<< /Length ${stream.length} >>\nstream\n`), stream, asciiBytes("\nendstream")]);
-  } else {
-    const stream = asciiBytes(content);
-    contentId = add([asciiBytes(`<< /Length ${stream.length} >>\nstream\n`), stream, asciiBytes("\nendstream")]);
   }
+  pageContents.forEach((content) => {
+    const stream = asciiBytes(content);
+    add([asciiBytes(`<< /Length ${stream.length} >>\nstream\n`), stream, asciiBytes("\nendstream")]);
+  });
 
   const chunks = [asciiBytes("%PDF-1.4\n")];
   const offsets = [0];
@@ -306,8 +322,7 @@ function buildPdf(content, logo) {
 export async function downloadInvoicePdf(order) {
   const orderNumber = getOrderNumber(order);
   const logo = await loadLogo();
-  const content = buildContent(order, Boolean(logo));
-  const blob = buildPdf(content, logo);
+  const blob = createInvoicePdfBlob(order, logo);
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -316,4 +331,16 @@ export async function downloadInvoicePdf(order) {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export function createInvoicePdfBlob(order, logo = null) {
+  const sourceItems = order.items || order.products || [];
+  const chunks = [];
+  const pageCount = Math.max(1, Math.ceil(sourceItems.length / 18));
+  const chunkSize = Math.max(1, Math.ceil(sourceItems.length / pageCount));
+  for (let index = 0; index < sourceItems.length; index += chunkSize) chunks.push(sourceItems.slice(index, index + chunkSize));
+  if (!chunks.length) chunks.push([]);
+  const completeTotals = totals(order, normalizeItems(order));
+  const contents = chunks.map((items, index) => buildContent({ ...order, items, products: undefined, subtotal: completeTotals.subtotal, shippingAmount: completeTotals.shipping, discountAmount: completeTotals.discount, taxAmount: completeTotals.tax, totalAmount: completeTotals.grandTotal }, Boolean(logo), { page: index + 1, pages: chunks.length, last: index === chunks.length - 1 }));
+  return buildPdf(contents, logo);
 }

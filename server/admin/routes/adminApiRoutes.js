@@ -6,6 +6,7 @@ import * as controller from "../controllers/adminController.js";
 import { requireAdmin, requireAdminPermission } from "../middleware/adminAuth.js";
 import { protect } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
+import { productIdValidator, productUpdateValidator, productValidator } from "../../validators/productValidators.js";
 
 const router = Router();
 const restrictionLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many restriction management requests.", errors: [] } });
@@ -31,12 +32,12 @@ router.put("/orders/:id/status", requireAdminPermission("orders.update"), contro
 router.post("/orders/:id/ready-to-ship", requireAdminPermission("orders.ship"), controller.orderReadyToShip);
 router.post("/orders/:id/mock-shipment/next", requireAdminPermission("shipping.manage"), controller.mockShippingNext);
 router.get("/products", requireAdminPermission("products.read"), controller.products);
-router.post("/products", requireAdminPermission("products.create"), controller.saveProduct);
-router.put("/products/:id", requireAdminPermission("products.update"), controller.saveProduct);
-router.delete("/products/:id", requireAdminPermission("products.archive"), controller.archiveProduct);
+router.post("/products", requireAdminPermission("products.create"), productValidator, validate, controller.saveProduct);
+router.put("/products/:id", requireAdminPermission("products.update"), productIdValidator, productUpdateValidator, validate, controller.saveProduct);
+router.delete("/products/:id", requireAdminPermission("products.archive"), productIdValidator, validate, controller.archiveProduct);
 router.post("/products/bulk-price/preview", requireAdminPermission("products.update"), controller.bulkPricePreview);
 router.post("/products/bulk-price/apply", requireAdminPermission("products.update"), controller.bulkPriceApply);
-router.put("/inventory/:id", requireAdminPermission("inventory.update"), controller.inventoryUpdate);
+router.put("/inventory/:id", requireAdminPermission("inventory.update"), productIdValidator, [body("mode").isIn(["add", "reduce", "set"]).withMessage("Valid stock update mode is required."), body("quantity").isInt({ min: 0 }).withMessage("Quantity must be a whole number of zero or more."), body().custom((value) => value.mode === "set" || Number(value.quantity) > 0).withMessage("Add or reduce quantity must be greater than zero.")], validate, controller.inventoryUpdate);
 router.get("/categories", requireAdminPermission("categories.read"), controller.categories);
 router.post("/categories", requireAdminPermission("categories.manage"), controller.saveCategory);
 router.put("/categories/:id", requireAdminPermission("categories.manage"), controller.saveCategory);

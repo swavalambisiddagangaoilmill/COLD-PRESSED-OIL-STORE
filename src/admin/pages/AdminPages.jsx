@@ -1,5 +1,5 @@
 // API-backed page components for the Swavalambi Siddaganga Oil Mill admin panel.
-import { ArrowDown, ArrowUp, Download, Eye, EyeOff, Plus, Search, Trash2 } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowUp, CheckCircle2, Download, Eye, EyeOff, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useToast } from "../../components/features/feedback/ToastProvider.jsx";
 import { AdminBadge, AdminButton, AdminCard, AdminFilters, AdminInput, AdminModal, AdminPageHeader, AdminSelect, AdminTable, AdminTextarea } from "../components/AdminUi.jsx";
@@ -55,6 +55,17 @@ function useAdminAction() {
   return { pending, run };
 }
 
+function useAdminRefresh(reload, scopes) {
+  useEffect(() => {
+    const refresh = (event) => {
+      const changed = event.detail?.scopes || [];
+      if (scopes.some((scope) => changed.includes(scope))) reload();
+    };
+    window.addEventListener("ss-admin-data-changed", refresh);
+    return () => window.removeEventListener("ss-admin-data-changed", refresh);
+  }, [reload, scopes.join("|")]);
+}
+
 function updateItemList(setData, id, nextItem, remove = false) {
   setData((current) => current ? { ...current, items: (current.items || []).map((item) => item._id === id ? { ...item, ...nextItem } : item).filter((item) => !(remove && item._id === id)) } : current);
 }
@@ -69,6 +80,24 @@ function State({ loading, error, empty, title = "No records found.", description
 function Cell({ children, className = "" }) { return <td className={`whitespace-nowrap px-4 py-3 align-middle ${className}`}>{children}</td>; }
 function SearchBox({ value, onChange, placeholder = "Search" }) { return <label className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink/35" size={16} /><input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="h-10 w-full rounded-lg border border-[var(--admin-border)] bg-white pl-9 pr-3 text-sm outline-none focus:border-[var(--admin-primary)]" /></label>; }
 function Toggle({ label, checked, onChange }) { return <label className="flex items-center gap-2 text-sm font-semibold text-ink/70"><input type="checkbox" checked={Boolean(checked)} onChange={(e) => onChange(e.target.checked)} />{label}</label>; }
+
+const blockInvalidNumberKey = (event) => {
+  if (["-", "+", "e", "E"].includes(event.key)) event.preventDefault();
+};
+
+function numericError(value, label, { required = false, integer = false } = {}) {
+  if (value === "" || value === undefined || value === null) return required ? `${label} is required.` : "";
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || (label !== "Stock" && number <= 0)) return `${label} must be ${label === "Stock" ? "zero or more" : "greater than zero"}.`;
+  if (integer && !Number.isInteger(number)) return `${label} must be a whole number.`;
+  return "";
+}
+
+function skuPreview(form, categories) {
+  const clean = (value, fallback) => String(value || "").normalize("NFKD").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toUpperCase() || fallback;
+  const category = categories.find((item) => item._id === (form.category?._id || form.category));
+  return [clean(category?.slug || category?.name, "CATEGORY").slice(0, 8), clean(form.title, "PRODUCT").slice(0, 12), form.weight ? clean(form.weight, "UNIT") : "UNIT"].join("-");
+}
 
 function offerStatus(offer) {
   if (!offer.isActive) return "Disabled";
@@ -91,9 +120,22 @@ function ServiceStatusSection() {
   return <div className="mt-5 rounded-xl border border-[var(--admin-border)] bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-bold">Service Status</h2><span className="text-xs font-semibold text-ink/40">External integrations</span></div><div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">{Object.entries(services).map(([key, service]) => <div key={key} className="rounded-lg bg-linen/60 p-3"><p className="text-xs font-bold uppercase tracking-[0.12em] text-ink/40">{statusText(key)}</p><p className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${style[service.status] || style.offline}`}>{icon[service.status] || "Offline"}</p><p className="mt-2 line-clamp-2 text-xs font-semibold text-ink/50">{service.message}</p></div>)}</div></div>;
 }
 export function DashboardPage() {
-  const { data, loading, error } = useAdminData(adminApi.dashboard);
+  const { data, loading, error, reload } = useAdminData(adminApi.dashboard);
+  const { data: serviceData } = useAdminData(adminApi.serviceStatus);
+  const { pending, run } = useAdminAction();
+  useAdminRefresh(reload, ["dashboard", "orders", "inventory"]);
   const s = data?.summary || {};
-  return <><AdminPageHeader title="Dashboard" description="Store operations overview." /><State loading={loading} error={error} />{data && <><div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6"><AdminCard title="Today's Orders" value={String(s.todayOrders || 0)} /><AdminCard title="Today's Revenue" value={money(s.todayRevenue)} /><AdminCard title="Pending Orders" value={String(s.pendingOrders || 0)} /><AdminCard title="Ready to Ship" value={String(s.readyToShip || 0)} /><AdminCard title="Low Stock" value={String(s.lowStock || 0)} /><AdminCard title="Total Customers" value={String(s.totalCustomers || 0)} /></div><ServiceStatusSection /><div className="mt-5 grid gap-5 xl:grid-cols-[1.3fr_0.7fr]"><OrdersTable orders={data.recentOrders || []} /><div><h2 className="mb-3 text-lg font-bold">Needs Attention</h2>{Object.entries(data.needsAttention || {}).map(([key, value]) => <div key={key} className="mb-3 rounded-xl border border-[var(--admin-border)] bg-white p-4 text-sm font-semibold">{statusText(key)}: {value}</div>)}</div></div></>}</>;
+  const action = async (type, order) => {
+    const key = `${type}:${order._id}`;
+    const status = type === "confirm" ? "confirmed" : type === "ship" ? "shipped" : type === "deliver" ? "delivered" : "cancelled";
+    const labels = { confirm: "Order confirmed.", ready: "Order marked ready to ship.", ship: "Order marked shipped.", deliver: "Order delivered.", cancel: "Order cancelled." };
+    const result = await run(key, type === "ready" ? () => adminApi.readyToShip(order._id) : () => adminApi.orderStatus(order._id, status), labels[type]);
+    if (result?.order) {
+      await reload();
+      window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["orders", "inventory", "products"] } }));
+    }
+  };
+  return <><AdminPageHeader title="Dashboard" description="Store operations overview." /><State loading={loading} error={error} />{data && <><div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6"><AdminCard title="Today's Orders" value={String(s.todayOrders || 0)} /><AdminCard title="Today's Revenue" value={money(s.todayRevenue)} /><AdminCard title="Pending Orders" value={String(s.pendingOrders || 0)} /><AdminCard title="Ready to Ship" value={String(s.readyToShip || 0)} /><AdminCard title="Low Stock" value={String(s.lowStock || 0)} /><AdminCard title="Total Customers" value={String(s.totalCustomers || 0)} /></div><ServiceStatusSection /><div className="mt-5 grid gap-5 xl:grid-cols-[1.3fr_0.7fr]"><OrdersTable orders={data.recentOrders || []} onAction={action} pending={pending} shiprocketAvailable={serviceData?.services?.shiprocket?.available !== false} /><div><h2 className="mb-3 text-lg font-bold">Needs Attention</h2>{Object.entries(data.needsAttention || {}).map(([key, value]) => <div key={key} className="mb-3 rounded-xl border border-[var(--admin-border)] bg-white p-4 text-sm font-semibold">{statusText(key)}: {value}</div>)}</div></div></>}</>;
 }
 
 function OrdersTable({ orders = [], onAction, pending = {}, shiprocketAvailable = true }) {
@@ -102,7 +144,7 @@ function OrdersTable({ orders = [], onAction, pending = {}, shiprocketAvailable 
   const canShip = (order) => order.orderStatus === "packed";
   const canDeliver = (order) => order.orderStatus === "shipped";
   const canCancel = (order) => ["placed", "confirmed", "packed"].includes(order.orderStatus);
-  return <AdminTable columns={["Order", "Customer", "Date", "Items", "Payment", "Amount", "Order Status", "Shipping", "Actions"]} rows={orders.map((order) => <tr key={order._id}><Cell className="font-bold">{order._id}</Cell><Cell>{order.user?.name || order.shippingAddress?.fullName || "Customer"}</Cell><Cell>{new Date(order.createdAt).toLocaleDateString("en-IN")}</Cell><Cell>{order.products?.length || 0}</Cell><Cell><AdminBadge>{statusText(order.paymentStatus)}</AdminBadge></Cell><Cell>{money(order.totalAmount)}</Cell><Cell><AdminBadge>{statusText(order.orderStatus)}</AdminBadge></Cell><Cell>{statusText(order.shippingStatus)}</Cell><Cell><div className="flex flex-wrap gap-2">{canConfirm(order) && <AdminButton variant="secondary" loading={pending[`confirm:${order._id}`]} onClick={() => onAction?.("confirm", order)}>Confirm</AdminButton>}{canReady(order) && <AdminButton variant="secondary" loading={pending[`ready:${order._id}`]} onClick={() => onAction?.("ready", order)}>Ready</AdminButton>}{canShip(order) && <AdminButton variant="secondary" loading={pending[`ship:${order._id}`]} onClick={() => onAction?.("ship", order)}>Mark Shipped</AdminButton>}{canDeliver(order) && <AdminButton variant="secondary" loading={pending[`deliver:${order._id}`]} onClick={() => onAction?.("deliver", order)}>Deliver</AdminButton>}{canCancel(order) && <AdminButton variant="danger" loading={pending[`cancel:${order._id}`]} onClick={() => onAction?.("cancel", order)}>Cancel</AdminButton>}</div></Cell></tr>)} />;
+  return <AdminTable columns={["Order", "Customer", "Date", "Items", "Payment", "Amount", "Order Status", "Shipping", "Actions"]} rows={orders.map((order) => { const orderPending = Object.entries(pending).some(([key, value]) => value && key.endsWith(`:${order._id}`)); return <tr key={order._id}><Cell className="font-bold">{order._id}</Cell><Cell>{order.user?.name || order.shippingAddress?.fullName || "Customer"}</Cell><Cell>{new Date(order.createdAt).toLocaleDateString("en-IN")}</Cell><Cell>{order.products?.length || 0}</Cell><Cell><AdminBadge>{statusText(order.paymentStatus)}</AdminBadge></Cell><Cell>{money(order.totalAmount)}</Cell><Cell><AdminBadge>{statusText(order.orderStatus)}</AdminBadge></Cell><Cell>{statusText(order.shippingStatus)}</Cell><Cell><div className="flex flex-wrap gap-2">{canConfirm(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`confirm:${order._id}`]} onClick={() => onAction?.("confirm", order)}>Confirm</AdminButton>}{canReady(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`ready:${order._id}`]} onClick={() => onAction?.("ready", order)}>Ready</AdminButton>}{canShip(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`ship:${order._id}`]} onClick={() => onAction?.("ship", order)}>Mark Shipped</AdminButton>}{canDeliver(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`deliver:${order._id}`]} onClick={() => onAction?.("deliver", order)}>Deliver</AdminButton>}{canCancel(order) && <AdminButton variant="danger" disabled={orderPending} loading={pending[`cancel:${order._id}`]} onClick={() => onAction?.("cancel", order)}>Cancel</AdminButton>}</div></Cell></tr>; })} />;
 }
 
 export function OrdersPage() {
@@ -117,7 +159,10 @@ export function OrdersPage() {
     const status = type === "confirm" ? "confirmed" : type === "ship" ? "shipped" : type === "deliver" ? "delivered" : "cancelled";
     const labels = { confirm: "Order confirmed.", ready: "Order marked ready to ship.", ship: "Order marked shipped.", deliver: "Order delivered.", cancel: "Order cancelled." };
     const result = await run(key, type === "ready" ? () => adminApi.readyToShip(order._id) : () => adminApi.orderStatus(order._id, status), labels[type]);
-    if (result?.order) setOrder(result.order);
+    if (result?.order) {
+      setOrder(result.order);
+      window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["dashboard", "orders", "inventory", "products"] } }));
+    }
   };
   return <><AdminPageHeader title="Orders" description="Review and process customer orders." /><AdminFilters><SearchBox value={q} onChange={setQ} placeholder="Search orders" /></AdminFilters><State loading={loading} error={error} empty={!data?.items?.length} title="No orders found." />{data?.items?.length ? <OrdersTable orders={data.items} onAction={action} pending={pending} shiprocketAvailable={shiprocketAvailable} /> : null}</>;
 }
@@ -127,11 +172,85 @@ function ProductEditor({ open, onClose, product, categories, onSaved }) {
   const { data: serviceData } = useAdminData(adminApi.serviceStatus);
   const uploadAvailable = serviceData?.services?.cloudinary?.available !== false;
   const uploadMessage = serviceData?.services?.cloudinary?.message || "Image uploads are temporarily unavailable.";
-  const [form, setForm] = useState(product || { title: "", description: "", sku: "", price: 0, discountPrice: "", stock: 0, images: [], featured: false, bestSeller: false, newArrival: false, codEnabled: true, onlinePaymentEnabled: true, returnEligible: true, exchangeEligible: false, isActive: true, dimensions: {} });
-  useEffect(() => setForm(product || { title: "", description: "", sku: "", price: 0, discountPrice: "", stock: 0, images: [], featured: false, bestSeller: false, newArrival: false, codEnabled: true, onlinePaymentEnabled: true, returnEligible: true, exchangeEligible: false, isActive: true, dimensions: {} }), [product, open]);
-  const upload = async (file) => { if (!uploadAvailable) return; const data = await run("product:image", () => adminApi.uploadImage(file), "Image uploaded."); if (data) setForm((current) => ({ ...current, images: [...(current.images || []), data.image || data] })); };
-  const save = async () => { const payload = { ...form, price: Number(form.price), discountPrice: form.discountPrice === "" ? undefined : Number(form.discountPrice), stock: Number(form.stock), weight: Number(form.weight || 0), dimensions: { length: Number(form.dimensions?.length || 0), width: Number(form.dimensions?.width || 0), height: Number(form.dimensions?.height || 0) }, category: form.category?._id || form.category || categories[0]?._id }; const result = await run("product:save", () => adminApi.saveProduct(payload, product?._id), "Product saved."); if (result?.product) { onSaved(result.product); onClose(); } };
-  return <AdminModal title={product ? "Edit Product" : "Add Product"} open={open} onClose={onClose} footer={<AdminButton loading={pending["product:save"]} onClick={save}>Save Product</AdminButton>}><div className="grid gap-4"><AdminInput label="Product Name / Title" value={form.title || ""} onChange={(e) => setForm({ ...form, title: e.target.value })} /><AdminTextarea label="Description" value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} /><div className="grid gap-4 md:grid-cols-2"><AdminSelect label="Category" value={form.category?._id || form.category || ""} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categories.map((item) => <option key={item._id} value={item._id}>{item.name}</option>)}</AdminSelect><AdminInput label="SKU" value={form.sku || ""} onChange={(e) => setForm({ ...form, sku: e.target.value })} /><AdminInput label="Price" type="number" value={form.price || ""} onChange={(e) => setForm({ ...form, price: e.target.value })} /><AdminInput label="Discount Price" type="number" value={form.discountPrice || ""} onChange={(e) => setForm({ ...form, discountPrice: e.target.value })} /><AdminInput label="Stock" type="number" value={form.stock || 0} onChange={(e) => setForm({ ...form, stock: e.target.value })} /><AdminInput label="Weight" type="number" value={form.weight || ""} onChange={(e) => setForm({ ...form, weight: e.target.value })} /><AdminInput label="Package Length" type="number" value={form.dimensions?.length || ""} onChange={(e) => setForm({ ...form, dimensions: { ...(form.dimensions || {}), length: e.target.value } })} /><AdminInput label="Package Width" type="number" value={form.dimensions?.width || ""} onChange={(e) => setForm({ ...form, dimensions: { ...(form.dimensions || {}), width: e.target.value } })} /><AdminInput label="Package Height" type="number" value={form.dimensions?.height || ""} onChange={(e) => setForm({ ...form, dimensions: { ...(form.dimensions || {}), height: e.target.value } })} /></div><div><p className="text-sm font-bold text-ink/70">Product Images</p><div className="mt-2 flex flex-wrap gap-3">{(form.images || []).map((image, index) => <div key={`${image.url}-${index}`} className="relative"><img src={image.url} alt="" className="h-20 w-20 rounded-lg object-cover" /><button onClick={() => setForm({ ...form, images: form.images.filter((_, i) => i !== index) })} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-xs text-white">x</button></div>)}<label title={uploadAvailable ? "" : uploadMessage} className={`grid h-20 w-20 place-items-center rounded-lg border border-dashed border-[var(--admin-border)] text-xs font-bold text-ink/45 ${uploadAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}>Upload<input type="file" accept="image/*" disabled={!uploadAvailable} className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} /></label></div></div><div className="grid gap-3 md:grid-cols-2"><Toggle label="Featured" checked={form.featured} onChange={(value) => setForm({ ...form, featured: value })} /><Toggle label="Best Seller" checked={form.bestSeller} onChange={(value) => setForm({ ...form, bestSeller: value })} /><Toggle label="New Arrival" checked={form.newArrival} onChange={(value) => setForm({ ...form, newArrival: value })} /><Toggle label="COD Enabled" checked={form.codEnabled !== false} onChange={(value) => setForm({ ...form, codEnabled: value })} /><Toggle label="Online Payment Enabled" checked={form.onlinePaymentEnabled !== false} onChange={(value) => setForm({ ...form, onlinePaymentEnabled: value })} /><Toggle label="Return Eligible" checked={form.returnEligible !== false} onChange={(value) => setForm({ ...form, returnEligible: value })} /><Toggle label="Exchange Eligible" checked={form.exchangeEligible} onChange={(value) => setForm({ ...form, exchangeEligible: value })} /><Toggle label="Active" checked={form.isActive} onChange={(value) => setForm({ ...form, isActive: value })} /></div></div></AdminModal>;
+  const empty = { title: "", description: "", price: "", discountPrice: "", stock: "", weight: "", images: [], featured: false, bestSeller: false, newArrival: false, codEnabled: true, onlinePaymentEnabled: true, returnEligible: true, exchangeEligible: false, isActive: true, dimensions: { length: "", width: "", height: "" } };
+  const [form, setForm] = useState(product || empty);
+  const [errors, setErrors] = useState({});
+  const [uploadState, setUploadState] = useState({ status: "idle", message: "" });
+  useEffect(() => {
+    setForm(product ? { ...empty, ...product, category: product.category?._id || product.category, dimensions: { ...empty.dimensions, ...(product.dimensions || {}) } } : empty);
+    setErrors({});
+    setUploadState({ status: "idle", message: "" });
+  }, [product, open]);
+
+  const validate = () => {
+    const next = {
+      title: form.title?.trim() ? "" : "Product title is required.",
+      description: form.description?.trim() ? "" : "Description is required.",
+      category: form.category ? "" : "Select a category.",
+      price: numericError(form.price, "Price", { required: true }),
+      discountPrice: numericError(form.discountPrice, "Discount price"),
+      stock: numericError(form.stock, "Stock", { required: true, integer: true }),
+      weight: numericError(form.weight, "Weight"),
+      length: numericError(form.dimensions?.length, "Package length"),
+      width: numericError(form.dimensions?.width, "Package width"),
+      height: numericError(form.dimensions?.height, "Package height"),
+      images: form.images?.length ? "" : "Upload at least one product image.",
+    };
+    if (!next.discountPrice && form.discountPrice !== "" && Number(form.discountPrice) >= Number(form.price)) next.discountPrice = "Discount price must be lower than the regular price.";
+    setErrors(next);
+    return !Object.values(next).some(Boolean);
+  };
+
+  const upload = async (file, input) => {
+    if (!uploadAvailable || pending["product:image"]) return;
+    setUploadState({ status: "uploading", message: `Uploading ${file.name}...` });
+    const data = await run("product:image", () => adminApi.uploadImage(file), "Image uploaded.");
+    if (input) input.value = "";
+    if (data) {
+      setForm((current) => ({ ...current, images: [...(current.images || []), data.image || data] }));
+      setErrors((current) => ({ ...current, images: "" }));
+      setUploadState({ status: "success", message: "Image uploaded successfully." });
+    } else {
+      setUploadState({ status: "error", message: "Image upload failed. Select the file and try again." });
+    }
+  };
+
+  const save = async () => {
+    if (pending["product:image"] || !validate()) return;
+    const optionalNumber = (value) => value === "" || value === undefined || value === null ? undefined : Number(value);
+    const payload = {
+      ...form,
+      price: Number(form.price),
+      discountPrice: optionalNumber(form.discountPrice),
+      stock: Number(form.stock),
+      weight: optionalNumber(form.weight),
+      dimensions: { length: optionalNumber(form.dimensions?.length), width: optionalNumber(form.dimensions?.width), height: optionalNumber(form.dimensions?.height) },
+      category: form.category?._id || form.category,
+    };
+    const result = await run("product:save", () => adminApi.saveProduct(payload, product?._id), "Product saved.");
+    if (result?.product) { onSaved(result.product); window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["products", "inventory", "dashboard"] } })); onClose(); }
+  };
+
+  const numberProps = { min: "0", inputMode: "decimal", onKeyDown: blockInvalidNumberKey };
+  return <AdminModal title={product ? "Edit Product" : "Add Product"} open={open} onClose={pending["product:image"] || pending["product:save"] ? undefined : onClose} footer={<AdminButton disabled={pending["product:image"] || categories.length === 0} loading={pending["product:save"]} onClick={save}>{pending["product:image"] ? "Uploading image..." : "Save Product"}</AdminButton>}>
+    <div className="grid gap-4">
+      <AdminInput label="Product Name / Title" value={form.title || ""} error={errors.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+      <label className="grid gap-1.5 text-sm font-semibold text-ink/65"><span>Description</span><textarea value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} className={`min-h-24 rounded-lg border bg-white px-3 py-2 text-sm text-ink outline-none ${errors.description ? "border-red-400" : "border-ink/10 focus:border-leaf"}`} />{errors.description && <span className="text-xs text-red-700">{errors.description}</span>}</label>
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="grid gap-1.5 text-sm font-semibold text-ink/65"><span>Category</span><select value={form.category?._id || form.category || ""} onChange={(e) => { setForm({ ...form, category: e.target.value }); setErrors((current) => ({ ...current, category: "" })); }} className={`h-10 rounded-lg border bg-white px-3 text-sm ${errors.category ? "border-red-400" : "border-ink/10"}`}><option value="">Select a category</option>{categories.map((item) => <option key={item._id} value={item._id}>{item.name}</option>)}</select>{errors.category && <span className="text-xs text-red-700">{errors.category}</span>}</label>
+        <AdminInput label="SKU (generated automatically)" value={skuPreview(form, categories)} readOnly hint="Generated from category, product name, and weight." />
+        <AdminInput label="Price" type="number" step="0.01" value={form.price ?? ""} error={errors.price} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, price: e.target.value })} />
+        <AdminInput label="Discount Price" type="number" step="0.01" value={form.discountPrice ?? ""} error={errors.discountPrice} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, discountPrice: e.target.value })} />
+        <AdminInput label="Stock" type="number" step="1" value={form.stock ?? ""} error={errors.stock} {...numberProps} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
+        <AdminInput label="Weight" type="number" step="0.01" value={form.weight ?? ""} error={errors.weight} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, weight: e.target.value })} />
+        <AdminInput label="Package Length" type="number" step="0.01" value={form.dimensions?.length ?? ""} error={errors.length} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, dimensions: { ...(form.dimensions || {}), length: e.target.value } })} />
+        <AdminInput label="Package Width" type="number" step="0.01" value={form.dimensions?.width ?? ""} error={errors.width} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, dimensions: { ...(form.dimensions || {}), width: e.target.value } })} />
+        <AdminInput label="Package Height" type="number" step="0.01" value={form.dimensions?.height ?? ""} error={errors.height} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, dimensions: { ...(form.dimensions || {}), height: e.target.value } })} />
+      </div>
+      <div><p className="text-sm font-bold text-ink/70">Product Images</p><div className="mt-2 flex flex-wrap gap-3">{(form.images || []).map((image, index) => <div key={`${image.url}-${index}`} className="relative"><img src={image.url} alt="" className="h-20 w-20 rounded-lg object-cover" /><button type="button" disabled={pending["product:image"]} onClick={() => setForm({ ...form, images: form.images.filter((_, i) => i !== index) })} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-xs text-white">x</button></div>)}<label title={uploadAvailable ? "" : uploadMessage} className={`grid h-20 w-20 place-items-center rounded-lg border border-dashed border-[var(--admin-border)] text-xs font-bold text-ink/45 ${uploadAvailable && !pending["product:image"] ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}>{pending["product:image"] ? <span className="grid place-items-center gap-1"><Loader2 size={18} className="animate-spin" />Uploading</span> : "Upload"}<input type="file" accept="image/*" disabled={!uploadAvailable || pending["product:image"]} className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], e.target)} /></label></div>{errors.images && <p className="mt-2 text-xs font-semibold text-red-700">{errors.images}</p>}{uploadState.message && <p role="status" className={`mt-3 inline-flex items-center gap-2 text-sm font-semibold ${uploadState.status === "error" ? "text-red-700" : uploadState.status === "success" ? "text-leaf" : "text-ink/60"}`}>{uploadState.status === "uploading" ? <Loader2 size={15} className="animate-spin" /> : uploadState.status === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}{uploadState.message}</p>}</div>
+      <div className="grid gap-3 md:grid-cols-2"><Toggle label="Featured" checked={form.featured} onChange={(value) => setForm({ ...form, featured: value })} /><Toggle label="Best Seller" checked={form.bestSeller} onChange={(value) => setForm({ ...form, bestSeller: value })} /><Toggle label="New Arrival" checked={form.newArrival} onChange={(value) => setForm({ ...form, newArrival: value })} /><Toggle label="COD Enabled" checked={form.codEnabled !== false} onChange={(value) => setForm({ ...form, codEnabled: value })} /><Toggle label="Online Payment Enabled" checked={form.onlinePaymentEnabled !== false} onChange={(value) => setForm({ ...form, onlinePaymentEnabled: value })} /><Toggle label="Return Eligible" checked={form.returnEligible !== false} onChange={(value) => setForm({ ...form, returnEligible: value })} /><Toggle label="Exchange Eligible" checked={form.exchangeEligible} onChange={(value) => setForm({ ...form, exchangeEligible: value })} /><Toggle label="Active" checked={form.isActive} onChange={(value) => setForm({ ...form, isActive: value })} /></div>
+    </div>
+  </AdminModal>;
 }
 
 export function ProductsPage() {
@@ -141,6 +260,7 @@ export function ProductsPage() {
   const [editor, setEditor] = useState(null);
   const [bulk, setBulk] = useState({ operation: "increase_percentage", value: 10 });
   const { data, loading, error, reload, setData } = useAdminData(() => adminApi.products(q ? `?search=${encodeURIComponent(q)}` : ""), [q]);
+  useAdminRefresh(reload, ["products"]);
   const { data: catData } = useAdminData(adminApi.categories);
   const { pending, run } = useAdminAction();
   const products = data?.items || [];
@@ -155,7 +275,8 @@ export function ProductsPage() {
 export function ProductFormPage() { return <ProductsPage />; }
 
 export function InventoryPage() {
-  const { data, loading, error, setData } = useAdminData(() => adminApi.products("?limit=100"));
+  const { data, loading, error, reload, setData } = useAdminData(() => adminApi.products("?limit=100"));
+  useAdminRefresh(reload, ["inventory"]);
   const { data: settingsData } = useAdminData(adminApi.settings);
   const [filter, setFilter] = useState("All");
   const [editing, setEditing] = useState(null);
@@ -169,14 +290,14 @@ export function InventoryPage() {
 function StockModal({ state, onClose, onSaved }) {
   const { pending, run } = useAdminAction();
   const [quantity, setQuantity] = useState(1);
-  useEffect(() => setQuantity(state?.quantity || 1), [state]);
+  useEffect(() => setQuantity(state?.quantity ?? ""), [state]);
   if (!state) return null;
   const current = Number(state.product.stock || 0);
-  const qty = Math.max(0, Math.trunc(Number(quantity) || 0));
+  const qty = quantity === "" ? 0 : Number(quantity);
   const next = state.mode === "set" ? qty : state.mode === "reduce" ? Math.max(0, current - qty) : current + qty;
-  const invalid = qty < 0 || !Number.isInteger(Number(quantity)) || (state.mode === "reduce" && qty > current);
-  const save = async () => { const result = await run(`inventory:${state.product._id}`, () => adminApi.inventory(state.product._id, { mode: state.mode, quantity: qty }), "Inventory updated."); if (result?.product) { onSaved(result.product); onClose(); } };
-  return <AdminModal title="Update Stock" open onClose={onClose} footer={<AdminButton disabled={invalid} loading={pending[`inventory:${state.product._id}`]} onClick={save}>Update Stock</AdminButton>}><div className="grid gap-4"><AdminCard title="Product" value={state.product.title} note={`SKU: ${state.product.sku || "-"}`} /><AdminInput label={state.mode === "set" ? "Set Stock To" : state.mode === "reduce" ? "Reduce" : "Add"} type="number" min="0" step="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} /><div className="rounded-xl bg-linen p-4 text-sm font-bold">Preview: {current} {state.mode === "add" ? "+" : state.mode === "reduce" ? "-" : "?"} {qty} = {next}</div>{invalid && <p className="text-sm font-semibold text-red-700">Enter a valid whole number. Stock cannot go below zero.</p>}</div></AdminModal>;
+  const invalid = quantity === "" || qty < 0 || !Number.isInteger(qty) || (state.mode !== "set" && qty === 0) || (state.mode === "reduce" && qty > current);
+  const save = async () => { if (invalid) return; const result = await run(`inventory:${state.product._id}`, () => adminApi.inventory(state.product._id, { mode: state.mode, quantity: qty }), "Inventory updated."); if (result?.product) { onSaved(result.product); window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["dashboard", "products", "inventory"] } })); onClose(); } };
+  return <AdminModal title="Update Stock" open onClose={onClose} footer={<AdminButton disabled={invalid} loading={pending[`inventory:${state.product._id}`]} onClick={save}>Update Stock</AdminButton>}><div className="grid gap-4"><AdminCard title="Product" value={state.product.title} note={`SKU: ${state.product.sku || "-"}`} /><AdminInput label={state.mode === "set" ? "Set Stock To" : state.mode === "reduce" ? "Reduce" : "Add"} type="number" min="0" step="1" inputMode="numeric" value={quantity} onKeyDown={blockInvalidNumberKey} onChange={(e) => setQuantity(e.target.value)} /><div className="rounded-xl bg-linen p-4 text-sm font-bold">Preview: {current} {state.mode === "add" ? "+" : state.mode === "reduce" ? "-" : "="} {qty} = {next}</div>{invalid && <p className="text-sm font-semibold text-red-700">Enter a valid whole number. Add/reduce quantities must be greater than zero, and stock cannot go below zero.</p>}</div></AdminModal>;
 }
 
 function CategoryForm({ open, category, onClose, onSaved }) {

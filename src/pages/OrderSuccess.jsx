@@ -72,12 +72,16 @@ export default function OrderSuccess() {
             </div>
           </div>
 
-          <div className="hidden print:block">
+          <div className="hidden print:block print:border print:border-leaf print:p-8">
             <div className="flex items-start justify-between border-b border-ink/15 pb-6">
-              <div>
+              <div className="flex items-start gap-4">
+                <img src="/logo.webp" alt="Swavalambi Siddaganga Oil Mill" className="h-16 w-16 object-contain" />
+                <div>
                 <p className="text-xs font-bold uppercase tracking-[0.22em] text-clay">Tax Invoice</p>
                 <h1 className="mt-2 font-serif text-4xl font-semibold">Swavalambi Siddaganga Oil Mill</h1>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-ink/65">SIDDAGANGA OIL MILL, Near Small City Club Road, Sira Gate, TUDA Layout, Tumakuru, Karnataka 572106</p>
+                <p className="mt-1 text-sm text-ink/65">09972565174 - support@swavalambisiddagangaoilmill.com</p>
+                </div>
               </div>
               <div className="text-right text-sm leading-6 text-ink/65">
                 <p><strong className="text-ink">Invoice:</strong> {invoiceNumber}</p>
@@ -87,12 +91,16 @@ export default function OrderSuccess() {
             </div>
             <div className="grid grid-cols-2 gap-8 border-b border-ink/15 py-6 text-sm leading-6">
               <div>
-                <h2 className="font-bold uppercase tracking-[0.12em] text-ink/50">Bill To</h2>
-                <p className="mt-3 whitespace-pre-line text-ink/75">{order.address || formatAddress(order.shippingAddress)}</p>
+                <h2 className="font-bold uppercase tracking-[0.12em] text-ink/50">Customer and Billing</h2>
+                <p className="mt-3 font-semibold text-ink">{order.customerName || order.user?.name || order.shippingAddress?.fullName}</p>
+                <p className="text-ink/75">{order.customerEmail || order.user?.email || "-"}</p>
+                <p className="text-ink/75">{order.customerPhone || order.user?.phone || order.shippingAddress?.phone}</p>
+                <p className="mt-2 whitespace-pre-line text-ink/75">{formatAddress(order.billingAddress || order.shippingAddress)}</p>
               </div>
               <div>
-                <h2 className="font-bold uppercase tracking-[0.12em] text-ink/50">Payment</h2>
-                <p className="mt-3 text-ink/75">Status: {order.paymentStatus || "Confirmed"}</p>
+                <h2 className="font-bold uppercase tracking-[0.12em] text-ink/50">Shipping and Payment</h2>
+                <p className="mt-3 whitespace-pre-line text-ink/75">{formatAddress(order.shippingAddress)}</p>
+                <p className="mt-2 text-ink/75">Status: {order.paymentStatus || "Confirmed"}</p>
                 <p className="text-ink/75">Method: {order.paymentMethod || "Online/COD"}</p>
                 {order.awbCode && <p className="text-ink/75">AWB: {order.awbCode}</p>}
               </div>
@@ -102,7 +110,9 @@ export default function OrderSuccess() {
                 <tr className="border-b border-ink/15 text-xs uppercase tracking-[0.12em] text-ink/50">
                   <th className="py-3">Product</th>
                   <th className="py-3 text-center">Qty</th>
-                  <th className="py-3 text-right">Price</th>
+                  <th className="py-3 text-right">List</th>
+                  <th className="py-3 text-right">Discount</th>
+                  <th className="py-3 text-right">Unit Price</th>
                   <th className="py-3 text-right">Amount</th>
                 </tr>
               </thead>
@@ -112,10 +122,14 @@ export default function OrderSuccess() {
                   const id = item.id || item.product || name;
                   const quantity = Number(item.quantity || 1);
                   const price = Number(item.price || 0);
+                  const listPrice = Number(item.originalPrice || item.listPrice || price);
+                  const itemDiscount = Math.max(0, listPrice - price);
                   return (
                     <tr key={id} className="border-b border-ink/10">
                       <td className="py-3 font-semibold">{name}{item.volume ? ` (${item.volume})` : ""}</td>
                       <td className="py-3 text-center">{quantity}</td>
+                      <td className="py-3 text-right">{formatCurrency(listPrice)}</td>
+                      <td className="py-3 text-right">{itemDiscount > 0 ? formatCurrency(itemDiscount) : "-"}</td>
                       <td className="py-3 text-right">{formatCurrency(price)}</td>
                       <td className="py-3 text-right font-semibold">{formatCurrency(price * quantity)}</td>
                     </tr>

@@ -71,8 +71,22 @@ export async function updateOrderStatus(id, nextStatus) {
   const order = await Order.findById(id);
   if (!order) throw new ApiError("Order not found.", 404);
   if (!orderTransitions[order.orderStatus]?.includes(nextStatus)) throw new ApiError("Invalid order status transition.", 400);
+  const previousStatus = order.orderStatus;
   order.orderStatus = nextStatus;
   await order.save();
+  if (nextStatus === "cancelled" && !order.inventoryRestoredAt) {
+    try {
+      await Product.bulkWrite(order.products.map((item) => ({ updateOne: { filter: { _id: item.product }, update: { $inc: { stock: item.quantity } } } })));
+      order.inventoryRestoredAt = new Date();
+      await order.save();
+      const restoredProducts = await Product.find({ _id: { $in: order.products.map((item) => item.product) } });
+      await Promise.all(restoredProducts.map((product) => createInventoryNotifications(product)));
+    } catch (error) {
+      order.orderStatus = previousStatus;
+      await order.save().catch(() => undefined);
+      throw error;
+    }
+  }
   return order;
 }
 
@@ -92,11 +106,35 @@ export async function listProducts(query) {
   return { items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
 }
 
+function skuPart(value, fallback) {
+  const clean = String(value || "").normalize("NFKD").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toUpperCase();
+  return clean || fallback;
+}
+
+async function generateProductSku(data, id) {
+  const category = await Category.findById(data.category).select("name slug").lean();
+  if (!category) throw new ApiError("Select a valid product category.", 400);
+  const weight = Number(data.weight);
+  const base = [skuPart(category.slug || category.name, "CAT").slice(0, 8), skuPart(data.title, "PRODUCT").slice(0, 12), Number.isFinite(weight) && weight > 0 ? skuPart(weight, "UNIT") : "UNIT"].join("-");
+  let sku = base;
+  let suffix = 1;
+  while (await Product.exists({ sku, ...(id ? { _id: { $ne: id } } : {}) })) {
+    suffix += 1;
+    sku = `${base}-${suffix}`;
+  }
+  return sku;
+}
+
 export async function saveProduct(payload, id) {
-  const allowed = ["title", "description", "benefits", "sku", "price", "discountPrice", "stock", "category", "images", "featured", "bestSeller", "newArrival", "codEnabled", "onlinePaymentEnabled", "returnEligible", "exchangeEligible", "isActive", "weight", "dimensions"];
+  const allowed = ["title", "description", "benefits", "price", "discountPrice", "stock", "category", "images", "featured", "bestSeller", "newArrival", "codEnabled", "onlinePaymentEnabled", "returnEligible", "exchangeEligible", "isActive", "weight", "dimensions"];
   const data = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
   if (data.title) data.slug = slugify(data.title);
-  return id ? Product.findByIdAndUpdate(id, data, { new: true, runValidators: true }) : Product.create(data);
+  const current = id ? await Product.findById(id) : null;
+  if (id && !current) throw new ApiError("Product not found.", 404);
+  const skuSource = { title: data.title || current?.title, category: data.category || current?.category, weight: data.weight ?? current?.weight };
+  data.sku = await generateProductSku(skuSource, id);
+  const product = id ? await Product.findByIdAndUpdate(id, data, { new: true, runValidators: true }).populate("category", "name slug") : await Product.create(data);
+  return id ? product : product.populate("category", "name slug");
 }
 
 export async function archiveProduct(id) {
@@ -158,7 +196,9 @@ export async function bulkPriceApply(payload) {
 export async function updateInventory(id, { mode, quantity }) {
   const product = await Product.findById(id);
   if (!product) throw new ApiError("Product not found.", 404);
-  const qty = Number(quantity) || 0;
+  const qty = Number(quantity);
+  if (!Number.isInteger(qty) || qty < 0) throw new ApiError("Quantity must be a whole number of zero or more.", 400);
+  if (mode === "reduce" && qty > product.stock) throw new ApiError("Quantity cannot reduce stock below zero.", 400);
   product.stock = mode === "set" ? qty : mode === "reduce" ? Math.max(0, product.stock - qty) : product.stock + qty;
   await product.save();
   return product;

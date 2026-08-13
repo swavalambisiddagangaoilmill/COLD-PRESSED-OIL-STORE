@@ -38,8 +38,8 @@ export function AdminCard({ title, value, note, children }) {
   return <div className="rounded-xl border border-ink/10 bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-[0.12em] text-ink/45">{title}</p>{value && <p className="mt-2 text-2xl font-bold text-ink">{value}</p>}{note && <p className="mt-1 text-xs font-semibold text-ink/50">{note}</p>}{children}</div>;
 }
 
-export function AdminInput({ label, className = "", ...props }) {
-  return <label className="grid gap-1.5 text-sm font-semibold text-ink/65"><span>{label}</span><input className={`h-10 rounded-lg border border-ink/10 bg-white px-3 text-sm text-ink outline-none transition focus:border-leaf ${className}`} {...props} /></label>;
+export function AdminInput({ label, className = "", error = "", hint = "", ...props }) {
+  return <label className="grid gap-1.5 text-sm font-semibold text-ink/65"><span>{label}</span><input aria-invalid={Boolean(error)} className={`h-10 rounded-lg border bg-white px-3 text-sm text-ink outline-none transition ${error ? "border-red-400 focus:border-red-600" : "border-ink/10 focus:border-leaf"} ${className}`} {...props} />{error ? <span className="text-xs font-semibold text-red-700">{error}</span> : hint ? <span className="text-xs font-medium text-ink/45">{hint}</span> : null}</label>;
 }
 
 export function AdminSelect({ label, children, className = "", ...props }) {

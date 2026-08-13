@@ -73,6 +73,7 @@ const orderSchema = new mongoose.Schema(
     isMockShipment: { type: Boolean, default: false },
     mockShippingStep: { type: Number, default: 0 },
     mockShippingHistory: [{ status: String, label: String, createdAt: { type: Date, default: Date.now } }],
+    inventoryRestoredAt: { type: Date },
   },
   { timestamps: true }
 );
@@ -85,5 +86,4 @@ orderSchema.index({ razorpayPaymentId: 1 }, { unique: true, sparse: true });
 orderSchema.index({ razorpayOrderId: 1 }, { sparse: true });
 
 export default mongoose.model("Order", orderSchema);
-
 
