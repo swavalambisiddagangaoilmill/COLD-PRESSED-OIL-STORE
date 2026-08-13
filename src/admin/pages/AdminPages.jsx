@@ -115,9 +115,9 @@ function normalizeDiscountType(value) { return value === "Fixed Amount" || value
 function ServiceStatusSection() {
   const { data } = useAdminData(adminApi.serviceStatus);
   const services = data?.services || {};
-  const style = { online: "bg-leaf/10 text-leaf", limited: "bg-amber-100 text-amber-700", offline: "bg-danger/10 text-danger" };
-  const icon = { online: "Online", limited: "Limited", offline: "Offline" };
-  return <div className="mt-5 rounded-xl border border-[var(--admin-border)] bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-bold">Service Status</h2><span className="text-xs font-semibold text-ink/40">External integrations</span></div><div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">{Object.entries(services).map(([key, service]) => <div key={key} className="rounded-lg bg-linen/60 p-3"><p className="text-xs font-bold uppercase tracking-[0.12em] text-ink/40">{statusText(key)}</p><p className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${style[service.status] || style.offline}`}>{icon[service.status] || "Offline"}</p><p className="mt-2 line-clamp-2 text-xs font-semibold text-ink/50">{service.message}</p></div>)}</div></div>;
+  const style = { online: "bg-leaf/10 text-leaf", degraded: "bg-amber-100 text-amber-700", not_configured: "bg-slate-100 text-slate-600", offline: "bg-danger/10 text-danger" };
+  const icon = { online: "Online", degraded: "Degraded", not_configured: "Not Configured", offline: "Offline" };
+  return <div className="mt-5 rounded-xl border border-[var(--admin-border)] bg-white p-4 shadow-sm"><div className="mb-3 flex items-center justify-between"><h2 className="text-lg font-bold">Service Status</h2><span className="text-xs font-semibold text-ink/40">External integrations</span></div><div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">{Object.entries(services).map(([key, service]) => <div key={key} className="rounded-lg bg-linen/60 p-3"><p className="text-xs font-bold uppercase tracking-[0.12em] text-ink/40">{service.name || statusText(key)}</p><p className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${style[service.status] || style.offline}`}>{icon[service.status] || "Offline"}</p><p className="mt-2 line-clamp-2 text-xs font-semibold text-ink/50">{service.message}</p></div>)}</div></div>;
 }
 export function DashboardPage() {
   const { data, loading, error, reload } = useAdminData(adminApi.dashboard);

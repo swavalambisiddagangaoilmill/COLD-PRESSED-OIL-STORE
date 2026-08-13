@@ -73,11 +73,19 @@ app.get("/api/health", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({ success: true, message: "API is healthy" });
 });
+app.get("/api/service-status", async (_req, res, next) => {
+  try {
+    const data = await getServiceStatus();
+    res.setHeader("Cache-Control", "private, max-age=30");
+    res.status(200).json({ success: true, message: "Service status fetched", data });
+  } catch (error) {
+    next(error);
+  }
+});
 app.use(restrictionGuard);
 app.use(morgan(env.isProduction ? "combined" : "dev"));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 150, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many requests.", errors: [] } }));
 
-app.get("/api/service-status", (_req, res) => res.status(200).json({ success: true, message: "Service status fetched", data: getServiceStatus() }));
 app.get("/api/carousel", getActiveCarousel);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
