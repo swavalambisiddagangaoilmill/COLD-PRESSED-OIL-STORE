@@ -69,11 +69,11 @@ app.use(express.json({ limit: "256kb" }));
 app.use(express.urlencoded({ extended: true, limit: "64kb", parameterLimit: 50 }));
 app.use(sanitizeRequest);
 app.use(preventParameterPollution);
+app.get("/api/health", (_req, res) => res.status(200).json({ success: true, message: "API is healthy", data: { uptime: process.uptime(), serviceStatus: getServiceStatus() } }));
 app.use(restrictionGuard);
 app.use(morgan(env.isProduction ? "combined" : "dev"));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 150, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many requests.", errors: [] } }));
 
-app.get("/api/health", (_req, res) => res.status(200).json({ success: true, message: "API is healthy", data: { uptime: process.uptime(), serviceStatus: getServiceStatus() } }));
 app.get("/api/service-status", (_req, res) => res.status(200).json({ success: true, message: "Service status fetched", data: getServiceStatus() }));
 app.get("/api/carousel", getActiveCarousel);
 app.use("/api/auth", authRoutes);

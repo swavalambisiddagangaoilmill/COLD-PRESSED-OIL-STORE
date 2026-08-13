@@ -13,10 +13,15 @@ process.on("uncaughtException", (error) => {
   console.error("Uncaught exception", { message: error.message, stack: error.stack });
 });
 
-await connectDB();
-await ensureDefaultAdmin();
-startServiceStatusMonitor();
-
-app.listen(env.port, () => {
-  console.log(`Swavalambi Siddaganga Oil Mill API running on port ${env.port}`);
+const server = app.listen(env.port, env.host, () => {
+  console.log(`Swavalambi Siddaganga Oil Mill API listening on ${env.host}:${env.port}`);
 });
+
+try {
+  await connectDB();
+  await ensureDefaultAdmin();
+  startServiceStatusMonitor();
+} catch (error) {
+  console.error("Backend initialization failed", { message: error.message });
+  server.close(() => process.exit(1));
+}

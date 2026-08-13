@@ -10,6 +10,7 @@ export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   isProduction,
   port: Number(process.env.PORT) || 5000,
+  host: process.env.HOST || "0.0.0.0",
   backendPublicUrl: process.env.BACKEND_PUBLIC_URL || "",
   mongoUri: process.env.MONGO_URI || "mongodb://127.0.0.1:27017/ss_oil_mill_ecommerce",
   jwtSecret: process.env.JWT_SECRET || "development_only_change_me",

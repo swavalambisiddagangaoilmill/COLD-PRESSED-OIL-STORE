@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: swavalambi-siddaganga-oil-mill-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MSG91_AUTH_KEY
+        sync: false
+      - key: MSG91_TEMPLATE_ID
+        sync: false
