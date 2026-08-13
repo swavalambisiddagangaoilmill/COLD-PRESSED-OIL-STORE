@@ -51,6 +51,7 @@ export default function CartSummary({ totals, showCheckout = true }) {
       </div>
       <div className="mt-6 grid gap-2">
         <div className="flex gap-2"><Input className="flex-1" placeholder="Coupon code" aria-label="Coupon code" value={coupon} onChange={(event) => setCoupon(event.target.value.toUpperCase())} /><Button type="button" variant="outline" className="h-[52px] px-4" onClick={applyCoupon} disabled={checking || appliedCoupon?.code === coupon.trim().toUpperCase()}>{checking ? "Checking" : appliedCoupon?.code === coupon.trim().toUpperCase() ? "Applied" : "Apply"}</Button></div>
+        {appliedCoupon && <button type="button" className="justify-self-start text-sm font-bold text-clay hover:text-danger" onClick={() => { clearCoupon(); setCoupon(""); setCouponMessage("Coupon removed."); }}>Remove coupon</button>}
         {couponMessage && <p className={`text-sm font-semibold ${appliedCoupon ? "text-leaf" : "text-danger"}`}>{couponMessage}</p>}
         {belowMinimum && <p className="text-sm font-semibold text-clay">Minimum order is {formatCurrency(minimumOrder)}.</p>}
         <p className="text-sm text-ink/55">Delivery estimate: 2-5 business days after confirmation.</p>

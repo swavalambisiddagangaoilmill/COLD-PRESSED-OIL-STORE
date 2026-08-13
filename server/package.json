@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
+    "test": "node --test tests/couponService.test.js",
     "seed": "node seed/seed.js",
     "reset": "node seed/seed.js --reset",
     "create-owner": "node scripts/create-owner.js"
