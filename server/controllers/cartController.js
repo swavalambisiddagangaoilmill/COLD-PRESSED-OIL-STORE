@@ -9,7 +9,7 @@ export const getCartHandler = asyncHandler(async (req, res) => {
 });
 
 export const syncCartHandler = asyncHandler(async (req, res) => {
-  const cart = await syncCart(req.user._id, req.body.items || []);
+  const cart = await syncCart(req.user._id, req.body.items || [], { merge: req.body.merge === true });
   sendSuccess(res, 200, "Cart synced successfully", { cart });
 });
 

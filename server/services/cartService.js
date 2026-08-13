@@ -21,14 +21,21 @@ export async function getCart(userId) {
   return populatedCart(userId);
 }
 
-export async function syncCart(userId, items = []) {
+export function mergeRequestedCartItems(existingItems = [], incomingItems = []) {
   const merged = new Map();
-  items.forEach((item) => {
+  [...existingItems, ...incomingItems].forEach((item) => {
     const product = item.productId || item.product || item.id;
     if (!product) return;
     const key = product.toString();
     merged.set(key, (merged.get(key) || 0) + requestedQuantity(item.quantity));
   });
+  return merged;
+}
+
+export async function syncCart(userId, items = [], { merge = false } = {}) {
+  const user = merge ? await User.findById(userId).select("cart").lean() : null;
+  if (merge && !user) throw new ApiError("User not found.", 404);
+  const merged = mergeRequestedCartItems(user?.cart || [], items);
   const products = await Product.find({ _id: { $in: [...merged.keys()] }, isActive: true });
   const productMap = new Map(products.map((product) => [product._id.toString(), product]));
   const cart = [...merged.entries()].map(([productId, quantity]) => {

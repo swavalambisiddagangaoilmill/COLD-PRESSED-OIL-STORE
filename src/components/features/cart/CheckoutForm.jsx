@@ -1,7 +1,7 @@
 // Renders CheckoutForm for cart and checkout flows.
 import { CreditCard, Home, Truck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { getAuthToken } from "../../../api/apiClient.js";
 import { checkUpiQrPayment, createOrder, createPaymentIntent, createUpiQrPayment, verifyPayment } from "../../../services/checkoutService.js";
 import { fetchAccountProfile } from "../../../services/accountService.js";
@@ -309,7 +309,7 @@ export default function CheckoutForm() {
           </label>
         </div>
       </div>
-      <label className="mt-6 flex items-start gap-3 text-sm leading-6 text-ink/65"><input type="checkbox" required className="mt-1" />I agree to the Terms & Conditions, Privacy Policy, and Refund & Cancellation Policy.</label>
+      <label className="mt-6 flex items-start gap-3 text-sm leading-6 text-ink/65"><input type="checkbox" required className="mt-1" /><span>I agree to the <Link to="/legal/terms" onClick={(event) => event.stopPropagation()} className="font-bold text-leaf underline-offset-2 hover:underline">Terms & Conditions</Link>, <Link to="/legal/privacy" onClick={(event) => event.stopPropagation()} className="font-bold text-leaf underline-offset-2 hover:underline">Privacy Policy</Link>, <Link to="/legal/refund" onClick={(event) => event.stopPropagation()} className="font-bold text-leaf underline-offset-2 hover:underline">Refund Policy</Link>, and <Link to="/legal/cancellation" onClick={(event) => event.stopPropagation()} className="font-bold text-leaf underline-offset-2 hover:underline">Cancellation Policy</Link>.</span></label>
       <Button type="submit" className="mt-8 w-full" disabled={processing}>{buttonText}</Button>
     </form>
   );

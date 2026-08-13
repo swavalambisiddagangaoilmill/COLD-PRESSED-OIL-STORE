@@ -12,8 +12,8 @@ export async function fetchCart() {
   return (data.cart || []).map(normalizeCartItem);
 }
 
-export async function syncCart(items) {
-  const data = await apiRequest(API_ENDPOINTS.cartSync, { method: "PUT", body: JSON.stringify({ items: items.map((item) => ({ productId: item._id || item.id, quantity: item.quantity })) }) });
+export async function syncCart(items, { merge = false } = {}) {
+  const data = await apiRequest(API_ENDPOINTS.cartSync, { method: "PUT", body: JSON.stringify({ merge, items: items.map((item) => ({ productId: item._id || item.id, quantity: item.quantity })) }) });
   return (data.cart || []).map(normalizeCartItem);
 }
 

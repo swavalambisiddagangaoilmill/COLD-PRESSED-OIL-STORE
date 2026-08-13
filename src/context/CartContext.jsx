@@ -1,8 +1,8 @@
 // Provides cart state synchronized with backend cart APIs.
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getAuthToken } from "../api/apiClient.js";
 import { useAuth } from "./AuthContext.jsx";
-import { addCartItem, clearCartApi, fetchCart, removeCartItem, updateCartItem } from "../services/cartService.js";
+import { addCartItem, clearCartApi, fetchCart, removeCartItem, syncCart, updateCartItem } from "../services/cartService.js";
 import { validateCoupon as validateCouponApi } from "../services/promotionService.js";
 import { readGuestSession, writeGuestSession } from "../utils/guestSession.js";
 
@@ -12,17 +12,32 @@ export function CartProvider({ children }) {
   const [items, setItems] = useState(() => readGuestSession().data.cart);
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const { authenticated } = useAuth();
+  const cartLoadRef = useRef(null);
 
   useEffect(() => {
-    let active = true;
-    if (!getAuthToken()) return undefined;
-    fetchCart().then((cart) => active && setItems(cart)).catch(() => {});
-    return () => { active = false; };
+    const token = getAuthToken();
+    if (!token) {
+      cartLoadRef.current = null;
+      setItems(readGuestSession().data.cart);
+      return undefined;
+    }
+    if (cartLoadRef.current === token) return undefined;
+    cartLoadRef.current = token;
+    const guestCart = readGuestSession().data.cart;
+    const loadCart = guestCart.length ? syncCart(guestCart, { merge: true }) : fetchCart();
+    loadCart.then((cart) => {
+      if (getAuthToken() !== token) return;
+      if (guestCart.length) writeGuestSession({ cart: [] });
+      setItems(cart);
+    }).catch(() => {
+      if (getAuthToken() === token) cartLoadRef.current = null;
+    });
+    return undefined;
   }, [authenticated]);
 
   useEffect(() => {
-    writeGuestSession({ cart: items });
-  }, [items]);
+    if (!authenticated) writeGuestSession({ cart: items });
+  }, [authenticated, items]);
 
   useEffect(() => {
     if (!items.length) setAppliedCoupon(null);

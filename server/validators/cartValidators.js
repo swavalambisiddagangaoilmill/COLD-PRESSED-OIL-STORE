@@ -8,6 +8,7 @@ export const cartItemValidator = [
 
 export const cartSyncValidator = [
   body("items").isArray().withMessage("Items must be an array."),
+  body("merge").optional().isBoolean().withMessage("Merge must be true or false."),
   body("items.*.productId").optional().isMongoId().withMessage("Valid product id is required."),
   body("items.*.product").optional().isMongoId().withMessage("Valid product id is required."),
   body("items.*.id").optional().isMongoId().withMessage("Valid product id is required."),
