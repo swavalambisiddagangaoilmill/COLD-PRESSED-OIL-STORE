@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 
 const isProduction = process.env.NODE_ENV === "production";
+const shiprocketMock = String(process.env.SHIPROCKET_MOCK || "false").trim().toLowerCase() === "true";
 
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
@@ -42,7 +43,7 @@ export const env = {
     apiSecret: process.env.CLOUDINARY_API_SECRET || process.env.CLOUDINARY_SECRET || "",
   },
   shiprocket: {
-    mock: !isProduction && process.env.SHIPROCKET_MOCK === "true",
+    mock: shiprocketMock,
     email: process.env.SHIPROCKET_EMAIL || "",
     password: process.env.SHIPROCKET_PASSWORD || "",
     pickupLocation: process.env.SHIPROCKET_PICKUP_LOCATION || "",
@@ -58,12 +59,6 @@ export const env = {
 if (isProduction && (env.jwtSecret === "development_only_change_me" || env.jwtSecret.length < 32)) {
   throw new Error("JWT_SECRET must be a strong secret in production.");
 }
-
-if (isProduction && process.env.SHIPROCKET_MOCK === "true") {
-  throw new Error("SHIPROCKET_MOCK cannot be enabled in production.");
-}
-
-
 
 if (isProduction) {
   const required = [

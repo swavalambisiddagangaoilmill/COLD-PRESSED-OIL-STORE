@@ -48,7 +48,7 @@ function configurationSnapshot() {
       ? status("cloudinary", "degraded", "Configured; connectivity has not been checked yet.")
       : status("cloudinary", "not_configured", "Not configured."),
     shiprocket: env.shiprocket.mock
-      ? status("shiprocket", "degraded", "Development mock mode; no live connection.")
+      ? status("shiprocket", "degraded", "Mock mode enabled; no live Shiprocket calls.")
       : hasAll([env.shiprocket.email, env.shiprocket.password])
         ? status("shiprocket", "degraded", "Configured; connectivity has not been checked yet.")
         : status("shiprocket", "not_configured", "Not configured."),

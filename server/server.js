@@ -15,6 +15,7 @@ process.on("uncaughtException", (error) => {
 
 const server = app.listen(env.port, env.host, () => {
   console.log(`Swavalambi Siddaganga Oil Mill API listening on ${env.host}:${env.port}`);
+  console.log(env.shiprocket.mock ? "Shiprocket running in MOCK mode" : "Shiprocket running in LIVE mode");
 });
 
 try {
