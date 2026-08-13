@@ -9,7 +9,7 @@ import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";
 import StoreSettings from "../../models/StoreSettings.js";
 import User from "../../models/User.js";
-import { createReadyToShipShipment, advanceMockShipment } from "../../services/shiprocketService.js";
+import { createReadyToShipShipment, advanceMockShipment, markShipmentHandedOver } from "../../services/shiprocketService.js";
 import { createAdminNotification, createInventoryNotifications } from "../../services/adminNotificationService.js";
 import { deleteImage } from "../../services/uploadService.js";
 import { ApiError } from "../../utils/ApiError.js";
@@ -39,7 +39,7 @@ export async function dashboardData() {
   const start = new Date(); start.setHours(0, 0, 0, 0);
   const end = new Date(start); end.setDate(end.getDate() + 1);
   const validRevenue = { createdAt: { $gte: start, $lt: end }, $or: [{ paymentStatus: "paid" }, { paymentMethod: "cod", orderStatus: { $ne: "cancelled" } }] };
-  const [todayOrders, revenueAgg, pendingOrders, readyToShip, lowStock, totalCustomers, totalOrders, products, totalRevenueAgg, recentOrders, failedPayments, sales] = await Promise.all([
+  const [todayOrders, revenueAgg, pendingOrders, readyToShip, lowStock, totalCustomers, totalOrders, products, totalRevenueAgg, failedPayments, sales] = await Promise.all([
     Order.countDocuments({ createdAt: { $gte: start, $lt: end } }),
     Order.aggregate([{ $match: validRevenue }, { $group: { _id: null, total: { $sum: "$totalAmount" } } }]),
     Order.countDocuments({ orderStatus: "placed" }),
@@ -49,11 +49,10 @@ export async function dashboardData() {
     Order.countDocuments(),
     Product.countDocuments({ isArchived: { $ne: true } }),
     Order.aggregate([{ $match: { $or: [{ paymentStatus: "paid" }, { paymentMethod: "cod", orderStatus: { $ne: "cancelled" } }] } }, { $group: { _id: null, total: { $sum: "$totalAmount" } } }]),
-    Order.find().populate("user", "name email").sort({ createdAt: -1 }).limit(8),
     Order.countDocuments({ paymentStatus: "failed" }),
     Order.aggregate([{ $match: { createdAt: { $gte: new Date(Date.now() - 7 * 86400000) }, paymentStatus: { $in: ["paid"] } } }, { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, total: { $sum: "$totalAmount" }, orders: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
   ]);
-  return { summary: { todayOrders, todayRevenue: revenueAgg[0]?.total || 0, pendingOrders, readyToShip, lowStock, totalCustomers, totalOrders, products, totalRevenue: totalRevenueAgg[0]?.total || 0 }, recentOrders, needsAttention: { waitingConfirmation: pendingOrders, readyToShip, lowStock, failedPayments }, sales };
+  return { summary: { todayOrders, todayRevenue: revenueAgg[0]?.total || 0, pendingOrders, readyToShip, lowStock, totalCustomers, totalOrders, products, totalRevenue: totalRevenueAgg[0]?.total || 0 }, needsAttention: { waitingConfirmation: pendingOrders, readyToShip, lowStock, failedPayments }, sales };
 }
 
 export async function listOrders(query) {
@@ -72,7 +71,11 @@ export async function updateOrderStatus(id, nextStatus) {
   if (!order) throw new ApiError("Order not found.", 404);
   if (!orderTransitions[order.orderStatus]?.includes(nextStatus)) throw new ApiError("Invalid order status transition.", 400);
   const previousStatus = order.orderStatus;
+  const previousShippingStatus = order.shippingStatus;
   order.orderStatus = nextStatus;
+  if (nextStatus === "cancelled") order.shippingStatus = "cancelled";
+  if (nextStatus === "shipped" && !["picked_up", "in_transit", "out_for_delivery"].includes(order.shippingStatus)) order.shippingStatus = "shipped";
+  if (nextStatus === "delivered") order.shippingStatus = "delivered";
   await order.save();
   if (nextStatus === "cancelled" && !order.inventoryRestoredAt) {
     try {
@@ -83,6 +86,7 @@ export async function updateOrderStatus(id, nextStatus) {
       await Promise.all(restoredProducts.map((product) => createInventoryNotifications(product)));
     } catch (error) {
       order.orderStatus = previousStatus;
+      order.shippingStatus = previousShippingStatus;
       await order.save().catch(() => undefined);
       throw error;
     }
@@ -91,6 +95,7 @@ export async function updateOrderStatus(id, nextStatus) {
 }
 
 export async function readyToShip(id) { return createReadyToShipShipment(id); }
+export async function handoverShipment(id) { return markShipmentHandedOver(id); }
 export async function nextMockShipping(id) { return advanceMockShipment(id); }
 
 export async function listProducts(query) {

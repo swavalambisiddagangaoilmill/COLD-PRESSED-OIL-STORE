@@ -70,6 +70,7 @@ const orderSchema = new mongoose.Schema(
     manifestUrl: { type: String },
     shippingFailureReason: { type: String },
     readyToShipAt: { type: Date },
+    handedOverAt: { type: Date },
     isMockShipment: { type: Boolean, default: false },
     mockShippingStep: { type: Number, default: 0 },
     mockShippingHistory: [{ status: String, label: String, createdAt: { type: Date, default: Date.now } }],
@@ -86,4 +87,3 @@ orderSchema.index({ razorpayPaymentId: 1 }, { unique: true, sparse: true });
 orderSchema.index({ razorpayOrderId: 1 }, { sparse: true });
 
 export default mongoose.model("Order", orderSchema);
-

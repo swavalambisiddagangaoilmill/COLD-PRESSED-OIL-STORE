@@ -283,7 +283,7 @@ export async function createReadyToShipShipment(orderId) {
     order.trackingUrl = getTrackingUrl(awbCode);
     order.estimatedDelivery = parseEstimatedDelivery(courier.estimatedDelivery) || order.estimatedDelivery;
     order.shippingStatus = "awb_assigned";
-    order.orderStatus = order.orderStatus === "placed" ? "packed" : order.orderStatus;
+    if (["placed", "confirmed"].includes(order.orderStatus)) order.orderStatus = "packed";
     await order.save();
 
     const pickup = await shiprocketRequest("/courier/generate/pickup", { method: "POST", body: { shipment_id: [order.shiprocketShipmentId] } });
@@ -309,6 +309,22 @@ export async function createReadyToShipShipment(orderId) {
   }
 }
 
+export async function markShipmentHandedOver(orderId) {
+  const order = await loadOrder(orderId);
+  if (["picked_up", "shipped", "in_transit", "out_for_delivery", "delivered"].includes(order.shippingStatus)) return order;
+  if (order.orderStatus === "cancelled" || order.shippingStatus === "cancelled") throw new ApiError("Cancelled orders cannot be handed over.", 400);
+  if (order.shippingStatus !== "ready_for_pickup" || !order.awbCode) throw new ApiError("The shipment must be ready with an AWB before handover.", 400);
+  if (order.isMockShipment) applyMockStep(order, 1);
+  else {
+    order.shippingStatus = "picked_up";
+    order.orderStatus = "shipped";
+  }
+  order.pickupStatus = "Handed over to Shiprocket";
+  order.handedOverAt = order.handedOverAt || new Date();
+  await order.save();
+  return order;
+}
+
 export async function syncShiprocketWebhook(payload, headers = {}) {
   const expected = env.shiprocket.webhookSecret;
   if (!expected) throw new ApiError("Shiprocket webhook secret is not configured.", 503);
@@ -329,6 +345,8 @@ export async function syncShiprocketWebhook(payload, headers = {}) {
     : rawStatus.includes("rto") ? "rto"
     : rawStatus.includes("ship") || rawStatus.includes("transit") ? "shipped"
     : order.shippingStatus;
+
+  if (order.orderStatus === "cancelled" && normalized !== "cancelled") return order;
 
   order.shippingStatus = normalized;
   if (normalized === "delivered") order.orderStatus = "delivered";

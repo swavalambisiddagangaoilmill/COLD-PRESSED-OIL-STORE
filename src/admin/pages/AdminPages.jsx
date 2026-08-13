@@ -1,6 +1,7 @@
 // API-backed page components for the Swavalambi Siddaganga Oil Mill admin panel.
 import { AlertCircle, ArrowDown, ArrowUp, CheckCircle2, Download, Eye, EyeOff, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "../../components/features/feedback/ToastProvider.jsx";
 import { AdminBadge, AdminButton, AdminCard, AdminFilters, AdminInput, AdminModal, AdminPageHeader, AdminSelect, AdminTable, AdminTextarea } from "../components/AdminUi.jsx";
 import { adminApi } from "../services/adminApi.js";
@@ -121,21 +122,9 @@ function ServiceStatusSection() {
 }
 export function DashboardPage() {
   const { data, loading, error, reload } = useAdminData(adminApi.dashboard);
-  const { data: serviceData } = useAdminData(adminApi.serviceStatus);
-  const { pending, run } = useAdminAction();
   useAdminRefresh(reload, ["dashboard", "orders", "inventory"]);
   const s = data?.summary || {};
-  const action = async (type, order) => {
-    const key = `${type}:${order._id}`;
-    const status = type === "confirm" ? "confirmed" : type === "ship" ? "shipped" : type === "deliver" ? "delivered" : "cancelled";
-    const labels = { confirm: "Order confirmed.", ready: "Order marked ready to ship.", ship: "Order marked shipped.", deliver: "Order delivered.", cancel: "Order cancelled." };
-    const result = await run(key, type === "ready" ? () => adminApi.readyToShip(order._id) : () => adminApi.orderStatus(order._id, status), labels[type]);
-    if (result?.order) {
-      await reload();
-      window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["orders", "inventory", "products"] } }));
-    }
-  };
-  return <><AdminPageHeader title="Dashboard" description="Store operations overview." /><State loading={loading} error={error} />{data && <><div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6"><AdminCard title="Today's Orders" value={String(s.todayOrders || 0)} /><AdminCard title="Today's Revenue" value={money(s.todayRevenue)} /><AdminCard title="Pending Orders" value={String(s.pendingOrders || 0)} /><AdminCard title="Ready to Ship" value={String(s.readyToShip || 0)} /><AdminCard title="Low Stock" value={String(s.lowStock || 0)} /><AdminCard title="Total Customers" value={String(s.totalCustomers || 0)} /></div><ServiceStatusSection /><div className="mt-5 grid gap-5 xl:grid-cols-[1.3fr_0.7fr]"><OrdersTable orders={data.recentOrders || []} onAction={action} pending={pending} shiprocketAvailable={serviceData?.services?.shiprocket?.available !== false} /><div><h2 className="mb-3 text-lg font-bold">Needs Attention</h2>{Object.entries(data.needsAttention || {}).map(([key, value]) => <div key={key} className="mb-3 rounded-xl border border-[var(--admin-border)] bg-white p-4 text-sm font-semibold">{statusText(key)}: {value}</div>)}</div></div></>}</>;
+  return <><AdminPageHeader title="Dashboard" description="Store operations overview." /><State loading={loading} error={error} />{data && <><div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6"><AdminCard title="Today's Orders" value={String(s.todayOrders || 0)} /><AdminCard title="Today's Revenue" value={money(s.todayRevenue)} /><AdminCard title="Pending Orders" value={String(s.pendingOrders || 0)} /><AdminCard title="Ready to Ship" value={String(s.readyToShip || 0)} /><AdminCard title="Low Stock" value={String(s.lowStock || 0)} /><AdminCard title="Total Customers" value={String(s.totalCustomers || 0)} /></div><ServiceStatusSection /><div className="mt-5"><h2 className="mb-3 text-lg font-bold">Needs Attention</h2><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{Object.entries(data.needsAttention || {}).map(([key, value]) => <div key={key} className="rounded-xl border border-[var(--admin-border)] bg-white p-4 text-sm font-semibold">{statusText(key)}: {value}</div>)}</div></div></>}</>;
 }
 
 function OrdersTable({ orders = [], onAction, pending = {}, shiprocketAvailable = true }) {
@@ -148,6 +137,7 @@ function OrdersTable({ orders = [], onAction, pending = {}, shiprocketAvailable 
 }
 
 export function OrdersPage() {
+  const navigate = useNavigate();
   const [q, setQ] = useState("");
   const { data, loading, error, setData } = useAdminData(() => adminApi.orders(q ? `?search=${encodeURIComponent(q)}` : ""), [q]);
   const { pending, run } = useAdminAction();
@@ -162,6 +152,7 @@ export function OrdersPage() {
     if (result?.order) {
       setOrder(result.order);
       window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["dashboard", "orders", "inventory", "products"] } }));
+      if (type === "ready") navigate(`/admin/shipping?ready=${order._id}`);
     }
   };
   return <><AdminPageHeader title="Orders" description="Review and process customer orders." /><AdminFilters><SearchBox value={q} onChange={setQ} placeholder="Search orders" /></AdminFilters><State loading={loading} error={error} empty={!data?.items?.length} title="No orders found." />{data?.items?.length ? <OrdersTable orders={data.items} onAction={action} pending={pending} shiprocketAvailable={shiprocketAvailable} /> : null}</>;
@@ -392,7 +383,24 @@ export function GalleryPage() {
   const move = async (index, direction) => { const next = [...items]; const target = index + direction; if (target < 0 || target >= next.length) return; [next[index], next[target]] = [next[target], next[index]]; const result = await run("gallery:reorder", () => adminApi.reorderGallery(next.map((item) => item._id)), "Gallery order updated."); if (result?.items) setData({ items: result.items }); };
   return <><AdminPageHeader title="Gallery" description="Manage homepage gallery images." action={<AdminButton onClick={() => setUploadOpen(true)}><Plus size={16} />Upload Images</AdminButton>} /><State loading={loading} error={error} empty={!items.length} title="No gallery images yet." description="Upload images to show in the homepage gallery." action={<AdminButton onClick={() => setUploadOpen(true)}>Upload Images</AdminButton>} />{items.length ? <AdminTable columns={["Preview", "Status", "Order", "Actions"]} rows={items.map((item, index) => <tr key={item._id}><Cell>{item.image?.url ? <img src={item.image.url} alt="" className="h-14 w-20 rounded-lg object-cover" /> : "-"}</Cell><Cell><AdminBadge>{item.isVisible ? "Active" : "Disabled"}</AdminBadge></Cell><Cell>{index + 1}</Cell><Cell><div className="flex flex-wrap gap-2"><AdminButton variant="secondary" disabled={index === 0} loading={pending["gallery:reorder"]} onClick={() => move(index, -1)}><ArrowUp size={14} /></AdminButton><AdminButton variant="secondary" disabled={index === items.length - 1} loading={pending["gallery:reorder"]} onClick={() => move(index, 1)}><ArrowDown size={14} /></AdminButton><AdminButton variant="secondary" loading={pending[`gallery:toggle:${item._id}`]} onClick={() => toggle(item)}>{item.isVisible ? <EyeOff size={14} /> : <Eye size={14} />}</AdminButton><AdminButton variant="danger" loading={pending[`gallery:delete:${item._id}`]} onClick={() => remove(item)}><Trash2 size={14} /></AdminButton></div></Cell></tr>)} /> : null}<GalleryUploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onSaved={addRows} /></>;
 }
-export function ShippingPage() { const { data, loading, error, setData } = useAdminData(adminApi.shipping); const { pending, run } = useAdminAction(); const items = data?.items || []; const next = async (order) => { const result = await run(`shipping:${order._id}`, () => adminApi.mockNext(order._id), "Shipping status updated."); if (result?.order) updateItemList(setData, order._id, result.order); }; return <><AdminPageHeader title="Shipping" description="Manage shipment progress and courier details." /><State loading={loading} error={error} empty={!items.length} title="No shipments found." />{items.length ? <AdminTable columns={["Order", "Customer", "Status", "Courier", "AWB", "Action"]} rows={items.map((o) => <tr key={o._id}><Cell>{o._id}</Cell><Cell>{o.user?.name || o.shippingAddress?.fullName}</Cell><Cell>{statusText(o.shippingStatus)}</Cell><Cell>{o.courierName || "-"}</Cell><Cell>{o.awbCode || "-"}</Cell><Cell><AdminButton variant="secondary" loading={pending[`shipping:${o._id}`]} onClick={() => next(o)}>Next Mock Status</AdminButton></Cell></tr>)} /> : null}</>; }
+export function ShippingPage() {
+  const location = useLocation();
+  const { data, loading, error, setData } = useAdminData(adminApi.shipping);
+  const { pending, run } = useAdminAction();
+  const items = data?.items || [];
+  const selectedReadyId = new URLSearchParams(location.search).get("ready");
+  const ready = items.filter((order) => order.shippingStatus === "ready_for_pickup" && !order.handedOverAt && order.orderStatus !== "cancelled");
+  const processed = items.filter((order) => !ready.some((item) => item._id === order._id) && order.shippingStatus !== "pending");
+  const handover = async (order) => {
+    const result = await run(`handover:${order._id}`, () => adminApi.handoverShipment(order._id), "Order handed over to Shiprocket.");
+    if (result?.order) {
+      updateItemList(setData, order._id, result.order);
+      window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["dashboard", "orders", "inventory", "products", "shipping"] } }));
+    }
+  };
+  const next = async (order) => { const result = await run(`shipping:${order._id}`, () => adminApi.mockNext(order._id), "Shipping status updated."); if (result?.order) updateItemList(setData, order._id, result.order); };
+  return <><AdminPageHeader title="Shipping" description="Verify ready packages and manage Shiprocket handover." /><State loading={loading} error={error} /><section className="mt-5"><div className="mb-3 flex items-center justify-between"><div><h2 className="text-lg font-bold">Ready for Shiprocket Handover</h2><p className="mt-1 text-sm text-[var(--admin-muted)]">These packages are prepared and waiting for the Shiprocket agent. Verify each package before handover.</p></div><AdminBadge>{ready.length} Waiting</AdminBadge></div>{!loading && !error && !ready.length ? <div className="rounded-xl border border-[var(--admin-border)] bg-white p-6 text-sm font-semibold text-[var(--admin-muted)]">No orders are currently waiting for handover.</div> : null}{ready.length ? <AdminTable columns={["Order", "Customer & Shipping", "Products", "Order Details", "Shipment", "Handover"]} rows={ready.map((order) => <tr key={order._id} className={order._id === selectedReadyId ? "bg-leaf/5" : ""}><Cell className="font-bold">{order._id}</Cell><Cell><div className="max-w-64 whitespace-normal"><p className="font-bold">{order.user?.name || order.shippingAddress?.fullName || "Customer"}</p><p className="mt-1 text-xs leading-5 text-ink/55">{order.shippingAddress?.phone}<br />{[order.shippingAddress?.street, order.shippingAddress?.city, order.shippingAddress?.state, order.shippingAddress?.postalCode].filter(Boolean).join(", ")}</p></div></Cell><Cell><div className="max-w-72 whitespace-normal space-y-1">{order.products?.map((product, index) => <p key={`${product.product || product.title}-${index}`} className="text-sm"><span className="font-semibold">{product.title}</span> × {product.quantity}</p>)}</div></Cell><Cell><div className="space-y-1"><p className="font-bold">{money(order.totalAmount)}</p><p className="text-xs text-ink/55">{new Date(order.createdAt).toLocaleString("en-IN")}</p><p className="text-xs font-semibold">{statusText(order.paymentMethod)} · {statusText(order.paymentStatus)}</p></div></Cell><Cell><div className="space-y-1"><AdminBadge>Ready for Pickup</AdminBadge><p className="text-xs font-semibold">{order.courierName || "Shiprocket"}</p><p className="text-xs text-ink/55">AWB: {order.awbCode || "Pending"}</p></div></Cell><Cell><AdminButton disabled={Boolean(pending[`handover:${order._id}`])} loading={pending[`handover:${order._id}`]} onClick={() => handover(order)}>Mark Handed Over</AdminButton></Cell></tr>)} /> : null}</section>{processed.length ? <section className="mt-7"><h2 className="mb-3 text-lg font-bold">Processed Shipments</h2><AdminTable columns={["Order", "Customer", "Status", "Courier", "AWB", "Updated"]} rows={processed.map((order) => <tr key={order._id}><Cell className="font-bold">{order._id}</Cell><Cell>{order.user?.name || order.shippingAddress?.fullName || "Customer"}</Cell><Cell><AdminBadge>{statusText(order.shippingStatus)}</AdminBadge></Cell><Cell>{order.courierName || "-"}</Cell><Cell>{order.awbCode || "-"}</Cell><Cell>{order.isMockShipment && !["delivered", "cancelled"].includes(order.shippingStatus) ? <AdminButton variant="secondary" disabled={Boolean(pending[`shipping:${order._id}`])} loading={pending[`shipping:${order._id}`]} onClick={() => next(order)}>Next Mock Status</AdminButton> : new Date(order.updatedAt).toLocaleString("en-IN")}</Cell></tr>)} /></section> : null}</>;
+}
 export function CustomersPage() { return <SimpleList title="Customers" description="Review customer profiles and order totals." loader={adminApi.customers} columns={["Name", "Email", "Phone", "Orders", "Total Spent", "Status"]} row={(u) => [u.name, u.email, u.phone || "-", u.orderCount || 0, money(u.totalSpent), u.isDisabled ? "Disabled" : "Active"]} />; }
 export function PaymentsPage() { return <SimpleList title="Payments" description="Review payment methods and statuses." loader={adminApi.payments} columns={["Payment ID", "Order", "Customer", "Method", "Amount", "Status"]} row={(o) => [o.razorpayPaymentId || `COD-${o._id}`, o._id, o.user?.name || "-", o.paymentMethod, money(o.totalAmount), o.paymentStatus]} />; }
 export function ContentPage() { return <SimpleList title="Content" description="Manage editable website content." loader={adminApi.content} columns={["Key", "Updated"]} row={(c) => [c.key, new Date(c.updatedAt).toLocaleString("en-IN")]} />; }

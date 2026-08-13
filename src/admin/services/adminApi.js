@@ -11,6 +11,7 @@ export const adminApi = {
   orders: (query = "") => apiRequest(`${base}/orders${query}`),
   orderStatus: (id, status) => apiRequest(`${base}/orders/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
   readyToShip: (id) => apiRequest(`${base}/orders/${id}/ready-to-ship`, { method: "POST" }),
+  handoverShipment: (id) => apiRequest(`${base}/orders/${id}/handover`, { method: "POST" }),
   mockNext: (id) => apiRequest(`${base}/orders/${id}/mock-shipment/next`, { method: "POST" }),
   products: (query = "") => apiRequest(`${base}/products${query}`),
   saveProduct: (payload, id) => apiRequest(id ? `${base}/products/${id}` : `${base}/products`, { method: id ? "PUT" : "POST", body: JSON.stringify(payload) }),
