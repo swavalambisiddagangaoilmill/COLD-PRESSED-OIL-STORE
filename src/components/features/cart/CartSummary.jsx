@@ -21,6 +21,10 @@ export default function CartSummary({ totals, showCheckout = true }) {
       setCouponMessage("Enter a coupon code first.");
       return;
     }
+    if (appliedCoupon?.code === code.toUpperCase()) {
+      setCouponMessage("This coupon is already applied.");
+      return;
+    }
     setChecking(true);
     setCouponMessage("");
     try {
@@ -40,13 +44,13 @@ export default function CartSummary({ totals, showCheckout = true }) {
       <h2 className="font-serif text-3xl font-semibold">Order Summary</h2>
       <div className="mt-6 space-y-4 text-sm">
         <div className="flex justify-between"><span className="text-ink/60">Subtotal</span><span className="font-semibold">{formatCurrency(totals.subtotal)}</span></div>
-        <div className="flex justify-between"><span className="text-ink/60">Savings</span><span className="font-semibold text-leaf">-{formatCurrency(totals.discount)}</span></div>
-        {totals.couponDiscount > 0 && <div className="flex justify-between"><span className="text-ink/60">Coupon</span><span className="font-semibold text-leaf">-{formatCurrency(totals.couponDiscount)}</span></div>}
+        <div className="flex justify-between"><span className="text-ink/60">Savings</span><span className="font-semibold text-leaf">-{formatCurrency(totals.discount + totals.couponDiscount)}</span></div>
+        {totals.couponDiscount > 0 && <div className="flex justify-between"><span className="text-ink/60">Coupon ({appliedCoupon?.code})</span><span className="font-semibold text-leaf">-{formatCurrency(totals.couponDiscount)}</span></div>}
         <div className="flex justify-between"><span className="text-ink/60">Shipping</span><span className="font-semibold">{totals.shipping ? formatCurrency(totals.shipping) : "Free"}</span></div>
         <div className="flex justify-between"><span className="text-ink/60">Estimated tax</span><span className="font-semibold">{formatCurrency(totals.tax)}</span></div>
       </div>
       <div className="mt-6 grid gap-2">
-        <div className="flex gap-2"><Input className="flex-1" placeholder="Coupon code" aria-label="Coupon code" value={coupon} onChange={(event) => setCoupon(event.target.value.toUpperCase())} /><Button type="button" variant="outline" className="h-[52px] px-4" onClick={applyCoupon} disabled={checking}>{checking ? "Checking" : "Apply"}</Button></div>
+        <div className="flex gap-2"><Input className="flex-1" placeholder="Coupon code" aria-label="Coupon code" value={coupon} onChange={(event) => setCoupon(event.target.value.toUpperCase())} /><Button type="button" variant="outline" className="h-[52px] px-4" onClick={applyCoupon} disabled={checking || appliedCoupon?.code === coupon.trim().toUpperCase()}>{checking ? "Checking" : appliedCoupon?.code === coupon.trim().toUpperCase() ? "Applied" : "Apply"}</Button></div>
         {couponMessage && <p className={`text-sm font-semibold ${appliedCoupon ? "text-leaf" : "text-danger"}`}>{couponMessage}</p>}
         {belowMinimum && <p className="text-sm font-semibold text-clay">Minimum order is {formatCurrency(minimumOrder)}.</p>}
         <p className="text-sm text-ink/55">Delivery estimate: 2-5 business days after confirmation.</p>

@@ -3,7 +3,7 @@ import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
 import { createAdminNotification, createInventoryNotifications } from "./adminNotificationService.js";
-import { normalizeCouponCode, validateCouponForItems } from "./couponService.js";
+import { calculateCheckoutTotals, consumeCouponUsage, normalizeCouponCode, validateCouponForItems } from "./couponService.js";
 
 function normalizeOrderProducts(products = []) {
   const merged = new Map();
@@ -50,12 +50,18 @@ export async function createOrder(userId, payload) {
   }
 
   try {
-    const subtotal = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const totalAmount = Math.max(0, subtotal - couponResult.discountAmount);
-    const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: payload.paymentStatus || "pending", razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature, totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: couponResult.discountAmount });
-    if (couponResult.coupon) await couponResult.coupon.updateOne({ $inc: { usedCount: 1 } });
-    await createAdminNotification({ category: "orders", type: "new_order", title: "New Order", description: `Order ${order._id} was placed for Rs. ${totalAmount}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } });
-    await Promise.all(productIds.map((id) => Product.findById(id).then((product) => product && createInventoryNotifications(product))));
+    const totals = calculateCheckoutTotals(orderItems, couponResult.discountAmount);
+    const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: payload.paymentStatus || "pending", razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount });
+    try {
+      await consumeCouponUsage(couponResult.coupon);
+    } catch (error) {
+      await Order.findByIdAndDelete(order._id);
+      throw error;
+    }
+    await Promise.allSettled([
+      createAdminNotification({ category: "orders", type: "new_order", title: "New Order", description: `Order ${order._id} was placed for Rs. ${totals.totalAmount}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } }),
+      ...productIds.map((id) => Product.findById(id).then((product) => product && createInventoryNotifications(product))),
+    ]);
     return order;
   } catch (error) {
     await rollbackStock(successfulUpdates);

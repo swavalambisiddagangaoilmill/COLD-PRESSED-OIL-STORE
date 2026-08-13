@@ -11,6 +11,7 @@ import StoreSettings from "../../models/StoreSettings.js";
 import User from "../../models/User.js";
 import { createReadyToShipShipment, advanceMockShipment, markShipmentHandedOver } from "../../services/shiprocketService.js";
 import { createAdminNotification, createInventoryNotifications } from "../../services/adminNotificationService.js";
+import { normalizeCouponCode } from "../../services/couponService.js";
 import { deleteImage } from "../../services/uploadService.js";
 import { ApiError } from "../../utils/ApiError.js";
 import { slugify } from "../../utils/slugify.js";
@@ -257,7 +258,13 @@ export const saveOffer = (payload, userId, id) => id ? Offer.findByIdAndUpdate(i
 export const deleteOffer = (id) => Offer.findByIdAndDelete(id);
 export const listCoupons = () => Coupon.find().populate("categories", "name").populate("products", "title").sort({ createdAt: -1 });
 export const saveCoupon = (payload, userId, id) => {
-  const data = { ...payload, code: payload.code?.toUpperCase() };
+  const discountValue = Number(payload.discountValue);
+  const discountType = payload.discountType;
+  if (!normalizeCouponCode(payload.code)) throw new ApiError("Coupon code is required.", 400);
+  if (!Number.isFinite(discountValue) || discountValue <= 0) throw new ApiError("Discount value must be greater than zero.", 400);
+  if (discountType === "PERCENTAGE" && discountValue > 100) throw new ApiError("Percentage discount cannot exceed 100%.", 400);
+  if (!payload.startDate || !payload.expiryDate || String(payload.startDate).slice(0, 10) > String(payload.expiryDate).slice(0, 10)) throw new ApiError("Coupon expiry date must be on or after the start date.", 400);
+  const data = { ...payload, code: normalizeCouponCode(payload.code), discountValue, startDate: String(payload.startDate).slice(0, 10), expiryDate: String(payload.expiryDate).slice(0, 10) };
   return id ? Coupon.findByIdAndUpdate(id, data, { new: true, runValidators: true }) : Coupon.create({ ...data, createdBy: userId });
 };
 export const deleteCoupon = (id) => Coupon.findByIdAndDelete(id);

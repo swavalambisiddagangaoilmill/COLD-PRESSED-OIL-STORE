@@ -7,10 +7,15 @@ import { validateCoupon as validateCouponApi } from "../services/promotionServic
 import { readGuestSession, writeGuestSession } from "../utils/guestSession.js";
 
 const CartContext = createContext(null);
+const COUPON_SESSION_KEY = "ss_oil_mill_applied_coupon";
+
+function readAppliedCoupon() {
+  try { return JSON.parse(window.sessionStorage.getItem(COUPON_SESSION_KEY)) || null; } catch { return null; }
+}
 
 export function CartProvider({ children }) {
   const [items, setItems] = useState(() => readGuestSession().data.cart);
-  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [appliedCoupon, setAppliedCoupon] = useState(readAppliedCoupon);
   const { authenticated } = useAuth();
   const cartLoadRef = useRef(null);
 
@@ -40,26 +45,29 @@ export function CartProvider({ children }) {
   }, [authenticated, items]);
 
   useEffect(() => {
-    if (!items.length) setAppliedCoupon(null);
+    if (!items.length) clearCoupon();
   }, [items.length]);
 
   const couponProducts = useMemo(() => items.map((item) => ({ product: item._id || item.id, quantity: item.quantity })), [items]);
 
   const validateCoupon = async (code) => {
-    const coupon = await validateCouponApi(code, couponProducts);
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    if (appliedCoupon?.code === normalizedCode) return appliedCoupon;
+    const coupon = await validateCouponApi(normalizedCode, couponProducts);
     setAppliedCoupon(coupon);
+    window.sessionStorage.setItem(COUPON_SESSION_KEY, JSON.stringify(coupon));
     return coupon;
   };
 
-  const clearCoupon = () => setAppliedCoupon(null);
+  const clearCoupon = () => { setAppliedCoupon(null); window.sessionStorage.removeItem(COUPON_SESSION_KEY); };
 
   useEffect(() => {
     if (!appliedCoupon?.code || !couponProducts.length) return undefined;
     let active = true;
     const timer = window.setTimeout(() => {
       validateCouponApi(appliedCoupon.code, couponProducts)
-        .then((coupon) => active && setAppliedCoupon(coupon))
-        .catch(() => active && setAppliedCoupon(null));
+        .then((coupon) => { if (active) { setAppliedCoupon(coupon); window.sessionStorage.setItem(COUPON_SESSION_KEY, JSON.stringify(coupon)); } })
+        .catch(() => { if (active) clearCoupon(); });
     }, 500);
     return () => { active = false; window.clearTimeout(timer); };
   }, [appliedCoupon?.code, couponProducts]);
@@ -69,8 +77,8 @@ export function CartProvider({ children }) {
     let active = true;
     const revalidate = () => {
       validateCouponApi(appliedCoupon.code, couponProducts)
-        .then((coupon) => active && setAppliedCoupon(coupon))
-        .catch(() => active && setAppliedCoupon(null));
+        .then((coupon) => { if (active) { setAppliedCoupon(coupon); window.sessionStorage.setItem(COUPON_SESSION_KEY, JSON.stringify(coupon)); } })
+        .catch(() => { if (active) clearCoupon(); });
     };
     const timer = window.setInterval(revalidate, 15000);
     window.addEventListener("ss-oil-mill-promotions-changed", revalidate);
@@ -134,7 +142,7 @@ export function CartProvider({ children }) {
     const discount = mrpTotal - subtotal;
     const shipping = subtotal > 999 || subtotal === 0 ? 0 : 80;
     const tax = Math.round(subtotal * 0.05);
-    const couponDiscount = Math.min(appliedCoupon?.discountAmount || 0, subtotal + shipping + tax);
+    const couponDiscount = Math.min(appliedCoupon?.discountAmount || 0, subtotal);
     return { subtotal, mrpTotal, discount, couponDiscount, shipping, tax, total: Math.max(0, subtotal + shipping + tax - couponDiscount) };
   }, [appliedCoupon?.discountAmount, items]);
 

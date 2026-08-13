@@ -7,7 +7,7 @@ import Product from "../models/Product.js";
 import { createOrder as createStoreOrder } from "./orderService.js";
 import { ApiError } from "../utils/ApiError.js";
 import { createAdminNotification } from "./adminNotificationService.js";
-import { validateCouponForItems } from "./couponService.js";
+import { calculateCheckoutTotals, validateCouponForItems } from "./couponService.js";
 import { isServiceAvailable, logExternalFailure } from "./serviceStatusService.js";
 
 const PAYMENT_UNAVAILABLE = "Online payments are temporarily unavailable.";
@@ -28,7 +28,7 @@ async function calculateOrderAmount(productsPayload = [], userId, couponCode) {
 
   const subtotal = items.reduce((total, item) => total + item.price * item.quantity, 0);
   const coupon = await validateCouponForItems({ code: couponCode, userId, items, subtotal });
-  return Math.max(0, subtotal - coupon.discountAmount);
+  return calculateCheckoutTotals(items, coupon.discountAmount).totalAmount;
 }
 
 function assertRazorpayAvailable() {
