@@ -4,6 +4,23 @@ import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
 
+export const COUPON_REASONS = Object.freeze({
+  NOT_FOUND: "COUPON_NOT_FOUND",
+  EXPIRED: "COUPON_EXPIRED",
+  INACTIVE: "COUPON_INACTIVE",
+  NOT_STARTED: "COUPON_NOT_STARTED",
+  USAGE_LIMIT: "COUPON_USAGE_LIMIT_REACHED",
+  ALREADY_USED: "COUPON_ALREADY_USED",
+  MINIMUM_ORDER: "COUPON_MINIMUM_ORDER_NOT_REACHED",
+  INVALID_CONFIGURATION: "COUPON_INVALID_CONFIGURATION",
+  NOT_APPLICABLE: "COUPON_NOT_APPLICABLE",
+  FIRST_ORDER_ONLY: "COUPON_FIRST_ORDER_ONLY",
+});
+
+function couponError(reason, message) {
+  return new ApiError(message, 400, [], reason);
+}
+
 export function normalizeCouponCode(code = "") {
   return String(code || "").trim().toUpperCase();
 }
@@ -31,13 +48,19 @@ export function calculateCheckoutTotals(items = [], couponDiscount = 0) {
 }
 
 export function assertCouponEligibility(coupon, now = new Date()) {
-  if (!coupon) throw new ApiError("Coupon code was not found.", 400);
-  if (!coupon.isActive) throw new ApiError("Coupon is inactive.", 400);
+  if (!coupon) throw couponError(COUPON_REASONS.NOT_FOUND, "Coupon code not found.");
+  if (!coupon.isActive) throw couponError(COUPON_REASONS.INACTIVE, "This coupon is currently unavailable.");
   const bounds = couponDateBounds(coupon);
-  if (!bounds.start || !bounds.expiry) throw new ApiError("Coupon dates are invalid.", 400);
-  if (now < bounds.start) throw new ApiError("Coupon is not active yet.", 400);
-  if (now > bounds.expiry) throw new ApiError("Coupon has expired.", 400);
-  if (coupon.usageLimit > 0 && coupon.usedCount >= coupon.usageLimit) throw new ApiError("Coupon usage limit has been reached.", 400);
+  const validDiscount = ["PERCENTAGE", "FIXED"].includes(coupon.discountType)
+    && Number.isFinite(Number(coupon.discountValue))
+    && Number(coupon.discountValue) > 0
+    && (coupon.discountType !== "PERCENTAGE" || Number(coupon.discountValue) <= 100);
+  if (!bounds.start || !bounds.expiry || bounds.start > bounds.expiry || !validDiscount) {
+    throw couponError(COUPON_REASONS.INVALID_CONFIGURATION, "This coupon cannot be applied right now.");
+  }
+  if (now < bounds.start) throw couponError(COUPON_REASONS.NOT_STARTED, "This coupon is not active yet.");
+  if (now > bounds.expiry) throw couponError(COUPON_REASONS.EXPIRED, "This coupon has expired.");
+  if (coupon.usageLimit > 0 && coupon.usedCount >= coupon.usageLimit) throw couponError(COUPON_REASONS.USAGE_LIMIT, "This coupon has reached its usage limit.");
 }
 
 export function calculateCouponDiscount(coupon, discountBase, orderSubtotal = discountBase) {
@@ -68,15 +91,18 @@ export async function validateCouponForItems({ code, userId, items = [], subtota
   assertCouponEligibility(coupon, now);
 
   const orderSubtotal = Number(subtotal ?? items.reduce((sum, item) => sum + lineTotal(item), 0));
-  if (orderSubtotal < coupon.minimumOrderAmount) throw new ApiError(`Minimum order for this coupon is Rs. ${coupon.minimumOrderAmount}.`, 400);
+  if (orderSubtotal < coupon.minimumOrderAmount) {
+    const amountMore = Math.max(0, coupon.minimumOrderAmount - orderSubtotal);
+    throw couponError(COUPON_REASONS.MINIMUM_ORDER, `Add ₹${amountMore.toLocaleString("en-IN")} more to use this coupon.`);
+  }
 
   if (coupon.firstOrderOnly && userId) {
     const existingOrders = await Order.countDocuments({ user: userId });
-    if (existingOrders > 0) throw new ApiError("This coupon is valid only on the first order.", 400);
+    if (existingOrders > 0) throw couponError(COUPON_REASONS.FIRST_ORDER_ONLY, "This coupon is available only on your first order.");
   }
   if (coupon.perCustomerUsageLimit > 0 && userId) {
     const customerUses = await Order.countDocuments({ user: userId, couponCode });
-    if (customerUses >= coupon.perCustomerUsageLimit) throw new ApiError("You have already used this coupon the maximum number of times.", 400);
+    if (customerUses >= coupon.perCustomerUsageLimit) throw couponError(COUPON_REASONS.ALREADY_USED, "You have already used this coupon.");
   }
 
   const productIds = new Set((coupon.products || []).map((id) => id.toString()));
@@ -86,7 +112,7 @@ export async function validateCouponForItems({ code, userId, items = [], subtota
     if (coupon.scope === "CATEGORY") return categoryIds.has(itemCategoryId(item));
     return true;
   });
-  if (!eligibleItems.length) throw new ApiError("Coupon does not apply to the selected products.", 400);
+  if (!eligibleItems.length) throw couponError(COUPON_REASONS.NOT_APPLICABLE, "This coupon does not apply to the selected products.");
 
   const discountBase = eligibleItems.reduce((sum, item) => sum + lineTotal(item), 0);
   return { coupon, discountAmount: calculateCouponDiscount(coupon, discountBase, orderSubtotal) };
@@ -97,7 +123,7 @@ export async function consumeCouponUsage(coupon) {
   const filter = { _id: coupon._id, isActive: true };
   if (coupon.usageLimit > 0) filter.usedCount = { $lt: coupon.usageLimit };
   const result = await Coupon.updateOne(filter, { $inc: { usedCount: 1 } });
-  if (result.modifiedCount !== 1) throw new ApiError("Coupon usage limit has been reached.", 400);
+  if (result.modifiedCount !== 1) throw couponError(COUPON_REASONS.USAGE_LIMIT, "This coupon has reached its usage limit.");
 }
 
 export async function validateCouponPayload({ code, userId, products = [] }) {
@@ -111,5 +137,5 @@ export async function validateCouponPayload({ code, userId, products = [] }) {
     return { product, quantity: item.quantity, price: product.discountPrice || product.price };
   });
   const result = await validateCouponForItems({ code, userId, items });
-  return { code: result.coupon.code, discountAmount: result.discountAmount, description: result.coupon.description || "Coupon applied successfully." };
+  return { code: result.coupon.code, discountAmount: result.discountAmount, description: result.coupon.description || "", message: "Coupon applied successfully." };
 }

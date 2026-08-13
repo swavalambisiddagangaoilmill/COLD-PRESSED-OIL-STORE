@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import Coupon from "../models/Coupon.js";
 import Order from "../models/Order.js";
-import { calculateCheckoutTotals, consumeCouponUsage, validateCouponForItems } from "../services/couponService.js";
+import { calculateCheckoutTotals, consumeCouponUsage, COUPON_REASONS, validateCouponForItems } from "../services/couponService.js";
 
 const originalCouponFindOne = Coupon.findOne;
 const originalCouponUpdateOne = Coupon.updateOne;
@@ -48,6 +48,15 @@ async function validate(currentCoupon, options = {}) {
   return validateCouponForItems({ code: currentCoupon?.code || "UNKNOWN", userId: options.userId, items, subtotal: options.subtotal });
 }
 
+async function expectCouponError(promise, reason, message) {
+  await assert.rejects(promise, (error) => {
+    assert.equal(error.reason, reason);
+    assert.equal(error.message, message);
+    assert.equal(error.statusCode, 400);
+    return true;
+  });
+}
+
 test("active percentage coupon applies immediately without consuming usage", async () => {
   let usageWrites = 0;
   Coupon.updateOne = async () => { usageWrites += 1; return { modifiedCount: 1 }; };
@@ -67,21 +76,28 @@ test("coupon expiring today remains valid for the full IST calendar date", async
   assert.equal(result.discountAmount, 200);
 });
 
-test("expired, future, inactive, exhausted, and minimum-order failures are specific", async () => {
+test("coupon failure scenarios return stable reasons and customer-safe messages", async () => {
   const dateInIndia = (offsetDays) => {
     const parts = Object.fromEntries(new Intl.DateTimeFormat("en", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(Date.now() + offsetDays * 86400000)).map((part) => [part.type, part.value]));
     return `${parts.year}-${parts.month}-${parts.day}`;
   };
-  await assert.rejects(validate(coupon({ expiryDate: dateInIndia(-1) })), /expired/);
-  await assert.rejects(validate(coupon({ startDate: dateInIndia(1), expiryDate: dateInIndia(2) })), /not active yet/);
-  await assert.rejects(validate(coupon({ isActive: false })), /inactive/);
-  await assert.rejects(validate(coupon({ usageLimit: 1, usedCount: 1 })), /usage limit/);
-  await assert.rejects(validate(coupon({ minimumOrderAmount: 401 })), /Minimum order/);
+  await expectCouponError(validate(null), COUPON_REASONS.NOT_FOUND, "Coupon code not found.");
+  await expectCouponError(validate(coupon({ startDate: dateInIndia(-2), expiryDate: dateInIndia(-1) })), COUPON_REASONS.EXPIRED, "This coupon has expired.");
+  await expectCouponError(validate(coupon({ startDate: dateInIndia(1), expiryDate: dateInIndia(2) })), COUPON_REASONS.NOT_STARTED, "This coupon is not active yet.");
+  await expectCouponError(validate(coupon({ isActive: false })), COUPON_REASONS.INACTIVE, "This coupon is currently unavailable.");
+  await expectCouponError(validate(coupon({ usageLimit: 1, usedCount: 1 })), COUPON_REASONS.USAGE_LIMIT, "This coupon has reached its usage limit.");
+  await expectCouponError(validate(coupon({ minimumOrderAmount: 500 })), COUPON_REASONS.MINIMUM_ORDER, "Add ₹100 more to use this coupon.");
+  await expectCouponError(validate(coupon({ discountValue: 0 })), COUPON_REASONS.INVALID_CONFIGURATION, "This coupon cannot be applied right now.");
+  await expectCouponError(validate(coupon({ discountType: "PERCENTAGE", discountValue: 101 })), COUPON_REASONS.INVALID_CONFIGURATION, "This coupon cannot be applied right now.");
 });
 
 test("guest validation works and logged-in usage limit is enforced", async () => {
   assert.equal((await validate(coupon())).discountAmount, 200);
-  await assert.rejects(validate(coupon(), { userId: "64b000000000000000000004", customerUses: 1 }), /maximum number of times/);
+  await expectCouponError(
+    validate(coupon(), { userId: "64b000000000000000000004", customerUses: 1 }),
+    COUPON_REASONS.ALREADY_USED,
+    "You have already used this coupon.",
+  );
 });
 
 test("successful order consumption increments usage atomically once", async () => {
@@ -98,5 +114,5 @@ test("successful order consumption increments usage atomically once", async () =
 
 test("exhausted coupon cannot be consumed by a concurrent order", async () => {
   Coupon.updateOne = async () => ({ modifiedCount: 0 });
-  await assert.rejects(consumeCouponUsage(coupon()), /usage limit/);
+  await expectCouponError(consumeCouponUsage(coupon()), COUPON_REASONS.USAGE_LIMIT, "This coupon has reached its usage limit.");
 });

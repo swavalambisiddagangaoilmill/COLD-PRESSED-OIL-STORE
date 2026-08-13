@@ -41,5 +41,6 @@ export function errorHandler(error, req, res, next) {
     console.error(error);
   }
 
-  return sendError(res, statusCode, message, errors);
+  const reason = statusCode < 500 ? error.reason : undefined;
+  return sendError(res, statusCode, message, errors, reason);
 }

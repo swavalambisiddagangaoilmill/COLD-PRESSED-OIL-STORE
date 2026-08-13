@@ -54,6 +54,7 @@ export async function apiRequest(endpoint, options = {}) {
     const error = new Error(message);
     error.status = response.status;
     error.errors = payload.errors || [];
+    error.reason = payload.reason;
     error.payload = payload;
     throw error;
   }

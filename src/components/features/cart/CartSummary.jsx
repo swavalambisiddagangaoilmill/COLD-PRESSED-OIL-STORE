@@ -30,10 +30,10 @@ export default function CartSummary({ totals, showCheckout = true }) {
     try {
       const result = await validateCoupon(code);
       setCoupon(result.code);
-      setCouponMessage(result.description || "Coupon applied successfully.");
+      setCouponMessage(result.message || "Coupon applied successfully.");
     } catch (err) {
       clearCoupon();
-      setCouponMessage(err.message || "Coupon is invalid or expired.");
+      setCouponMessage(err.message || "This coupon cannot be applied right now.");
     } finally {
       setChecking(false);
     }
