@@ -30,6 +30,22 @@ export function calculateCheckoutTotals(items = [], couponDiscount = 0) {
   return { subtotal, shippingAmount, taxAmount, discountAmount, totalAmount: Math.max(0, subtotal + shippingAmount + taxAmount - discountAmount) };
 }
 
+export function assertCouponEligibility(coupon, now = new Date()) {
+  if (!coupon) throw new ApiError("Coupon code was not found.", 400);
+  if (!coupon.isActive) throw new ApiError("Coupon is inactive.", 400);
+  const bounds = couponDateBounds(coupon);
+  if (!bounds.start || !bounds.expiry) throw new ApiError("Coupon dates are invalid.", 400);
+  if (now < bounds.start) throw new ApiError("Coupon is not active yet.", 400);
+  if (now > bounds.expiry) throw new ApiError("Coupon has expired.", 400);
+  if (coupon.usageLimit > 0 && coupon.usedCount >= coupon.usageLimit) throw new ApiError("Coupon usage limit has been reached.", 400);
+}
+
+export function calculateCouponDiscount(coupon, discountBase, orderSubtotal = discountBase) {
+  const rawDiscount = coupon.discountType === "PERCENTAGE" ? Math.round(discountBase * (coupon.discountValue / 100)) : coupon.discountValue;
+  const cappedDiscount = coupon.maximumDiscountAmount > 0 ? Math.min(rawDiscount, coupon.maximumDiscountAmount) : rawDiscount;
+  return Math.max(0, Math.min(orderSubtotal, Math.round(cappedDiscount)));
+}
+
 function itemProductId(item) {
   return item.product?._id?.toString?.() || item.product?.toString?.() || item._id?.toString?.() || item.id?.toString?.();
 }
@@ -49,13 +65,7 @@ export async function validateCouponForItems({ code, userId, items = [], subtota
 
   const coupon = await Coupon.findOne({ code: couponCode });
   const now = new Date();
-  if (!coupon) throw new ApiError("Coupon code was not found.", 400);
-  if (!coupon.isActive) throw new ApiError("Coupon is inactive.", 400);
-  const bounds = couponDateBounds(coupon);
-  if (!bounds.start || !bounds.expiry) throw new ApiError("Coupon dates are invalid.", 400);
-  if (now < bounds.start) throw new ApiError("Coupon is not active yet.", 400);
-  if (now > bounds.expiry) throw new ApiError("Coupon has expired.", 400);
-  if (coupon.usageLimit > 0 && coupon.usedCount >= coupon.usageLimit) throw new ApiError("Coupon usage limit has been reached.", 400);
+  assertCouponEligibility(coupon, now);
 
   const orderSubtotal = Number(subtotal ?? items.reduce((sum, item) => sum + lineTotal(item), 0));
   if (orderSubtotal < coupon.minimumOrderAmount) throw new ApiError(`Minimum order for this coupon is Rs. ${coupon.minimumOrderAmount}.`, 400);
@@ -79,9 +89,7 @@ export async function validateCouponForItems({ code, userId, items = [], subtota
   if (!eligibleItems.length) throw new ApiError("Coupon does not apply to the selected products.", 400);
 
   const discountBase = eligibleItems.reduce((sum, item) => sum + lineTotal(item), 0);
-  const rawDiscount = coupon.discountType === "PERCENTAGE" ? Math.round(discountBase * (coupon.discountValue / 100)) : coupon.discountValue;
-  const cappedDiscount = coupon.maximumDiscountAmount > 0 ? Math.min(rawDiscount, coupon.maximumDiscountAmount) : rawDiscount;
-  return { coupon, discountAmount: Math.max(0, Math.min(orderSubtotal, Math.round(cappedDiscount))) };
+  return { coupon, discountAmount: calculateCouponDiscount(coupon, discountBase, orderSubtotal) };
 }
 
 export async function consumeCouponUsage(coupon) {

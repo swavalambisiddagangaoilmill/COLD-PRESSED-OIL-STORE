@@ -111,6 +111,17 @@ function offerStatus(offer) {
 function mapScope(value) { return value === "CATEGORY" ? "Category" : value === "PRODUCTS" ? "Selected Products" : "Entire Store"; }
 function scopeFromLabel(value) { return value === "Category" ? "CATEGORY" : value === "Selected Products" ? "PRODUCTS" : "STORE"; }
 function couponScopeFromLabel(value) { return value === "Category" ? "CATEGORY" : value === "Selected Products" ? "PRODUCTS" : "ALL"; }
+function couponStatus(coupon) {
+  if (!coupon.isActive) return "Inactive";
+  if (coupon.usageLimit > 0 && coupon.usedCount >= coupon.usageLimit) return "Exhausted";
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()).map((part) => [part.type, part.value]));
+  const todayInIndia = `${parts.year}-${parts.month}-${parts.day}`;
+  const start = String(coupon.startDate || "").slice(0, 10);
+  const expiry = String(coupon.expiryDate || "").slice(0, 10);
+  if (start && todayInIndia < start) return "Scheduled";
+  if (expiry && todayInIndia > expiry) return "Expired";
+  return "Active";
+}
 function normalizeDiscountType(value) { return value === "Fixed Amount" || value === "FIXED" ? "FIXED" : "PERCENTAGE"; }
 
 function ServiceStatusSection() {
@@ -346,7 +357,7 @@ export function CouponsPage() {
   const items = data?.items || [];
   const saveRow = (coupon) => setData((current) => current ? { ...current, items: current.items?.some((item) => item._id === coupon._id) ? current.items.map((item) => item._id === coupon._id ? { ...item, ...coupon } : item) : [coupon, ...(current.items || [])] } : current);
   const remove = async (coupon) => { const result = await run(`coupon:delete:${coupon._id}`, () => adminApi.deleteCoupon(coupon._id), "Coupon deleted."); if (result) updateItemList(setData, coupon._id, coupon, true); };
-  return <><AdminPageHeader title="Coupons" description="Create and manage customer coupon codes." action={<AdminButton onClick={() => setEditing({})}><Plus size={16} />Create Coupon</AdminButton>} /><State loading={loading} error={error} empty={!items.length} title="No coupons yet." description="Create a coupon code for customer discounts." action={<AdminButton onClick={() => setEditing({})}>Create Coupon</AdminButton>} />{items.length ? <AdminTable columns={["Coupon Code", "Discount", "Usage", "Minimum Order", "Start Date", "Expiry", "Status", "Actions"]} rows={items.map((c) => <tr key={c._id}><Cell className="font-bold">{c.code}</Cell><Cell>{c.discountType === "PERCENTAGE" ? `${c.discountValue}%` : money(c.discountValue)}</Cell><Cell>{c.usedCount}/{c.usageLimit || "8"}</Cell><Cell>{money(c.minimumOrderAmount)}</Cell><Cell>{String(c.startDate).slice(0,10)}</Cell><Cell>{String(c.expiryDate).slice(0,10)}</Cell><Cell><AdminBadge>{c.isActive ? "Active" : "Disabled"}</AdminBadge></Cell><Cell><div className="flex gap-2"><AdminButton variant="secondary" onClick={() => setEditing(c)}>Edit</AdminButton><AdminButton variant="secondary" onClick={() => setEditing({ ...c, _id: undefined, code: `${c.code}COPY` })}>Duplicate</AdminButton><AdminButton variant="danger" loading={pending[`coupon:delete:${c._id}`]} onClick={() => remove(c)}><Trash2 size={14} /></AdminButton></div></Cell></tr>)} /> : null}<CouponForm open={Boolean(editing)} coupon={editing?._id ? editing : null} categories={catData?.items || []} products={productData?.items || []} onClose={() => setEditing(null)} onSaved={saveRow} /></>;
+  return <><AdminPageHeader title="Coupons" description="Create and manage customer coupon codes." action={<AdminButton onClick={() => setEditing({})}><Plus size={16} />Create Coupon</AdminButton>} /><State loading={loading} error={error} empty={!items.length} title="No coupons yet." description="Create a coupon code for customer discounts." action={<AdminButton onClick={() => setEditing({})}>Create Coupon</AdminButton>} />{items.length ? <AdminTable columns={["Coupon Code", "Discount", "Usage", "Minimum Order", "Start Date", "Expiry", "Status", "Actions"]} rows={items.map((c) => <tr key={c._id}><Cell className="font-bold">{c.code}</Cell><Cell>{c.discountType === "PERCENTAGE" ? `${c.discountValue}%` : money(c.discountValue)}</Cell><Cell>{c.usedCount}/{c.usageLimit || "Unlimited"}</Cell><Cell>{money(c.minimumOrderAmount)}</Cell><Cell>{String(c.startDate).slice(0,10)}</Cell><Cell>{String(c.expiryDate).slice(0,10)}</Cell><Cell><AdminBadge>{couponStatus(c)}</AdminBadge></Cell><Cell><div className="flex gap-2"><AdminButton variant="secondary" onClick={() => setEditing(c)}>Edit</AdminButton><AdminButton variant="secondary" onClick={() => setEditing({ ...c, _id: undefined, code: `${c.code}COPY` })}>Duplicate</AdminButton><AdminButton variant="danger" loading={pending[`coupon:delete:${c._id}`]} onClick={() => remove(c)}><Trash2 size={14} /></AdminButton></div></Cell></tr>)} /> : null}<CouponForm open={Boolean(editing)} coupon={editing?._id ? editing : null} categories={catData?.items || []} products={productData?.items || []} onClose={() => setEditing(null)} onSaved={saveRow} /></>;
 }
 
 function GalleryUploadModal({ open, onClose, onSaved }) {
