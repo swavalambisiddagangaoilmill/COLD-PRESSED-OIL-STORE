@@ -1,0 +1,42 @@
+name: Render backend keep-alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-backend-keep-alive
+  cancel-in-progress: true
+
+jobs:
+  ping-health-endpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      HEALTHCHECK_URL: ${{ vars.RENDER_BACKEND_URL }}/api/health
+    steps:
+      - name: Validate monitor configuration
+        shell: bash
+        run: |
+          if [[ "$HEALTHCHECK_URL" != https://*/api/health ]]; then
+            echo "Set the RENDER_BACKEND_URL repository variable to the public HTTPS Render service URL (without a trailing slash)."
+            exit 1
+          fi
+
+      - name: Ping backend health endpoint
+        shell: bash
+        run: |
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --location \
+            --max-time 45 \
+            --retry 2 \
+            --retry-delay 5 \
+            --retry-all-errors \
+            "$HEALTHCHECK_URL"
