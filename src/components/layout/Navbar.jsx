@@ -191,6 +191,15 @@ export default function Navbar() {
                 alt="Logo"
                 className="ml-3 hidden h-16 w-16 shrink-0 object-cover xl:block"
               />
+            </div>
+            <Link
+              to="/"
+              className="hidden min-w-0 justify-self-center px-2 text-center font-serif text-3xl font-semibold leading-tight tracking-tight xl:block"
+            >
+              Swavalambi Siddaganga Oil Mill
+              {/* ಸ್ವಾವಲಂಬಿ ಸಿದ್ದಗಂಗಾ ಆಯಿಲ್ ಮಿಲ್ */}
+            </Link>
+            <div className="flex items-center justify-end gap-0.5 sm:gap-1 xl:gap-3">
               <div className="hidden items-center gap-2 xl:flex" aria-label="Spiritual guides">
                 <img
                   src={basavannaLogo}
@@ -203,15 +212,6 @@ export default function Navbar() {
                   className="h-16 w-16 shrink-0 rounded-full object-cover object-top"
                 />
               </div>
-            </div>
-            <Link
-              to="/"
-              className="hidden min-w-0 justify-self-center px-2 text-center font-serif text-3xl font-semibold leading-tight tracking-tight xl:block"
-            >
-              Swavalambi Siddaganga Oil Mill
-              {/* ಸ್ವಾವಲಂಬಿ ಸಿದ್ದಗಂಗಾ ಆಯಿಲ್ ಮಿಲ್ */}
-            </Link>
-            <div className="flex items-center justify-end gap-0.5 sm:gap-1 xl:gap-3">
               <IconLink
                 label="Wishlist"
                 badge={wishlistItems.length}
