@@ -7,7 +7,7 @@ const INTRO_DURATION = 2100;
 const EXIT_DURATION = 360;
 
 const splashImages = [
-  { src: "/basavanna.webp", alt: "Basavanna", size: "side" },
+  { src: "/basavanna.png", alt: "Basavanna", size: "side" },
   { src: "/logo.webp", alt: "Swavalambi Siddaganga Oil Mill logo", size: "main" },
   { src: "/drshivkumarswamiji.webp", alt: "Dr Shivakumara Swamiji", size: "side" },
 ];
@@ -55,7 +55,7 @@ function IntroScreen({ reduced }) {
           Swavalambi Siddaganga Oil Mill
           {/* ????????? ????????? ????? ???? */}
         </p>
-        <p className="mt-4 text-xs font-bold uppercase tracking-[0.34em] text-brand sm:text-sm">WORK IS WORSHIP</p>
+        <p className="mt-4 text-sm font-bold tracking-[0.16em] text-brand sm:text-base">ಕಾಯಕವೇ ಕೈಲಾಸ</p>
         <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.3em] text-ink/45 sm:text-xs">ESTD. 2024</p>
       </motion.div>
     </motion.div>

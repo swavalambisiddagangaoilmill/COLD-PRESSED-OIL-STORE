@@ -9,7 +9,7 @@ import { useWishlist } from "../../context/WishlistContext.jsx";
 import DesktopMenu from "./DesktopMenu.jsx";
 import MobileDrawer from "./MobileDrawer.jsx";
 import MobileSearchPanel from "./MobileSearchPanel.jsx";
-import basavannaLogo from "/basavanna.webp";
+import basavannaLogo from "/basavanna.png";
 import companyLogo from "/logo.webp";
 import drshivkumarswamiji from "/drshivkumarswamiji.webp";
 
@@ -141,7 +141,7 @@ export default function Navbar() {
       >
         <div className="border-b border-ink/10">
           <div className="mx-auto grid h-[58px] max-w-screen-2xl grid-cols-[auto_1fr_auto] items-center px-4 sm:px-6 md:h-20 lg:px-8 xl:grid-cols-[1fr_auto_1fr] xl:h-[88px] xl:px-10 2xl:px-12">
-            <div className="flex items-center justify-start">
+            <div className="flex items-center justify-start gap-2 sm:gap-3">
               <Link
                 to="/"
                 className="flex items-center xl:hidden"
@@ -153,6 +153,18 @@ export default function Navbar() {
                   className="h-10 w-10 shrink-0 object-cover sm:h-12 sm:w-12"
                 />
               </Link>
+              <div className="flex items-center gap-1.5 xl:hidden" aria-label="Spiritual guides">
+                <img
+                  src={basavannaLogo}
+                  alt="Basavanna"
+                  className="h-9 w-9 shrink-0 rounded-full object-cover object-top sm:h-11 sm:w-11"
+                />
+                <img
+                  src={drshivkumarswamiji}
+                  alt="Dr Shivakumara Swamiji"
+                  className="h-9 w-9 shrink-0 rounded-full object-cover object-top sm:h-11 sm:w-11"
+                />
+              </div>
               <form
                 role="search"
                 onSubmit={(event) => {
@@ -179,6 +191,18 @@ export default function Navbar() {
                 alt="Logo"
                 className="ml-3 hidden h-16 w-16 shrink-0 object-cover xl:block"
               />
+              <div className="hidden items-center gap-2 xl:flex" aria-label="Spiritual guides">
+                <img
+                  src={basavannaLogo}
+                  alt="Basavanna"
+                  className="h-16 w-16 shrink-0 rounded-full object-cover object-top"
+                />
+                <img
+                  src={drshivkumarswamiji}
+                  alt="Dr Shivakumara Swamiji"
+                  className="h-16 w-16 shrink-0 rounded-full object-cover object-top"
+                />
+              </div>
             </div>
             <Link
               to="/"
@@ -188,16 +212,6 @@ export default function Navbar() {
               {/* ಸ್ವಾವಲಂಬಿ ಸಿದ್ದಗಂಗಾ ಆಯಿಲ್ ಮಿಲ್ */}
             </Link>
             <div className="flex items-center justify-end gap-0.5 sm:gap-1 xl:gap-3">
-              <img
-                src={basavannaLogo}
-                alt="Basavanna"
-                className="ml-3 hidden h-16 w-16 shrink-0 object-cover xl:block"
-              />
-              <img
-                src={drshivkumarswamiji}
-                alt="drshivkumarswamiji"
-                className="ml-3 hidden h-16 w-16 shrink-0 object-cover xl:block"
-              />
               <IconLink
                 label="Wishlist"
                 badge={wishlistItems.length}

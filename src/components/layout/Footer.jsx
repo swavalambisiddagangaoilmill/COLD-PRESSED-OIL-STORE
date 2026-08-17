@@ -167,7 +167,7 @@ export default function Footer() {
           <p>
             &copy; 2026 Swavalambi Siddaganga Oil Mill. All rights reserved.
           </p>
-          <p>Work is Worship.</p>
+          <p>ಕಾಯಕವೇ ಕೈಲಾಸ.</p>
         </div>
       </Container>
     </footer>
