@@ -3,6 +3,7 @@ import app from "./app.js";
 import { connectDB } from "./config/db.js";
 import { env } from "./config/env.js";
 import { ensureDefaultAdmin } from "./services/defaultAdminService.js";
+import { startKeepAlive, stopKeepAlive } from "./services/keepAliveService.js";
 import { startServiceStatusMonitor } from "./services/serviceStatusService.js";
 
 process.on("unhandledRejection", (reason) => {
@@ -18,11 +19,30 @@ const server = app.listen(env.port, env.host, () => {
   console.log(env.shiprocket.mock ? "Shiprocket running in MOCK mode" : "Shiprocket running in LIVE mode");
 });
 
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received; shutting down`);
+  stopKeepAlive();
+  const forceExit = setTimeout(() => process.exit(1), 10_000);
+  forceExit.unref?.();
+  server.close(() => {
+    clearTimeout(forceExit);
+    process.exit(0);
+  });
+}
+
+process.once("SIGTERM", () => shutdown("SIGTERM"));
+process.once("SIGINT", () => shutdown("SIGINT"));
+
 try {
   await connectDB();
   await ensureDefaultAdmin();
   startServiceStatusMonitor();
+  startKeepAlive();
 } catch (error) {
   console.error("Backend initialization failed", { message: error.message });
+  stopKeepAlive();
   server.close(() => process.exit(1));
 }

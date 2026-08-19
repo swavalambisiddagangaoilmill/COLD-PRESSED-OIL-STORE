@@ -6,6 +6,16 @@ dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 
 const isProduction = process.env.NODE_ENV === "production";
 const shiprocketMock = String(process.env.SHIPROCKET_MOCK || "false").trim().toLowerCase() === "true";
+const booleanValue = (value, fallback = false) => value == null ? fallback : String(value).trim().toLowerCase() === "true";
+const positiveNumber = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+};
+const keepAliveIntervalSeconds = Math.max(1, positiveNumber(process.env.KEEP_ALIVE_INTERVAL_SECONDS, 180));
+const keepAliveJitterSeconds = Math.min(
+  keepAliveIntervalSeconds - 1,
+  positiveNumber(process.env.KEEP_ALIVE_JITTER_SECONDS, 30),
+);
 
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
@@ -13,6 +23,15 @@ export const env = {
   port: Number(process.env.PORT) || 5000,
   host: process.env.HOST || "0.0.0.0",
   backendPublicUrl: process.env.BACKEND_PUBLIC_URL || "",
+  keepAlive: {
+    enabled: isProduction && booleanValue(process.env.KEEP_ALIVE_ENABLED),
+    baseUrl: process.env.KEEP_ALIVE_BASE_URL || process.env.BACKEND_PUBLIC_URL || "",
+    intervalSeconds: keepAliveIntervalSeconds,
+    jitterSeconds: Math.max(0, keepAliveJitterSeconds),
+    path: process.env.KEEP_ALIVE_PATH || "/api/health",
+    logging: booleanValue(process.env.KEEP_ALIVE_LOGGING),
+    timeoutMs: 10_000,
+  },
   mongoUri: process.env.MONGO_URI || "mongodb://127.0.0.1:27017/ss_oil_mill_ecommerce",
   jwtSecret: process.env.JWT_SECRET || "development_only_change_me",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",

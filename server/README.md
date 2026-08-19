@@ -42,3 +42,16 @@ All endpoints are mounted under `/api`.
 - Uploads: `/api/upload/image`
 
 Payment and upload providers are connected through environment-based service adapters. Configure provider credentials only in server/.env or the deployment secret manager.
+
+## Backend self health check
+
+Production deployments can enable a lightweight backend-only health request with `KEEP_ALIVE_ENABLED=true`. The scheduler calls the configured `KEEP_ALIVE_BASE_URL` and `KEEP_ALIVE_PATH` approximately every three minutes, choosing a fresh delay within the configured jitter range after every attempt. It performs no database writes and has no connection to email or notification services.
+
+The feature is disabled by default and remains inactive outside `NODE_ENV=production`. Configuration:
+
+- `KEEP_ALIVE_ENABLED=false`
+- `KEEP_ALIVE_BASE_URL=https://your-backend.example.com`
+- `KEEP_ALIVE_INTERVAL_SECONDS=180`
+- `KEEP_ALIVE_JITTER_SECONDS=30`
+- `KEEP_ALIVE_PATH=/api/health`
+- `KEEP_ALIVE_LOGGING=false`
