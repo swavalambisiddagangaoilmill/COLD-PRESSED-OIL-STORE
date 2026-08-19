@@ -8,6 +8,7 @@ import {
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 import Container from "../ui/Container.jsx";
+import companyLogo from "/logo.webp";
 import gloraLogo from "/glora-black.webp";
 import { socialLinks } from "../../data/socialLinks.js";
 
@@ -59,13 +60,21 @@ export default function Footer() {
         <div className="mx-auto max-w-5xl text-center">
           <Link
             to="/"
-            className="group block rounded-[2rem] border border-white/10 bg-white/[0.04] px-6 py-10 transition hover:-translate-y-1 hover:bg-white/[0.07]"
+            className="group flex flex-col items-center rounded-[2rem] border border-white/10 bg-white/[0.04] px-6 py-8 transition hover:-translate-y-1 hover:bg-white/[0.07] sm:py-10"
+            aria-label="Swavalambi Siddaganga Oil Mill home"
           >
-            <span className="text-xs font-bold uppercase tracking-[0.28em] text-clay">
-              Primary brand logo
-            </span>
-            <span className="mt-4 block font-serif text-5xl font-semibold leading-tight sm:text-6xl lg:text-7xl">
+            <img
+              src={companyLogo}
+              alt="Swavalambi Siddaganga Oil Mill logo"
+              className="h-28 w-auto object-contain drop-shadow-[0_12px_30px_rgb(0_0_0_/_0.28)] transition duration-500 group-hover:scale-105 sm:h-36"
+              loading="lazy"
+              decoding="async"
+            />
+            <span className="mt-5 block font-serif text-3xl font-semibold leading-tight sm:text-5xl lg:text-6xl">
               Swavalambi Siddaganga Oil Mill
+            </span>
+            <span className="mt-3 text-[10px] font-bold uppercase tracking-[0.3em] text-clay sm:text-xs">
+              Traditional cold pressed oils
             </span>
           </Link>
           <a
