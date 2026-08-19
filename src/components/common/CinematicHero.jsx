@@ -1,45 +1,111 @@
 // Shared CinematicHero component used across pages.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Volume2, VolumeX } from "lucide-react";
 
-export const DEMO_HERO_VIDEO = "https://videos.pexels.com/video-files/3195650/3195650-uhd_2560_1440_25fps.mp4";
+export const OIL_MILL_HERO_VIDEO = "https://res.cloudinary.com/lxlsemiu/video/upload/v1787124119/ss-oil-mill/videos/swavalambi-oil-mill-glimpse.mp4";
+export const OIL_MILL_HERO_POSTER = "/media/swavalambi-oil-mill-glimpse-poster.webp";
 
 export default function CinematicHero({ eyebrow, title, text, image, video, posterLabel, contentVisible = true }) {
+  const heroRef = useRef(null);
+  const videoRef = useRef(null);
   const [muted, setMuted] = useState(true);
   const [videoFailed, setVideoFailed] = useState(false);
-  const showVideo = Boolean(video) && !videoFailed;
+  const [videoReady, setVideoReady] = useState(false);
+  const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const videoAvailable = Boolean(video) && !videoFailed;
+
+  useEffect(() => {
+    const hero = heroRef.current;
+    if (!hero) return undefined;
+
+    if (!("IntersectionObserver" in window)) {
+      setIsVisible(true);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsVisible(entry.isIntersecting),
+      { rootMargin: "200px 0px", threshold: 0.01 },
+    );
+    observer.observe(hero);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!videoAvailable || !isVisible) return undefined;
+
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const constrainedConnection = connection?.saveData || ["slow-2g", "2g"].includes(connection?.effectiveType);
+    if (prefersReducedMotion || constrainedConnection) return undefined;
+
+    const startLoading = () => setShouldLoadVideo(true);
+    if ("requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(startLoading, { timeout: 1200 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+
+    const timeoutId = window.setTimeout(startLoading, 500);
+    return () => window.clearTimeout(timeoutId);
+  }, [isVisible, videoAvailable]);
+
+  useEffect(() => {
+    const element = videoRef.current;
+    if (!element || !videoReady) return;
+    if (isVisible) element.play().catch(() => {});
+    else element.pause();
+  }, [isVisible, videoReady]);
 
   return (
-    <section className="pt-8">
+    <section className="w-full pt-3 sm:pt-4">
       <motion.div
+        ref={heroRef}
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.55 }}
-        className="relative min-h-[420px] overflow-hidden bg-ink shadow-soft sm:min-h-[500px] lg:min-h-[620px]"
+        className="relative aspect-video w-full overflow-hidden bg-ink shadow-soft"
       >
-        {showVideo ? (
+        <img
+          src={image}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="eager"
+          decoding="async"
+          fetchPriority="high"
+        />
+        {videoAvailable && shouldLoadVideo && (
           <video
+            ref={videoRef}
             src={video}
             poster={image}
-            className="absolute inset-0 h-full w-full object-cover"
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${videoReady ? "opacity-100" : "opacity-0"}`}
             autoPlay
             loop
             muted={muted}
             playsInline
-            preload="metadata"
+            preload="none"
             controls={false}
             controlsList="nodownload nofullscreen noremoteplayback"
             disablePictureInPicture
             onContextMenu={(event) => event.preventDefault()}
-            onError={() => setVideoFailed(true)}
+            onCanPlay={() => setVideoReady(true)}
+            onError={() => {
+              setVideoFailed(true);
+              setVideoReady(false);
+            }}
             aria-hidden="true"
           />
-        ) : (
-          <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" loading="eager" />
+        )}
+        {videoAvailable && shouldLoadVideo && !videoReady && (
+          <div className="pointer-events-none absolute inset-0 grid place-items-center" role="status" aria-live="polite">
+            <span className="h-9 w-9 animate-spin rounded-full border-2 border-white/35 border-t-white shadow-sm" />
+            <span className="sr-only">Loading oil mill video</span>
+          </div>
         )}
         {contentVisible && <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/52 to-ink/16" />}
-        {showVideo && (
+        {videoAvailable && videoReady && (
           <button
             type="button"
             aria-label={muted ? "Unmute hero video" : "Mute hero video"}
