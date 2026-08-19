@@ -12,6 +12,7 @@ export default function Gallery() {
   const [activeIndex, setActiveIndex] = useState(null);
   const [zoomed, setZoomed] = useState(false);
   const touchStartRef = useRef(null);
+  const suppressImageClickRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -63,13 +64,17 @@ export default function Gallery() {
     };
   }, [activeImage, activeIndex]);
 
-  const handleViewerTouchEnd = (event) => {
+  const handleViewerPointerUp = (event) => {
     const start = touchStartRef.current;
-    const end = event.changedTouches[0];
     touchStartRef.current = null;
-    if (!start || !end || zoomed) return;
-    const distance = end.clientX - start;
-    if (Math.abs(distance) > 55) showImage(activeIndex + (distance < 0 ? 1 : -1));
+    if (!start || event.pointerType === "mouse" || zoomed) return;
+    const distanceX = event.clientX - start.x;
+    const distanceY = event.clientY - start.y;
+    if (Math.abs(distanceX) > 45 && Math.abs(distanceX) > Math.abs(distanceY)) {
+      suppressImageClickRef.current = true;
+      showImage(activeIndex + (distanceX < 0 ? 1 : -1));
+      window.setTimeout(() => { suppressImageClickRef.current = false; }, 0);
+    }
   };
 
   if (!images.length) return null;
@@ -136,24 +141,21 @@ export default function Gallery() {
                 key={activeImage.id || activeImage._id || activeImage.image}
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="relative flex h-[70vh] w-full max-w-6xl touch-pan-y items-center justify-center overflow-hidden sm:h-[74vh]"
+                className="relative flex h-[76vh] w-full max-w-6xl touch-pan-y select-none items-center justify-center overflow-hidden sm:h-[82vh]"
                 onClick={(event) => event.stopPropagation()}
-                onTouchStart={(event) => { touchStartRef.current = event.touches[0]; }}
-                onTouchEnd={handleViewerTouchEnd}
+                onPointerDown={(event) => {
+                  if (event.pointerType !== "mouse") touchStartRef.current = { x: event.clientX, y: event.clientY };
+                }}
+                onPointerUp={handleViewerPointerUp}
+                onPointerCancel={() => { touchStartRef.current = null; }}
               >
-                <SafeImage src={activeImage.image} alt={activeImage.alt || activeImage.title || "Oil mill gallery image"} className={`max-h-full max-w-full select-none object-contain transition-transform duration-300 ${zoomed ? "cursor-zoom-out scale-[1.6]" : "cursor-zoom-in scale-100"}`} draggable="false" onClick={() => setZoomed((current) => !current)} />
+                <SafeImage src={activeImage.image} alt={activeImage.alt || activeImage.title || "Oil mill gallery image"} className={`max-h-full max-w-full select-none object-contain transition-transform duration-300 ${zoomed ? "cursor-zoom-out scale-[1.6]" : "cursor-zoom-in scale-100"}`} draggable="false" onClick={() => {
+                  if (!suppressImageClickRef.current) setZoomed((current) => !current);
+                }} />
               </motion.div>
               <button type="button" onClick={(event) => { event.stopPropagation(); showImage(activeIndex + 1); }} aria-label="Next image" className="absolute right-6 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-ink shadow-lg transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:grid"><ChevronRight size={23} /></button>
               <p className="pointer-events-none absolute bottom-20 left-1/2 z-20 -translate-x-1/2 text-[9px] font-bold uppercase tracking-[0.22em] text-white/55 sm:hidden">Swipe sideways</p>
-              <div className="absolute bottom-3 left-1/2 z-20 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-2 rounded-2xl border border-white/15 bg-black/45 p-2 text-white shadow-2xl backdrop-blur-xl sm:bottom-5 sm:gap-3">
-                <div className="flex max-w-[62vw] gap-1.5 overflow-x-auto sm:max-w-[70vw] sm:gap-2">
-                  {images.map((item, index) => (
-                    <button key={item.id || item._id || item.image} type="button" onClick={(event) => { event.stopPropagation(); showImage(index); }} aria-label={`Show image ${index + 1}`} className={`h-11 w-11 shrink-0 overflow-hidden rounded-lg border-2 transition sm:h-14 sm:w-14 ${activeIndex === index ? "border-black opacity-100 ring-2 ring-white" : "border-transparent opacity-45 hover:opacity-90"}`}>
-                      <SafeImage src={item.image} alt="" className="h-full w-full object-cover" loading="lazy" />
-                    </button>
-                  ))}
-                </div>
-                <span className="hidden h-7 w-px bg-white/20 sm:block" />
+              <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/15 bg-black/45 px-3 py-2 text-white shadow-2xl backdrop-blur-xl sm:bottom-5">
                 <span className="min-w-10 text-center text-[10px] font-bold tabular-nums text-white/75">{activeIndex + 1}/{images.length}</span>
                 <button type="button" onClick={(event) => { event.stopPropagation(); setZoomed((current) => !current); }} aria-label={zoomed ? "Zoom out" : "Zoom in"} className="grid h-9 w-9 shrink-0 place-items-center rounded-full transition hover:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">{zoomed ? <ZoomOut size={18} /> : <ZoomIn size={18} />}</button>
               </div>
