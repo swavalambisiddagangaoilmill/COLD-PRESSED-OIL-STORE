@@ -4,6 +4,7 @@ import CinematicHero, { OIL_MILL_HERO_POSTER, OIL_MILL_HERO_VIDEO } from "../com
 import TestimonialCarousel from "../components/common/TestimonialCarousel.jsx";
 import Benefits from "../components/features/home/Benefits.jsx";
 import ExtractionProcess from "../components/features/home/ExtractionProcess.jsx";
+import Gallery from "../components/features/home/Gallery.jsx";
 import Container from "../components/ui/Container.jsx";
 import SectionHeading from "../components/ui/SectionHeading.jsx";
 import { processStepsDetailed, qualityStandards, sustainabilityPoints } from "../data/pageData.js";
@@ -23,6 +24,7 @@ export default function About() {
       />
       <Benefits />
       <ExtractionProcess />
+      <Gallery />
       <section className="section-padding bg-cream">
         <Container>
           <SectionHeading eyebrow="How we work" title="Sourced, pressed, and packed with care" text="Our process stays simple: careful seed selection, slow extraction, natural settling, protective packing, and fresh dispatch." />

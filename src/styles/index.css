@@ -273,6 +273,10 @@ img {
   transform: translate3d(0, 0, 0);
 }
 
+.gallery-marquee.is-paused .gallery-marquee-track {
+  animation-play-state: paused;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .gallery-marquee:hover .gallery-marquee-track {
     animation-play-state: paused;
@@ -293,6 +297,12 @@ img {
   }
   to {
     transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-marquee-track {
+    animation-play-state: paused;
   }
 }
 
