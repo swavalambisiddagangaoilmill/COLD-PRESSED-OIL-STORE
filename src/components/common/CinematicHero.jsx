@@ -179,14 +179,14 @@ export default function CinematicHero({ eyebrow, title, text, image, video, post
         {videoAvailable && videoReady && (
           <div className="pointer-events-none absolute inset-0 z-20 bg-gradient-to-t from-black/75 via-transparent to-black/10 opacity-100 transition-opacity duration-300 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
             <div className="absolute inset-x-0 top-1/2 hidden -translate-y-1/2 items-center justify-between px-[8%] md:flex">
-              <button type="button" onClick={() => seekBy(-10)} aria-label="Go back 10 seconds" className="pointer-events-auto grid h-16 w-16 place-items-center rounded-full border border-white/20 bg-black/35 text-white shadow-2xl backdrop-blur-xl transition hover:scale-110 hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
+              <button type="button" onClick={() => seekBy(-10)} aria-label="Go back 10 seconds" className="pointer-events-auto grid h-16 w-16 place-items-center rounded-full text-white drop-shadow-lg transition hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
                 <RotateCcw size={28} strokeWidth={1.7} aria-hidden="true" />
                 <span className="absolute text-[10px] font-black">10</span>
               </button>
               <button type="button" onClick={togglePlayback} aria-label={playing ? "Pause video" : "Play video"} className="pointer-events-auto grid h-20 w-20 place-items-center rounded-full border border-white/25 bg-white/90 text-ink shadow-2xl transition hover:scale-105 hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/40">
                 {playing ? <Pause size={30} fill="currentColor" /> : <Play size={30} fill="currentColor" className="ml-1" />}
               </button>
-              <button type="button" onClick={() => seekBy(10)} aria-label="Go forward 10 seconds" className="pointer-events-auto grid h-16 w-16 place-items-center rounded-full border border-white/20 bg-black/35 text-white shadow-2xl backdrop-blur-xl transition hover:scale-110 hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
+              <button type="button" onClick={() => seekBy(10)} aria-label="Go forward 10 seconds" className="pointer-events-auto grid h-16 w-16 place-items-center rounded-full text-white drop-shadow-lg transition hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
                 <RotateCw size={28} strokeWidth={1.7} aria-hidden="true" />
                 <span className="absolute text-[10px] font-black">10</span>
               </button>
@@ -204,7 +204,7 @@ export default function CinematicHero({ eyebrow, title, text, image, video, post
           </div>
         )}
         {seekFeedback && (
-          <div className={`pointer-events-none absolute ${seekFeedback < 0 ? "left-[18%]" : "right-[18%]"} top-1/2 z-30 grid h-20 w-20 -translate-y-1/2 animate-pulse place-items-center rounded-full border border-white/25 bg-black/55 text-white shadow-2xl backdrop-blur-xl`} aria-live="polite">
+          <div className={`pointer-events-none absolute ${seekFeedback < 0 ? "left-[18%]" : "right-[18%]"} top-1/2 z-30 grid h-20 w-20 -translate-y-1/2 animate-pulse place-items-center text-white drop-shadow-lg`} aria-live="polite">
             <span className="text-center text-xs font-black">{seekFeedback > 0 ? "+10" : "−10"}<span className="block text-[9px] font-semibold uppercase tracking-wider text-white/65">seconds</span></span>
           </div>
         )}

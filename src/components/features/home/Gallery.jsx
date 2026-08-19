@@ -36,8 +36,19 @@ export default function Gallery() {
 
   useEffect(() => {
     if (!activeImage) return undefined;
-    const previousOverflow = document.body.style.overflow;
+    const scrollY = window.scrollY;
+    const previousBodyStyles = {
+      overflow: document.body.style.overflow,
+      position: document.body.style.position,
+      top: document.body.style.top,
+      width: document.body.style.width,
+    };
+    const previousHtmlOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
+    document.documentElement.style.overflow = "hidden";
     const handleKey = (event) => {
       if (event.key === "Escape") closeViewer();
       if (event.key === "ArrowLeft") showImage(activeIndex - 1);
@@ -45,7 +56,9 @@ export default function Gallery() {
     };
     window.addEventListener("keydown", handleKey);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      Object.assign(document.body.style, previousBodyStyles);
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      window.scrollTo(0, scrollY);
       window.removeEventListener("keydown", handleKey);
     };
   }, [activeImage, activeIndex]);
@@ -112,13 +125,13 @@ export default function Gallery() {
       {createPortal(
         <AnimatePresence>
           {activeImage && (
-            <motion.div className="fixed inset-0 z-[100] grid place-items-center bg-[#100d0a]/97 p-3 backdrop-blur-xl sm:p-6" role="dialog" aria-modal="true" aria-label="Gallery image viewer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeViewer}>
+            <motion.div className="fixed inset-0 z-[100] grid overscroll-none place-items-center bg-[#100d0a]/97 p-3 backdrop-blur-xl sm:p-6" role="dialog" aria-modal="true" aria-label="Gallery image viewer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closeViewer} onWheel={(event) => event.stopPropagation()}>
               <div className="absolute left-4 top-4 z-20 text-white sm:left-6 sm:top-6">
-                <p className="text-[9px] font-black uppercase tracking-[0.28em] text-[#d5a54a]">Inside the mill</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.28em] text-white/55">Inside the mill</p>
                 <p className="mt-1 hidden max-w-md truncate font-serif text-xl sm:block">{activeImage.title || activeImage.alt || "Oil mill gallery"}</p>
               </div>
-              <button type="button" onClick={closeViewer} aria-label="Close gallery" className="absolute right-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:right-6 sm:top-6"><X size={21} /></button>
-              <button type="button" onClick={(event) => { event.stopPropagation(); showImage(activeIndex - 1); }} aria-label="Previous image" className="absolute left-3 top-1/2 z-20 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-ink shadow-lg transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:left-6"><ChevronLeft size={23} /></button>
+              <button type="button" onClick={closeViewer} aria-label="Close gallery" className="absolute right-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-full border border-white bg-white text-black shadow-xl transition hover:scale-105 hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:right-6 sm:top-6"><X size={21} strokeWidth={2.5} /></button>
+              <button type="button" onClick={(event) => { event.stopPropagation(); showImage(activeIndex - 1); }} aria-label="Previous image" className="absolute left-6 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-ink shadow-lg transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:grid"><ChevronLeft size={23} /></button>
               <motion.div
                 key={activeImage.id || activeImage._id || activeImage.image}
                 initial={{ opacity: 0, scale: 0.97 }}
@@ -130,11 +143,12 @@ export default function Gallery() {
               >
                 <SafeImage src={activeImage.image} alt={activeImage.alt || activeImage.title || "Oil mill gallery image"} className={`max-h-full max-w-full select-none object-contain transition-transform duration-300 ${zoomed ? "cursor-zoom-out scale-[1.6]" : "cursor-zoom-in scale-100"}`} draggable="false" onClick={() => setZoomed((current) => !current)} />
               </motion.div>
-              <button type="button" onClick={(event) => { event.stopPropagation(); showImage(activeIndex + 1); }} aria-label="Next image" className="absolute right-3 top-1/2 z-20 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-ink shadow-lg transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:right-6"><ChevronRight size={23} /></button>
+              <button type="button" onClick={(event) => { event.stopPropagation(); showImage(activeIndex + 1); }} aria-label="Next image" className="absolute right-6 top-1/2 z-20 hidden h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-ink shadow-lg transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:grid"><ChevronRight size={23} /></button>
+              <p className="pointer-events-none absolute bottom-20 left-1/2 z-20 -translate-x-1/2 text-[9px] font-bold uppercase tracking-[0.22em] text-white/55 sm:hidden">Swipe sideways</p>
               <div className="absolute bottom-3 left-1/2 z-20 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-2 rounded-2xl border border-white/15 bg-black/45 p-2 text-white shadow-2xl backdrop-blur-xl sm:bottom-5 sm:gap-3">
                 <div className="flex max-w-[62vw] gap-1.5 overflow-x-auto sm:max-w-[70vw] sm:gap-2">
                   {images.map((item, index) => (
-                    <button key={item.id || item._id || item.image} type="button" onClick={(event) => { event.stopPropagation(); showImage(index); }} aria-label={`Show image ${index + 1}`} className={`h-11 w-11 shrink-0 overflow-hidden rounded-lg border-2 transition sm:h-14 sm:w-14 ${activeIndex === index ? "border-[#d5a54a] opacity-100" : "border-transparent opacity-45 hover:opacity-90"}`}>
+                    <button key={item.id || item._id || item.image} type="button" onClick={(event) => { event.stopPropagation(); showImage(index); }} aria-label={`Show image ${index + 1}`} className={`h-11 w-11 shrink-0 overflow-hidden rounded-lg border-2 transition sm:h-14 sm:w-14 ${activeIndex === index ? "border-black opacity-100 ring-2 ring-white" : "border-transparent opacity-45 hover:opacity-90"}`}>
                       <SafeImage src={item.image} alt="" className="h-full w-full object-cover" loading="lazy" />
                     </button>
                   ))}
