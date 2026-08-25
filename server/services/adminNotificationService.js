@@ -37,11 +37,14 @@ export async function createAdminNotification(payload) {
 export async function createInventoryNotifications(product) {
   const settings = await StoreSettings.findOne({ key: "store" }).lean();
   const threshold = settings?.lowStockThreshold ?? 10;
-  if (product.stock === 0) {
-    return createAdminNotification({ category: "inventory", type: "out_of_stock", title: "Product Out Of Stock", description: `${product.title} is out of stock.`, dedupeKey: `inventory:out:${product._id}`, related: { kind: "Product", id: product._id, label: product.title, path: "/admin/inventory" } });
+  const variants = (product.variants || []).filter((variant) => variant.isActive && !variant.isArchived);
+  const out = variants.find((variant) => variant.stock === 0);
+  if (out) {
+    return createAdminNotification({ category: "inventory", type: "out_of_stock", title: "Variant Out Of Stock", description: `${product.title} ${out.name} is out of stock.`, dedupeKey: `inventory:out:${product._id}:${out._id}`, related: { kind: "Product", id: product._id, label: product.title, path: "/admin/inventory" } });
   }
-  if (product.stock <= threshold) {
-    return createAdminNotification({ category: "inventory", type: "low_stock", title: "Product Low On Stock", description: `${product.title} has ${product.stock} units remaining.`, dedupeKey: `inventory:low:${product._id}`, related: { kind: "Product", id: product._id, label: product.title, path: "/admin/inventory" } });
+  const low = variants.find((variant) => variant.stock <= threshold);
+  if (low) {
+    return createAdminNotification({ category: "inventory", type: "low_stock", title: "Variant Low On Stock", description: `${product.title} ${low.name} has ${low.stock} units remaining.`, dedupeKey: `inventory:low:${product._id}:${low._id}`, related: { kind: "Product", id: product._id, label: product.title, path: "/admin/inventory" } });
   }
   await AdminNotification.updateMany({ dedupeKey: { $in: [`inventory:out:${product._id}`, `inventory:low:${product._id}`] }, resolvedAt: null }, { resolvedAt: new Date() });
   return createAdminNotification({ category: "inventory", type: "back_in_stock", title: "Product Back In Stock", description: `${product.title} is back in stock.`, dedupeKey: `inventory:back:${product._id}:${Date.now()}`, related: { kind: "Product", id: product._id, label: product.title, path: "/admin/inventory" } });

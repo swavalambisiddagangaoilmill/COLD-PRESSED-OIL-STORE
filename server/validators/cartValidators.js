@@ -3,6 +3,7 @@ import { body, param } from "express-validator";
 
 export const cartItemValidator = [
   body("productId").isMongoId().withMessage("Valid product id is required."),
+  body("variantId").isMongoId().withMessage("Valid variant id is required."),
   body("quantity").optional().isInt({ min: 1 }).withMessage("Quantity must be at least 1."),
 ];
 
@@ -13,7 +14,8 @@ export const cartSyncValidator = [
   body("items.*.product").optional().isMongoId().withMessage("Valid product id is required."),
   body("items.*.id").optional().isMongoId().withMessage("Valid product id is required."),
   body("items.*.quantity").optional().isInt({ min: 1 }).withMessage("Quantity must be at least 1."),
+  body("items.*.variantId").isMongoId().withMessage("Valid variant id is required."),
 ];
 
 export const cartParamValidator = [param("productId").isMongoId().withMessage("Valid product id is required.")];
-export const cartQuantityValidator = [body("quantity").isInt({ min: 1 }).withMessage("Quantity must be at least 1.")];
+export const cartQuantityValidator = [body("variantId").isMongoId().withMessage("Valid variant id is required."), body("quantity").isInt({ min: 1 }).withMessage("Quantity must be at least 1.")];

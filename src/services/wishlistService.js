@@ -3,7 +3,8 @@ import { API_ENDPOINTS } from "../constants/apiConfig.js";
 import { apiRequest } from "../api/apiClient.js";
 
 function normalize(product) {
-  return { ...product, id: product._id || product.id, name: product.title || product.name, image: product.images?.[0]?.url || product.image || "", price: product.discountPrice || product.price || 0, mrp: product.price || product.mrp || 0, category: product.category?.name || product.category || "Oil", volume: product.volume || "1L" };
+  const variant = product.variants?.find((item) => item.isActive !== false && !item.isArchived && item.stock > 0) || product.variants?.find((item) => item.isActive !== false && !item.isArchived);
+  return { ...product, id: product._id || product.id, name: product.title || product.name, image: variant?.images?.[0]?.url || "", price: variant?.price || 0, mrp: variant?.mrp || variant?.price || 0, volume: variant?.name || "", selectedVariant: variant };
 }
 
 export async function fetchWishlist() {

@@ -26,7 +26,7 @@ router.delete("/notifications/clear-read", requireAdminPermission("notifications
 router.get("/notification-preferences", requireAdminPermission("settings.read"), controller.notificationPreferences);
 router.put("/notification-preferences", requireAdminPermission("settings.manage"), controller.saveNotificationPreferencesHandler);
 router.get("/sessions", requireAdminPermission("sessions.read"), controller.sessions);
-router.post("/sessions/revoke", requireAdminPermission("sessions.manage"), controller.revokeSessions);
+router.post("/sessions/revoke", requireAdminPermission("sessions.manage"), body("sessionIds").isArray({ min: 1, max: 5 }).withMessage("Select one or more sessions to revoke."), body("sessionIds.*").isUUID().withMessage("Valid session id is required."), validate, controller.revokeSessions);
 router.get("/orders", requireAdminPermission("orders.read"), controller.orders);
 router.put("/orders/:id/status", requireAdminPermission("orders.update"), controller.orderStatus);
 router.post("/orders/:id/ready-to-ship", requireAdminPermission("orders.ship"), controller.orderReadyToShip);
@@ -38,7 +38,7 @@ router.put("/products/:id", requireAdminPermission("products.update"), productId
 router.delete("/products/:id", requireAdminPermission("products.archive"), productIdValidator, validate, controller.archiveProduct);
 router.post("/products/bulk-price/preview", requireAdminPermission("products.update"), controller.bulkPricePreview);
 router.post("/products/bulk-price/apply", requireAdminPermission("products.update"), controller.bulkPriceApply);
-router.put("/inventory/:id", requireAdminPermission("inventory.update"), productIdValidator, [body("mode").isIn(["add", "reduce", "set"]).withMessage("Valid stock update mode is required."), body("quantity").isInt({ min: 0 }).withMessage("Quantity must be a whole number of zero or more."), body().custom((value) => value.mode === "set" || Number(value.quantity) > 0).withMessage("Add or reduce quantity must be greater than zero.")], validate, controller.inventoryUpdate);
+router.put("/inventory/:id", requireAdminPermission("inventory.update"), productIdValidator, [body("variantId").optional().isMongoId().withMessage("Valid variant id is required."), body("mode").isIn(["add", "reduce", "set"]).withMessage("Valid stock update mode is required."), body("quantity").isInt({ min: 0 }).withMessage("Quantity must be a whole number of zero or more."), body().custom((value) => value.mode === "set" || Number(value.quantity) > 0).withMessage("Add or reduce quantity must be greater than zero.")], validate, controller.inventoryUpdate);
 router.get("/categories", requireAdminPermission("categories.read"), controller.categories);
 router.post("/categories", requireAdminPermission("categories.manage"), controller.saveCategory);
 router.put("/categories/:id", requireAdminPermission("categories.manage"), controller.saveCategory);

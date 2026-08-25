@@ -1,294 +1,71 @@
-// Authentication business logic.
 import crypto from "crypto";
 import User from "../models/User.js";
+import OtpVerification from "../models/OtpVerification.js";
 import { ApiError } from "../utils/ApiError.js";
-import { normalizeIndianPhone } from "../utils/phone.js";
+import { maskPhone, normalizeIndianPhone } from "../utils/phone.js";
 import { signRefreshToken, signToken, verifyToken } from "../utils/jwt.js";
-import { assertAdminSessionCapacity, attachRefreshToken, createAdminSession } from "./adminSessionService.js";
-import { createAdminNotification } from "./adminNotificationService.js";
-import { sendNewDeviceEmail, sendPasswordResetEmail, sendVerificationEmail, sendWelcomeEmail } from "./emailService.js";
-import { verifyGoogleIdToken } from "./oauthService.js";
-import { verifyTurnstile } from "./turnstileService.js";
-import {
-  assertLoginAllowed,
-  createOtp,
-  createPlainToken,
-  findSessionByRefresh,
-  getDeviceDetails,
-  hashValue,
-  isKnownDevice,
-  loginNeedsTurnstile,
-  pushLoginHistory,
-  recordFailedLogin,
-  resetLoginProtection,
-  revokeSession,
-  trustDevice,
-  upsertSession,
-  verifyOtp,
-} from "./authSecurityService.js";
+import { findSessionByRefresh, getDeviceFingerprint, hashValue, pushLoginHistory, revokeSession, upsertSession } from "./authSecurityService.js";
+import { sendOTP } from "./whatsappService.js";
+import { attachRefreshToken, createAdminSession, findAdminSessionByRefresh, revokeAdminSessions } from "./adminSessionService.js";
 
-function hashToken(token) {
-  return hashValue(token);
-}
+const OTP_TTL_MS = 5 * 60 * 1000, RESEND_COOLDOWN_MS = 60 * 1000, PHONE_WINDOW_MS = 15 * 60 * 1000, PHONE_LIMIT = 5;
+const requestHash = (value) => hashValue(String(value || "unknown"));
 
-function createSessionId() {
-  return crypto.randomUUID();
-}
-
-function publicSecurity(user) {
-  const clean = user.toJSON ? user.toJSON() : user;
-  return {
-    emailVerified: Boolean(clean.emailVerified),
-    googleLinked: Boolean((clean.oauthProviders || []).some((item) => item.provider === "google")),
-    connectedProviders: clean.oauthProviders || [],
-    sessions: (clean.sessions || []).filter((item) => !item.revokedAt && new Date(item.expiresAt) > new Date()),
-    trustedDevices: clean.trustedDevices || [],
-    passwordChangedAt: clean.passwordChangedAt,
-    loginHistory: (clean.loginHistory || []).slice(0, 20),
-  };
-}
-
-export async function issueSession(user, sessionId = createSessionId(), req = null, remember = false) {
-  const token = signToken(user._id, sessionId);
-  const refreshToken = signRefreshToken(user._id, sessionId);
+export async function issueSession(user, id = crypto.randomUUID(), req = null) {
+  let sessionId = id;
+  if (user.role === "admin" && req) sessionId = (await createAdminSession(req, user)).sessionId;
+  const token = signToken(user._id, sessionId), refreshToken = signRefreshToken(user._id, sessionId);
+  if (user.role === "admin") await attachRefreshToken(sessionId, refreshToken);
   user.refreshToken = refreshToken;
-  if (req) upsertSession(user, req, refreshToken, sessionId, remember);
+  if (req && user.role !== "admin") upsertSession(user, req, refreshToken, sessionId, false);
   await user.save({ validateBeforeSave: false });
   user.refreshToken = undefined;
   return { user, token, refreshToken };
 }
 
-async function createEmailVerification(user) {
-  const token = createPlainToken();
-  user.emailVerificationToken = hashToken(token);
-  user.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000;
-  await sendVerificationEmail(user, token);
-  return token;
+export async function requestAuthOtp({ phone, purpose, name }, req) {
+  const phoneNumber = normalizeIndianPhone(phone);
+  const existingUser = await User.findOne({ phone: phoneNumber });
+  if (purpose === "signup" && existingUser) throw new ApiError("An account already exists with this mobile number. Please log in.", 409, [{ code: "ACCOUNT_EXISTS" }]);
+  if (purpose === "login" && !existingUser) throw new ApiError("No account found with this mobile number. Please create an account.", 404, [{ code: "ACCOUNT_NOT_FOUND" }]);
+  if (purpose === "signup" && String(name || "").trim().length < 2) throw new ApiError("Enter your full name.", 422);
+  const recent = await OtpVerification.find({ phoneNumber, purpose, createdAt: { $gt: new Date(Date.now() - PHONE_WINDOW_MS) } }).sort({ createdAt: -1 }).lean();
+  if (recent[0] && Date.now() - new Date(recent[0].createdAt).getTime() < RESEND_COOLDOWN_MS) {
+    const retryAfter = Math.ceil((RESEND_COOLDOWN_MS - (Date.now() - new Date(recent[0].createdAt).getTime())) / 1000);
+    throw new ApiError(`Please wait ${retryAfter} seconds before requesting another code.`, 429, [{ code: "OTP_COOLDOWN", retryAfter }]);
+  }
+  if (recent.length >= PHONE_LIMIT) throw new ApiError("Too many OTP requests. Please try again later.", 429, [{ code: "OTP_RATE_LIMIT" }]);
+  await OtpVerification.updateMany({ phoneNumber, purpose, consumedAt: null }, { $set: { consumedAt: new Date() } });
+  const otp = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+  const record = await OtpVerification.create({ phoneNumber, purpose, fullName: purpose === "signup" ? String(name).trim() : undefined, otpHash: hashValue(otp), expiresAt: new Date(Date.now() + OTP_TTL_MS), requestedByIpHash: requestHash(req.ip), requestedByDeviceHash: requestHash(getDeviceFingerprint(req)) });
+  try { await sendOTP(phoneNumber, otp); } catch { await OtpVerification.findByIdAndDelete(record._id); throw new ApiError("Unable to send the WhatsApp code. Please try again.", 502, [{ code: "WHATSAPP_SEND_FAILED" }]); }
+  return { phoneNumber: maskPhone(phoneNumber), purpose, expiresIn: 300, resendAfter: 60 };
 }
 
-export async function registerUser(payload, req) {
-  await verifyTurnstile(payload.turnstileToken, req);
-  const exists = await User.findOne({ email: payload.email });
-  if (exists) throw new ApiError("Email is already registered.", 409);
-  const user = new User({ name: payload.name, email: payload.email, phone: payload.phone ? normalizeIndianPhone(payload.phone) : undefined, password: payload.password, emailVerified: false });
-  await createEmailVerification(user);
-  if (req) {
-    trustDevice(user, req);
-    pushLoginHistory(user, req, "register");
-  }
-  await user.save();
-  await createAdminNotification({ category: "customers", type: "new_user_registration", title: "New User Registration", description: `${user.name} created an account.`, related: { kind: "User", id: user._id, label: user.email, path: "/admin/customers" } });
-  await sendWelcomeEmail(user);
-  const issued = await issueSession(user, undefined, req, true);
-  return issued;
-}
-
-export async function loginUser(email, password, req, options = {}) {
-  const user = await User.findOne({ email }).select("+password +refreshToken +failedLoginAttempts +loginLockUntil +turnstileRequiredUntil +sessions.refreshTokenHash +otpRecords.codeHash +oauthProviders.providerId");
-  if (!user) throw new ApiError("Invalid email or password.", 401);
-  assertLoginAllowed(user);
-  if (loginNeedsTurnstile(user)) await verifyTurnstile(options.turnstileToken || req.body.turnstileToken, req);
-  if (!(await user.comparePassword(password))) {
-    recordFailedLogin(user);
-    if (req) pushLoginHistory(user, req, "failed_login");
-    await user.save({ validateBeforeSave: false });
-    throw new ApiError("Invalid email or password.", 401, loginNeedsTurnstile(user) ? [{ code: "TURNSTILE_REQUIRED" }] : []);
-  }
+export async function verifyAuthOtp({ phone, purpose, otp }, req) {
+  const phoneNumber = normalizeIndianPhone(phone);
+  const record = await OtpVerification.findOne({ phoneNumber, purpose, consumedAt: null }).sort({ createdAt: -1 }).select("+otpHash");
+  if (!record || record.expiresAt <= new Date()) throw new ApiError("This code has expired. Request a new code.", 400, [{ code: "OTP_EXPIRED" }]);
+  if (record.attempts >= record.maxAttempts) throw new ApiError("Too many incorrect attempts. Request a new code.", 429, [{ code: "OTP_ATTEMPTS_EXCEEDED" }]);
+  record.attempts += 1;
+  if (record.otpHash !== hashValue(otp)) { await record.save(); throw new ApiError("That code is incorrect. Try again.", 400, [{ code: "OTP_INVALID", attemptsRemaining: record.maxAttempts - record.attempts }]); }
+  record.consumedAt = new Date(); await record.save();
+  let user = await User.findOne({ phone: phoneNumber });
+  if (purpose === "signup") {
+    if (user) throw new ApiError("An account already exists with this mobile number. Please log in.", 409);
+    try { user = await User.create({ name: record.fullName, phone: phoneNumber, phoneVerified: true, whatsappOptIn: false }); }
+    catch (error) { if (error?.code === 11000) throw new ApiError("An account already exists with this mobile number. Please log in.", 409); throw error; }
+  } else if (!user) throw new ApiError("No account found with this mobile number. Please create an account.", 404);
   if (user.isDisabled) throw new ApiError("This account is disabled.", 403);
-
-  if (req && user.role === "admin") {
-    // Admin authentication never trusts a remembered device; existing entries
-    // are cleared and every fresh login must complete the emailed OTP step.
-    user.trustedDevices = [];
-    if (!options.otpCode) {
-      await createOtp(user, "new_device");
-      pushLoginHistory(user, req, "admin_otp_required", { pendingOtp: true });
-      await sendNewDeviceEmail(user, getDeviceDetails(req));
-      await user.save({ validateBeforeSave: false });
-      return { otpRequired: true, reason: "NEW_DEVICE", message: "Security code sent to your email." };
-    }
-    verifyOtp(user, "new_device", options.otpCode);
-  } else if (req && !isKnownDevice(user, req)) {
-    if (!options.otpCode) {
-      await createOtp(user, "new_device");
-      pushLoginHistory(user, req, "new_device_login", { pendingOtp: true });
-      await sendNewDeviceEmail(user, getDeviceDetails(req));
-      await user.save({ validateBeforeSave: false });
-      return { otpRequired: true, reason: "NEW_DEVICE", message: "Security code sent to your email." };
-    }
-    verifyOtp(user, "new_device", options.otpCode);
-    trustDevice(user, req);
-  } else if (req && user.role !== "admin") {
-    trustDevice(user, req);
-  }
-
-  if (req && user.role === "admin") await assertAdminSessionCapacity(req, user);
-  const adminSession = req && user.role === "admin" ? await createAdminSession(req, user) : null;
-  resetLoginProtection(user);
-  if (req) pushLoginHistory(user, req, "login");
-  const issued = await issueSession(user, adminSession?.sessionId, req, user.role === "admin" ? false : Boolean(options.remember));
-  if (adminSession) await attachRefreshToken(adminSession.sessionId, issued.refreshToken);
-  return { ...issued, adminSession };
+  user.phoneVerified = true; pushLoginHistory(user, req, purpose === "signup" ? "signup_otp" : "login_otp");
+  return issueSession(user, undefined, req);
 }
 
-export async function googleLogin(idToken, req, remember = true) {
-  const profile = await verifyGoogleIdToken(idToken);
-  let user;
-  try {
-    user = await User.findOne({ email: profile.email }).select("+oauthProviders.providerId +sessions.refreshTokenHash");
-    if (!user) {
-      user = new User({ name: profile.name, email: profile.email, emailVerified: profile.emailVerified, role: "user", oauthProviders: [{ provider: "google", providerId: profile.providerId, email: profile.email }] });
-    } else if (user.role === "admin") {
-      throw new ApiError("Use admin login for this account.", 403);
-    } else if (!(user.oauthProviders || []).some((item) => item.provider === "google")) {
-      user.oauthProviders.push({ provider: "google", providerId: profile.providerId, email: profile.email });
-      if (profile.emailVerified) user.emailVerified = true;
-    }
-    if (user.isDisabled) throw new ApiError("This account is disabled.", 403);
-    if (req && !isKnownDevice(user, req)) {
-      trustDevice(user, req);
-      await sendNewDeviceEmail(user, getDeviceDetails(req));
-    }
-    if (req) pushLoginHistory(user, req, "google_login");
-    await user.save({ validateBeforeSave: false });
-  } catch (error) {
-    throw error;
-  }
-  return issueSession(user, undefined, req, remember);
-}
-
-export async function refreshUserSession(refreshToken, req) {
-  if (!refreshToken) throw new ApiError("Refresh token is required.", 401);
-  const decoded = verifyToken(refreshToken);
-  if (decoded.type !== "refresh") throw new ApiError("Invalid refresh token.", 401);
-  const user = await User.findById(decoded.id).select("+refreshToken +sessions.refreshTokenHash");
-  const session = user ? findSessionByRefresh(user, refreshToken) : null;
-  if (!user || (user.refreshToken !== refreshToken && !session)) throw new ApiError("Invalid refresh token.", 401);
-  if (user.isDisabled) throw new ApiError("This account is disabled.", 403);
-  if (req) pushLoginHistory(user, req, "refresh");
-  return issueSession(user, decoded.sessionId || session?.sessionId, req, true);
-}
-
-export async function logoutUser(userId, sessionId) {
-  if (!userId) return;
-  const user = await User.findById(userId).select("+sessions.refreshTokenHash");
-  if (!user) return;
-  revokeSession(user, sessionId);
-  user.refreshToken = undefined;
-  pushLoginHistory(user, { ip: "", get: () => "" }, "logout");
-  await user.save({ validateBeforeSave: false });
-}
-
-export async function updateUserProfile(userId, payload) {
-  const allowed = ["name", "phone"];
-  const updates = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
-  if (updates.phone) updates.phone = normalizeIndianPhone(updates.phone);
-  return User.findByIdAndUpdate(userId, updates, { new: true, runValidators: true });
-}
-export async function changeUserPassword(user, currentPassword, nextPassword, otpCode) {
-  const account = await User.findById(user._id).select("+password +refreshToken +sessions.refreshTokenHash +otpRecords.codeHash");
-  if (!(await account.comparePassword(currentPassword))) throw new ApiError("Current password is incorrect.", 400);
-  verifyOtp(account, "change_password", otpCode);
-  account.password = nextPassword;
-  account.refreshToken = undefined;
-  revokeSession(account);
-  await account.save();
-  if (user.role === "admin") await createAdminNotification({ category: "security", type: "password_changed", title: "Admin Password Changed", description: `${user.email} changed their password.`, related: { kind: "User", id: user._id, label: user.email, path: "/admin/settings" } });
-  return true;
-}
-
-export async function requestOtp(userId, purpose) {
-  const user = await User.findById(userId).select("+otpRecords.codeHash");
-  if (!user) throw new ApiError("User not found.", 404);
-  await createOtp(user, purpose);
-  await user.save({ validateBeforeSave: false });
-  return true;
-}
-
-export async function requestPasswordReset(email, req) {
-  if (req) await verifyTurnstile(req.body.turnstileToken, req);
-  const user = await User.findOne({ email }).select("+passwordResetToken +passwordResetExpires");
-  if (!user) return null;
-  const resetToken = createPlainToken();
-  user.passwordResetToken = hashToken(resetToken);
-  user.passwordResetExpires = Date.now() + 60 * 60 * 1000;
-  await user.save({ validateBeforeSave: false });
-  await sendPasswordResetEmail(user, resetToken);
-  return resetToken;
-}
-
-export async function resetPassword(resetToken, password) {
-  const hashed = hashToken(resetToken);
-  const user = await User.findOne({ $or: [{ passwordResetToken: hashed }, { passwordResetToken: resetToken }], passwordResetExpires: { $gt: Date.now() } }).select("+passwordResetToken +passwordResetExpires +sessions.refreshTokenHash");
-  if (!user) throw new ApiError("Reset token is invalid or expired.", 400);
-  user.password = password;
-  user.passwordResetToken = undefined;
-  user.passwordResetExpires = undefined;
-  revokeSession(user);
-  await user.save();
-  return issueSession(user);
-}
-
-export async function verifyEmail(token) {
-  const hashed = hashToken(token);
-  const user = await User.findOne({ $or: [{ emailVerificationToken: hashed }, { emailVerificationToken: token }], emailVerificationExpires: { $gt: Date.now() } }).select("+emailVerificationToken +emailVerificationExpires");
-  if (!user) throw new ApiError("Verification token is invalid or expired.", 400);
-  user.emailVerified = true;
-  user.emailVerificationToken = undefined;
-  user.emailVerificationExpires = undefined;
-  await user.save({ validateBeforeSave: false });
-  return user;
-}
-
-export async function resendVerification(userId) {
-  const user = await User.findById(userId).select("+emailVerificationToken +emailVerificationExpires");
-  if (!user) throw new ApiError("User not found.", 404);
-  if (user.emailVerified) return { user };
-  await createEmailVerification(user);
-  await user.save({ validateBeforeSave: false });
-  return { user };
-}
-
-export async function getSecuritySummary(userId) {
-  const user = await User.findById(userId).select("+oauthProviders.providerId +sessions.refreshTokenHash +otpRecords.codeHash");
-  if (!user) throw new ApiError("User not found.", 404);
-  return publicSecurity(user);
-}
-
-export async function revokeUserSession(userId, sessionId) {
-  const user = await User.findById(userId).select("+sessions.refreshTokenHash");
-  if (!user) throw new ApiError("User not found.", 404);
-  revokeSession(user, sessionId);
-  await user.save({ validateBeforeSave: false });
-  return publicSecurity(user);
-}
-
-export async function addAddress(userId, address) {
-  const user = await User.findById(userId);
-  if (!user) throw new ApiError("User not found.", 404);
-  const cleanAddress = { ...address };
-  if (cleanAddress.phone) cleanAddress.phone = normalizeIndianPhone(cleanAddress.phone);
-  if (cleanAddress.isDefault) user.addresses.forEach((item) => { item.isDefault = false; });
-  user.addresses.push(cleanAddress);
-  await user.save();
-  return user.addresses;
-}
-export async function updateAddress(userId, addressId, address) {
-  const user = await User.findById(userId);
-  const existing = user?.addresses.id(addressId);
-  if (!existing) throw new ApiError("Address not found.", 404);
-  const cleanAddress = { ...address };
-  if (cleanAddress.phone) cleanAddress.phone = normalizeIndianPhone(cleanAddress.phone);
-  if (cleanAddress.isDefault) user.addresses.forEach((item) => { item.isDefault = item._id.toString() === addressId; });
-  existing.set(cleanAddress);
-  await user.save();
-  return user.addresses;
-}
-export async function deleteAddress(userId, addressId) {
-  const user = await User.findById(userId);
-  const existing = user?.addresses.id(addressId);
-  if (!existing) throw new ApiError("Address not found.", 404);
-  existing.deleteOne();
-  await user.save();
-  return user.addresses;
-}
+export async function refreshUserSession(refreshToken, req) { if (!refreshToken) throw new ApiError("Refresh token is required.", 401); const decoded = verifyToken(refreshToken); if (decoded.type !== "refresh") throw new ApiError("Invalid refresh token.", 401); const user = await User.findById(decoded.id).select("+sessions.refreshTokenHash"); if (!user || user.isDisabled) throw new ApiError("Session expired.", 401); if (user.role === "admin") { const active = await findAdminSessionByRefresh(user._id, decoded.sessionId, refreshToken); if (!active) throw new ApiError("Session expired.", 401); const token = signToken(user._id, active.sessionId), nextRefreshToken = signRefreshToken(user._id, active.sessionId); await attachRefreshToken(active.sessionId, nextRefreshToken); return { user, token, refreshToken: nextRefreshToken }; } const active = findSessionByRefresh(user, refreshToken); if (!active) throw new ApiError("Session expired.", 401); revokeSession(user, active.sessionId); return issueSession(user, undefined, req); }
+export async function logoutUser(userId, id) { const user = await User.findById(userId); if (!user) return; if (user.role === "admin") await revokeAdminSessions(userId, [id], "logout"); else { revokeSession(user, id); await user.save({ validateBeforeSave: false }); } }
+export async function updateUserProfile(userId, payload) { const update = {}; if (payload.name) update.name = String(payload.name).trim(); if (typeof payload.whatsappOptIn === "boolean") update.whatsappOptIn = payload.whatsappOptIn; return User.findByIdAndUpdate(userId, update, { new: true, runValidators: true }); }
+export async function getSecuritySummary(userId) { const user = await User.findById(userId); return { phoneVerified: user.phoneVerified, sessions: (user.sessions || []).filter((s) => !s.revokedAt && s.expiresAt > new Date()), loginHistory: (user.loginHistory || []).slice(0, 20) }; }
+export async function revokeUserSession(userId, id) { const user = await User.findById(userId); revokeSession(user, id); await user.save({ validateBeforeSave: false }); return getSecuritySummary(userId); }
+export async function addAddress(userId, payload) { const user = await User.findById(userId); if (payload.isDefault) user.addresses.forEach((a) => { a.isDefault = false; }); user.addresses.push(payload); await user.save(); return user.addresses; }
+export async function updateAddress(userId, addressId, payload) { const user = await User.findById(userId); const address = user.addresses.id(addressId); if (!address) throw new ApiError("Address not found.", 404); if (payload.isDefault) user.addresses.forEach((a) => { a.isDefault = false; }); address.set(payload); await user.save(); return user.addresses; }
+export async function deleteAddress(userId, addressId) { const user = await User.findById(userId); const address = user.addresses.id(addressId); if (!address) throw new ApiError("Address not found.", 404); address.deleteOne(); await user.save(); return user.addresses; }

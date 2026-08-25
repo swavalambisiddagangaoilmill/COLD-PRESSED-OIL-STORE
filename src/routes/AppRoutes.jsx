@@ -10,17 +10,14 @@ import StatusPage from "../pages/StatusPage.jsx";
 const AdminProtectedRoute = lazy(() => import("../admin/routes/AdminProtectedRoute.jsx"));
 const AdminRoutes = lazy(() => import("../admin/routes/AdminRoutes.jsx"));
 const Account = lazy(() => import("../pages/Account.jsx"));
-const AdminSessionLimit = lazy(() => import("../pages/AdminSessionLimit.jsx"));
 const Cart = lazy(() => import("../pages/Cart.jsx"));
 const Checkout = lazy(() => import("../pages/Checkout.jsx"));
 const Contact = lazy(() => import("../pages/Contact.jsx"));
 const FAQ = lazy(() => import("../pages/FAQ.jsx"));
-const ForgotPassword = lazy(() => import("../pages/ForgotPassword.jsx"));
 const LegalPage = lazy(() => import("../pages/LegalPage.jsx"));
 const Login = lazy(() => import("../pages/Login.jsx"));
 const Signup = lazy(() => import("../pages/Signup.jsx"));
-const ResetPassword = lazy(() => import("../pages/ResetPassword.jsx"));
-const VerifyEmail = lazy(() => import("../pages/VerifyEmail.jsx"));
+const VerifyOtp = lazy(() => import("../pages/VerifyOtp.jsx"));
 const OrderDetails = lazy(() => import("../pages/OrderDetails.jsx"));
 const OrderSuccess = lazy(() => import("../pages/OrderSuccess.jsx"));
 const NotFound = lazy(() => import("../pages/NotFound.jsx"));
@@ -47,10 +44,7 @@ export default function AppRoutes() {
         <Route path="/about/process" element={<Navigate to="/about/story" replace />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-        <Route path="/auth/reset-password/:token" element={<ResetPassword />} />
-        <Route path="/auth/verify-email/:token" element={<VerifyEmail />} />
-        <Route path="/admin-session-limit" element={<AdminSessionLimit />} />
+        <Route path="/verify-otp" element={<VerifyOtp />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/order/success" element={<OrderSuccess />} />
         <Route path="/track/:id" element={<ProtectedRoute><TrackOrder /></ProtectedRoute>} />
@@ -58,7 +52,6 @@ export default function AppRoutes() {
         <Route path="/auth/login-required" element={<StatusPage code="401" retry />} />
         <Route path="/auth/access-denied" element={<StatusPage code="403" />} />
         <Route path="/auth/session-expired" element={<StatusPage code="session-expired" retry />} />
-        <Route path="/auth/email-not-verified" element={<StatusPage code="email-not-verified" />} />
         <Route path="/errors/500" element={<StatusPage code="500" retry />} />
         <Route path="/errors/503" element={<StatusPage code="503" retry />} />
         <Route path="/errors/429" element={<StatusPage code="429" retry />} />

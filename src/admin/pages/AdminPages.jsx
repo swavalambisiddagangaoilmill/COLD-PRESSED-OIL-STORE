@@ -94,12 +94,6 @@ function numericError(value, label, { required = false, integer = false } = {}) 
   return "";
 }
 
-function skuPreview(form, categories) {
-  const clean = (value, fallback) => String(value || "").normalize("NFKD").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toUpperCase() || fallback;
-  const category = categories.find((item) => item._id === (form.category?._id || form.category));
-  return [clean(category?.slug || category?.name, "CATEGORY").slice(0, 8), clean(form.title, "PRODUCT").slice(0, 12), form.weight ? clean(form.weight, "UNIT") : "UNIT"].join("-");
-}
-
 function offerStatus(offer) {
   if (!offer.isActive) return "Disabled";
   const now = new Date();
@@ -144,7 +138,10 @@ function OrdersTable({ orders = [], onAction, pending = {}, shiprocketAvailable 
   const canShip = (order) => order.orderStatus === "packed";
   const canDeliver = (order) => order.orderStatus === "shipped";
   const canCancel = (order) => ["placed", "confirmed", "packed"].includes(order.orderStatus);
-  return <AdminTable columns={["Order", "Customer", "Date", "Items", "Payment", "Amount", "Order Status", "Shipping", "Actions"]} rows={orders.map((order) => { const orderPending = Object.entries(pending).some(([key, value]) => value && key.endsWith(`:${order._id}`)); return <tr key={order._id}><Cell className="font-bold">{order._id}</Cell><Cell>{order.user?.name || order.shippingAddress?.fullName || "Customer"}</Cell><Cell>{new Date(order.createdAt).toLocaleDateString("en-IN")}</Cell><Cell>{order.products?.length || 0}</Cell><Cell><AdminBadge>{statusText(order.paymentStatus)}</AdminBadge></Cell><Cell>{money(order.totalAmount)}</Cell><Cell><AdminBadge>{statusText(order.orderStatus)}</AdminBadge></Cell><Cell>{statusText(order.shippingStatus)}</Cell><Cell><div className="flex flex-wrap gap-2">{canConfirm(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`confirm:${order._id}`]} onClick={() => onAction?.("confirm", order)}>Confirm</AdminButton>}{canReady(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`ready:${order._id}`]} onClick={() => onAction?.("ready", order)}>Ready</AdminButton>}{canShip(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`ship:${order._id}`]} onClick={() => onAction?.("ship", order)}>Mark Shipped</AdminButton>}{canDeliver(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`deliver:${order._id}`]} onClick={() => onAction?.("deliver", order)}>Deliver</AdminButton>}{canCancel(order) && <AdminButton variant="danger" disabled={orderPending} loading={pending[`cancel:${order._id}`]} onClick={() => onAction?.("cancel", order)}>Cancel</AdminButton>}</div></Cell></tr>; })} />;
+  return <AdminTable columns={["Order", "Customer", "Date", "Items", "Payment", "Amount", "Order Status", "Shipping", "Actions"]} rows={orders.map((order) => {
+    const orderPending = Object.entries(pending).some(([key, value]) => value && key.endsWith(`:${order._id}`));
+    return <tr key={order._id}><Cell className="font-bold">{order._id}</Cell><Cell>{order.user?.name || order.shippingAddress?.fullName || "Customer"}</Cell><Cell>{new Date(order.createdAt).toLocaleDateString("en-IN")}</Cell><Cell><div className="max-w-72 space-y-2 whitespace-normal">{order.products?.map((item) => <div key={`${item.product}-${item.variant}`}><p className="font-bold">{item.title}</p><p className="text-xs text-ink/55">Variant: {item.variantName} · SKU: {item.sku}</p><p className="text-xs text-ink/55">Qty {item.quantity} · {money(item.price)} each · {money(item.total)}</p></div>)}</div></Cell><Cell><AdminBadge>{statusText(order.paymentStatus)}</AdminBadge></Cell><Cell>{money(order.totalAmount)}</Cell><Cell><AdminBadge>{statusText(order.orderStatus)}</AdminBadge></Cell><Cell>{statusText(order.shippingStatus)}</Cell><Cell><div className="flex flex-wrap gap-2">{canConfirm(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`confirm:${order._id}`]} onClick={() => onAction?.("confirm", order)}>Confirm</AdminButton>}{canReady(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`ready:${order._id}`]} onClick={() => onAction?.("ready", order)}>Ready</AdminButton>}{canShip(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`ship:${order._id}`]} onClick={() => onAction?.("ship", order)}>Mark Shipped</AdminButton>}{canDeliver(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`deliver:${order._id}`]} onClick={() => onAction?.("deliver", order)}>Deliver</AdminButton>}{canCancel(order) && <AdminButton variant="danger" disabled={orderPending} loading={pending[`cancel:${order._id}`]} onClick={() => onAction?.("cancel", order)}>Cancel</AdminButton>}</div></Cell></tr>;
+  })} />;
 }
 
 export function OrdersPage() {
@@ -169,17 +166,18 @@ export function OrdersPage() {
   return <><AdminPageHeader title="Orders" description="Review and process customer orders." /><AdminFilters><SearchBox value={q} onChange={setQ} placeholder="Search orders" /></AdminFilters><State loading={loading} error={error} empty={!data?.items?.length} title="No orders found." />{data?.items?.length ? <OrdersTable orders={data.items} onAction={action} pending={pending} shiprocketAvailable={shiprocketAvailable} /> : null}</>;
 }
 
-function ProductEditor({ open, onClose, product, categories, onSaved }) {
+function ProductEditor({ open, onClose, product, onSaved }) {
   const { pending, run } = useAdminAction();
   const { data: serviceData } = useAdminData(adminApi.serviceStatus);
   const uploadAvailable = serviceData?.services?.cloudinary?.available !== false;
   const uploadMessage = serviceData?.services?.cloudinary?.message || "Image uploads are temporarily unavailable.";
-  const empty = { title: "", description: "", price: "", discountPrice: "", stock: "", weight: "", images: [], featured: false, bestSeller: false, newArrival: false, codEnabled: true, onlinePaymentEnabled: true, returnEligible: true, exchangeEligible: false, isActive: true, dimensions: { length: "", width: "", height: "" } };
+  const blankVariant = () => ({ name: "", sku: "", price: "", mrp: "", stock: "", weight: "", dimensions: { length: "", width: "", height: "" }, images: [], isActive: true });
+  const empty = { title: "", description: "", variants: [blankVariant()], featured: false, bestSeller: false, newArrival: false, codEnabled: true, onlinePaymentEnabled: true, returnEligible: true, exchangeEligible: false, isActive: true };
   const [form, setForm] = useState(product || empty);
   const [errors, setErrors] = useState({});
   const [uploadState, setUploadState] = useState({ status: "idle", message: "" });
   useEffect(() => {
-    setForm(product ? { ...empty, ...product, category: product.category?._id || product.category, dimensions: { ...empty.dimensions, ...(product.dimensions || {}) } } : empty);
+    setForm(product ? { ...empty, ...product, variants: (product.variants || []).filter((variant) => !variant.isArchived).map((variant) => ({ ...blankVariant(), ...variant, dimensions: { ...blankVariant().dimensions, ...(variant.dimensions || {}) } })) } : empty);
     setErrors({});
     setUploadState({ status: "idle", message: "" });
   }, [product, open]);
@@ -188,29 +186,20 @@ function ProductEditor({ open, onClose, product, categories, onSaved }) {
     const next = {
       title: form.title?.trim() ? "" : "Product title is required.",
       description: form.description?.trim() ? "" : "Description is required.",
-      category: form.category ? "" : "Select a category.",
-      price: numericError(form.price, "Price", { required: true }),
-      discountPrice: numericError(form.discountPrice, "Discount price"),
-      stock: numericError(form.stock, "Stock", { required: true, integer: true }),
-      weight: numericError(form.weight, "Weight"),
-      length: numericError(form.dimensions?.length, "Package length"),
-      width: numericError(form.dimensions?.width, "Package width"),
-      height: numericError(form.dimensions?.height, "Package height"),
-      images: form.images?.length ? "" : "Upload at least one product image.",
+      variants: form.variants?.some((v) => v.isActive) && form.variants.every((v) => v.name?.trim() && v.sku?.trim() && Number(v.price) > 0 && Number(v.mrp) >= Number(v.price) && Number.isInteger(Number(v.stock)) && Number(v.stock) >= 0 && Number(v.weight) >= 0 && [v.dimensions?.length, v.dimensions?.width, v.dimensions?.height].every((value) => Number(value) >= 0) && v.images?.length) && new Set(form.variants.map((v) => v.name.trim().toLowerCase())).size === form.variants.length && new Set(form.variants.map((v) => v.sku.trim().toUpperCase())).size === form.variants.length ? "" : "Add at least one active variant. Every variant needs a unique size and SKU, valid price/MRP, non-negative stock, weight and dimensions, and at least one image.",
     };
-    if (!next.discountPrice && form.discountPrice !== "" && Number(form.discountPrice) >= Number(form.price)) next.discountPrice = "Discount price must be lower than the regular price.";
     setErrors(next);
     return !Object.values(next).some(Boolean);
   };
 
-  const upload = async (file, input) => {
+  const upload = async (file, input, variantIndex) => {
     if (!uploadAvailable || pending["product:image"]) return;
     setUploadState({ status: "uploading", message: `Uploading ${file.name}...` });
     const data = await run("product:image", () => adminApi.uploadImage(file), "Image uploaded.");
     if (input) input.value = "";
     if (data) {
-      setForm((current) => ({ ...current, images: [...(current.images || []), data.image || data] }));
-      setErrors((current) => ({ ...current, images: "" }));
+      setForm((current) => ({ ...current, variants: current.variants.map((variant, index) => index === variantIndex ? { ...variant, images: [...variant.images, data.image || data] } : variant) }));
+      setErrors((current) => ({ ...current, variants: "" }));
       setUploadState({ status: "success", message: "Image uploaded successfully." });
     } else {
       setUploadState({ status: "error", message: "Image upload failed. Select the file and try again." });
@@ -222,34 +211,44 @@ function ProductEditor({ open, onClose, product, categories, onSaved }) {
     const optionalNumber = (value) => value === "" || value === undefined || value === null ? undefined : Number(value);
     const payload = {
       ...form,
-      price: Number(form.price),
-      discountPrice: optionalNumber(form.discountPrice),
-      stock: Number(form.stock),
-      weight: optionalNumber(form.weight),
-      dimensions: { length: optionalNumber(form.dimensions?.length), width: optionalNumber(form.dimensions?.width), height: optionalNumber(form.dimensions?.height) },
-      category: form.category?._id || form.category,
+      variants: form.variants.map((variant) => ({ ...variant, price: Number(variant.price), mrp: Number(variant.mrp), stock: Number(variant.stock), weight: Number(variant.weight), dimensions: { length: Number(variant.dimensions?.length), width: Number(variant.dimensions?.width), height: Number(variant.dimensions?.height) } })),
     };
     const result = await run("product:save", () => adminApi.saveProduct(payload, product?._id), "Product saved.");
     if (result?.product) { onSaved(result.product); window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["products", "inventory", "dashboard"] } })); onClose(); }
   };
 
   const numberProps = { min: "0", inputMode: "decimal", onKeyDown: blockInvalidNumberKey };
-  return <AdminModal title={product ? "Edit Product" : "Add Product"} open={open} onClose={pending["product:image"] || pending["product:save"] ? undefined : onClose} footer={<AdminButton disabled={pending["product:image"] || categories.length === 0} loading={pending["product:save"]} onClick={save}>{pending["product:image"] ? "Uploading image..." : "Save Product"}</AdminButton>}>
+  return <AdminModal title={product ? "Edit Product" : "Add Product"} open={open} onClose={pending["product:image"] || pending["product:save"] ? undefined : onClose} footer={<AdminButton disabled={pending["product:image"]} loading={pending["product:save"]} onClick={save}>{pending["product:image"] ? "Uploading image..." : "Save Product"}</AdminButton>}>
     <div className="grid gap-4">
       <AdminInput label="Product Name / Title" value={form.title || ""} error={errors.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
       <label className="grid gap-1.5 text-sm font-semibold text-ink/65"><span>Description</span><textarea value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} className={`min-h-24 rounded-lg border bg-white px-3 py-2 text-sm text-ink outline-none ${errors.description ? "border-red-400" : "border-ink/10 focus:border-leaf"}`} />{errors.description && <span className="text-xs text-red-700">{errors.description}</span>}</label>
       <div className="grid gap-4 md:grid-cols-2">
-        <label className="grid gap-1.5 text-sm font-semibold text-ink/65"><span>Category</span><select value={form.category?._id || form.category || ""} onChange={(e) => { setForm({ ...form, category: e.target.value }); setErrors((current) => ({ ...current, category: "" })); }} className={`h-10 rounded-lg border bg-white px-3 text-sm ${errors.category ? "border-red-400" : "border-ink/10"}`}><option value="">Select a category</option>{categories.map((item) => <option key={item._id} value={item._id}>{item.name}</option>)}</select>{errors.category && <span className="text-xs text-red-700">{errors.category}</span>}</label>
-        <AdminInput label="SKU (generated automatically)" value={skuPreview(form, categories)} readOnly hint="Generated from category, product name, and weight." />
-        <AdminInput label="Price (₹)" type="number" step="0.01" value={form.price ?? ""} error={errors.price} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, price: e.target.value })} />
-        <AdminInput label="Discount Price (₹)" type="number" step="0.01" value={form.discountPrice ?? ""} error={errors.discountPrice} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, discountPrice: e.target.value })} />
-        <AdminInput label="Stock / Quantity (units)" type="number" step="1" value={form.stock ?? ""} error={errors.stock} {...numberProps} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
-        <AdminInput label="Weight (kg)" type="number" step="0.01" value={form.weight ?? ""} error={errors.weight} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, weight: e.target.value })} />
-        <AdminInput label="Package Length (cm)" type="number" step="0.01" value={form.dimensions?.length ?? ""} error={errors.length} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, dimensions: { ...(form.dimensions || {}), length: e.target.value } })} />
-        <AdminInput label="Package Width (cm)" type="number" step="0.01" value={form.dimensions?.width ?? ""} error={errors.width} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, dimensions: { ...(form.dimensions || {}), width: e.target.value } })} />
-        <AdminInput label="Package Height (cm)" type="number" step="0.01" value={form.dimensions?.height ?? ""} error={errors.height} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, dimensions: { ...(form.dimensions || {}), height: e.target.value } })} />
       </div>
-      <div><p className="text-sm font-bold text-ink/70">Product Images</p><div className="mt-2 flex flex-wrap gap-3">{(form.images || []).map((image, index) => <div key={`${image.url}-${index}`} className="relative"><img src={image.url} alt="" className="h-20 w-20 rounded-lg object-cover" /><button type="button" disabled={pending["product:image"]} onClick={() => setForm({ ...form, images: form.images.filter((_, i) => i !== index) })} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-xs text-white">x</button></div>)}<label title={uploadAvailable ? "" : uploadMessage} className={`grid h-20 w-20 place-items-center rounded-lg border border-dashed border-[var(--admin-border)] text-xs font-bold text-ink/45 ${uploadAvailable && !pending["product:image"] ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}>{pending["product:image"] ? <span className="grid place-items-center gap-1"><Loader2 size={18} className="animate-spin" />Uploading</span> : "Upload"}<input type="file" accept="image/*" disabled={!uploadAvailable || pending["product:image"]} className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], e.target)} /></label></div>{errors.images && <p className="mt-2 text-xs font-semibold text-red-700">{errors.images}</p>}{uploadState.message && <p role="status" className={`mt-3 inline-flex items-center gap-2 text-sm font-semibold ${uploadState.status === "error" ? "text-red-700" : uploadState.status === "success" ? "text-leaf" : "text-ink/60"}`}>{uploadState.status === "uploading" ? <Loader2 size={15} className="animate-spin" /> : uploadState.status === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}{uploadState.message}</p>}</div>
+      <section>
+        <div className="flex items-center justify-between"><h3 className="font-bold">Variants</h3><AdminButton variant="secondary" onClick={() => setForm({ ...form, variants: [...form.variants, blankVariant()] })}><Plus size={14} />Add Variant</AdminButton></div>
+        {errors.variants && <p className="mt-2 text-xs font-semibold text-red-700">{errors.variants}</p>}
+        <div className="mt-3 grid gap-4">{form.variants.map((variant, variantIndex) => {
+          const updateVariant = (updates) => setForm({ ...form, variants: form.variants.map((item, index) => index === variantIndex ? { ...item, ...updates } : item) });
+          const updateDimensions = (updates) => updateVariant({ dimensions: { ...(variant.dimensions || {}), ...updates } });
+          return <div key={variant._id || variantIndex} className="rounded-xl border border-[var(--admin-border)] bg-linen/30 p-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <AdminInput label="Size / Unit" value={variant.name || ""} onChange={(e) => updateVariant({ name: e.target.value })} />
+              <AdminInput label="SKU" value={variant.sku || ""} onChange={(e) => updateVariant({ sku: e.target.value.toUpperCase() })} />
+              <AdminInput label="Selling Price (₹)" type="number" value={variant.price ?? ""} {...numberProps} onChange={(e) => updateVariant({ price: e.target.value })} />
+              <AdminInput label="MRP (₹)" type="number" value={variant.mrp ?? ""} {...numberProps} onChange={(e) => updateVariant({ mrp: e.target.value })} />
+              <AdminInput label="Stock / Quantity" type="number" step="1" value={variant.stock ?? ""} {...numberProps} onChange={(e) => updateVariant({ stock: e.target.value })} />
+              <AdminInput label="Weight (kg)" type="number" step="0.01" value={variant.weight ?? ""} {...numberProps} onChange={(e) => updateVariant({ weight: e.target.value })} />
+              <AdminInput label="Package Length (cm)" type="number" step="0.01" value={variant.dimensions?.length ?? ""} {...numberProps} onChange={(e) => updateDimensions({ length: e.target.value })} />
+              <AdminInput label="Package Width (cm)" type="number" step="0.01" value={variant.dimensions?.width ?? ""} {...numberProps} onChange={(e) => updateDimensions({ width: e.target.value })} />
+              <AdminInput label="Package Height (cm)" type="number" step="0.01" value={variant.dimensions?.height ?? ""} {...numberProps} onChange={(e) => updateDimensions({ height: e.target.value })} />
+              <Toggle label="Active" checked={variant.isActive} onChange={(value) => updateVariant({ isActive: value })} />
+            </div>
+            <p className="mt-4 text-sm font-bold text-ink/70">Variant Images</p>
+            <div className="mt-2 flex flex-wrap gap-3">{variant.images.map((image, imageIndex) => <div key={`${image.url}-${imageIndex}`} className="relative"><img src={image.url} alt="" className="h-20 w-20 rounded-lg object-cover" /><button type="button" onClick={() => updateVariant({ images: variant.images.filter((_, index) => index !== imageIndex) })} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-white">×</button></div>)}<label className="grid h-20 w-20 cursor-pointer place-items-center rounded-lg border border-dashed text-xs font-bold">Add Images<input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => { for (const file of Array.from(e.target.files || [])) await upload(file, null, variantIndex); e.target.value = ""; }} /></label></div>
+            {form.variants.length > 1 && <div className="mt-4"><AdminButton variant="danger" onClick={() => setForm({ ...form, variants: form.variants.filter((_, index) => index !== variantIndex) })}>Remove Variant</AdminButton></div>}
+          </div>;
+        })}</div>
+      </section>
       <div className="grid gap-3 md:grid-cols-2"><Toggle label="Featured" checked={form.featured} onChange={(value) => setForm({ ...form, featured: value })} /><Toggle label="Best Seller" checked={form.bestSeller} onChange={(value) => setForm({ ...form, bestSeller: value })} /><Toggle label="New Arrival" checked={form.newArrival} onChange={(value) => setForm({ ...form, newArrival: value })} /><Toggle label="COD Enabled" checked={form.codEnabled !== false} onChange={(value) => setForm({ ...form, codEnabled: value })} /><Toggle label="Online Payment Enabled" checked={form.onlinePaymentEnabled !== false} onChange={(value) => setForm({ ...form, onlinePaymentEnabled: value })} /><Toggle label="Return Eligible" checked={form.returnEligible !== false} onChange={(value) => setForm({ ...form, returnEligible: value })} /><Toggle label="Exchange Eligible" checked={form.exchangeEligible} onChange={(value) => setForm({ ...form, exchangeEligible: value })} /><Toggle label="Active" checked={form.isActive} onChange={(value) => setForm({ ...form, isActive: value })} /></div>
     </div>
   </AdminModal>;
@@ -263,15 +262,20 @@ export function ProductsPage() {
   const [bulk, setBulk] = useState({ operation: "increase_percentage", value: 10 });
   const { data, loading, error, reload, setData } = useAdminData(() => adminApi.products(q ? `?search=${encodeURIComponent(q)}` : ""), [q]);
   useAdminRefresh(reload, ["products"]);
-  const { data: catData } = useAdminData(adminApi.categories);
   const { pending, run } = useAdminAction();
   const products = data?.items || [];
-  const categories = catData?.items || [];
   const saveRow = (product) => setData((current) => current ? { ...current, items: current.items?.some((item) => item._id === product._id) ? current.items.map((item) => item._id === product._id ? { ...item, ...product } : item) : [product, ...(current.items || [])] } : current);
   const doPreview = async () => { const result = await run("bulk:preview", () => adminApi.bulkPreview({ target: { productIds: selected }, ...bulk }), "Preview generated."); if (result) setPreview(result); };
   const apply = async () => { const result = await run("bulk:apply", () => adminApi.bulkApply({ target: { productIds: selected }, ...bulk }), "Bulk update applied."); if (result) { setSelected([]); setPreview(null); reload(); } };
   const archive = async (product) => { const result = await run(`product:archive:${product._id}`, () => adminApi.archiveProduct(product._id), "Product archived."); if (result?.product) updateItemList(setData, product._id, result.product, true); };
-  return <><AdminPageHeader title="Products" description="Manage products, pricing and availability." action={<AdminButton onClick={() => setEditor({})}><Plus size={16} />Add Product</AdminButton>} /><AdminFilters><SearchBox value={q} onChange={setQ} placeholder="Search products" /></AdminFilters>{selected.length > 0 && <div className="mb-4 rounded-xl border border-[var(--admin-border)] bg-white p-4"><p className="font-bold">Selected: {selected.length} products</p><div className="mt-3 grid gap-3 md:grid-cols-5"><AdminSelect label="Bulk Action" value={bulk.operation} onChange={(e) => setBulk({ ...bulk, operation: e.target.value })}>{[["increase_percentage","Increase Price %"],["decrease_percentage","Decrease Price %"],["increase_fixed","Increase Price Rs."],["decrease_fixed","Decrease Price Rs."],["set_exact_price","Set Exact Price"],["set_discount_percentage","Set Discount %"],["set_exact_discount","Set Discount Price"],["remove_discount","Remove Discount"],["add_stock","Add Stock"],["reduce_stock","Reduce Stock"],["set_stock","Set Stock"],["activate","Activate"],["deactivate","Deactivate"],["archive","Archive"],["mark_featured","Mark Featured"],["remove_featured","Remove Featured"],["move_category","Move to Category"],["set_weight","Set Weight"],["set_dimensions","Set Dimensions"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}</AdminSelect><AdminInput label="Value" type="number" value={bulk.value || ""} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} /><AdminSelect label="Category" value={bulk.category || ""} onChange={(e) => setBulk({ ...bulk, category: e.target.value })}><option value="">Select</option>{categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}</AdminSelect><AdminButton variant="secondary" loading={pending["bulk:preview"]} onClick={doPreview}>Preview</AdminButton><AdminButton loading={pending["bulk:apply"]} onClick={apply}>Apply Changes</AdminButton></div>{preview?.examples?.map((item) => <span key={item.id} className="mr-2 mt-3 inline-flex rounded-full bg-linen px-3 py-1 text-sm">{item.title}: {money(item.before)} to {money(item.after)}</span>)}{preview && preview.count > 5 && <span className="text-sm text-ink/50">+ {preview.count - 5} more products</span>}</div>}<State loading={loading} error={error} empty={!products.length} title="No products found." description="Add your first product." action={<AdminButton onClick={() => setEditor({})}>Add Product</AdminButton>} />{products.length ? <AdminTable columns={["", "Product", "Category", "SKU", "Price", "Discount", "Stock", "Status", "Featured", "Actions"]} rows={products.map((product) => <tr key={product._id}><Cell><input type="checkbox" checked={selected.includes(product._id)} onChange={(e) => setSelected((current) => e.target.checked ? [...current, product._id] : current.filter((id) => id !== product._id))} /></Cell><Cell className="font-bold">{product.title}</Cell><Cell>{product.category?.name || "-"}</Cell><Cell>{product.sku || "-"}</Cell><Cell>{money(product.price)}</Cell><Cell>{product.discountPrice ? money(product.discountPrice) : "-"}</Cell><Cell>{product.stock}</Cell><Cell><AdminBadge>{product.isActive ? "Active" : "Inactive"}</AdminBadge></Cell><Cell>{product.featured ? "Yes" : "No"}</Cell><Cell><div className="flex gap-2"><AdminButton variant="secondary" onClick={() => setEditor(product)}>Edit</AdminButton><AdminButton variant="secondary" onClick={() => setEditor({ ...product, _id: undefined, title: `${product.title} Copy` })}>Duplicate</AdminButton><AdminButton variant="danger" loading={pending[`product:archive:${product._id}`]} onClick={() => archive(product)}><Trash2 size={14} /></AdminButton></div></Cell></tr>)} /> : null}<ProductEditor open={Boolean(editor)} product={editor?._id ? editor : null} categories={categories} onClose={() => setEditor(null)} onSaved={saveRow} /></>;
+  return <>
+    <AdminPageHeader title="Products" description="Manage products and their variants." action={<AdminButton onClick={() => setEditor({})}><Plus size={16} />Add Product</AdminButton>} />
+    <AdminFilters><SearchBox value={q} onChange={setQ} placeholder="Search products or variant SKUs" /></AdminFilters>
+    {selected.length > 0 && <div className="mb-4 rounded-xl border border-[var(--admin-border)] bg-white p-4"><p className="font-bold">Selected: {selected.length} products</p><div className="mt-3 grid gap-3 md:grid-cols-4"><AdminSelect label="Bulk Variant Action" value={bulk.operation} onChange={(e) => setBulk({ ...bulk, operation: e.target.value })}>{[["increase_percentage","Increase Variant Prices %"],["decrease_percentage","Decrease Variant Prices %"],["increase_fixed","Increase Variant Prices Rs."],["decrease_fixed","Decrease Variant Prices Rs."],["set_exact_price","Set Variant Prices"],["set_discount_percentage","Set Variant Discount %"],["remove_discount","Remove Variant Discounts"],["add_stock","Add Variant Stock"],["reduce_stock","Reduce Variant Stock"],["set_stock","Set Variant Stock"],["activate","Activate Products"],["deactivate","Deactivate Products"],["archive","Archive Products"],["mark_featured","Mark Featured"],["remove_featured","Remove Featured"],["set_weight","Set Variant Weight"]].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</AdminSelect><AdminInput label="Value" type="number" value={bulk.value || ""} onChange={(e) => setBulk({ ...bulk, value: e.target.value })} /><AdminButton variant="secondary" loading={pending["bulk:preview"]} onClick={doPreview}>Preview</AdminButton><AdminButton loading={pending["bulk:apply"]} onClick={apply}>Apply Changes</AdminButton></div>{preview?.examples?.map((item) => <span key={item.id} className="mr-2 mt-3 inline-flex rounded-full bg-linen px-3 py-1 text-sm">{item.title}: {money(item.before)} to {money(item.after)}</span>)}</div>}
+    <State loading={loading} error={error} empty={!products.length} title="No products found." description="Add your first product." action={<AdminButton onClick={() => setEditor({})}>Add Product</AdminButton>} />
+    {products.length ? <AdminTable columns={["", "Product", "Variants", "Price Range", "Total Stock", "Status", "Featured", "Actions"]} rows={products.map((product) => { const variants = (product.variants || []).filter((variant) => !variant.isArchived); const prices = variants.map((variant) => Number(variant.price)); return <tr key={product._id}><Cell><input type="checkbox" checked={selected.includes(product._id)} onChange={(e) => setSelected((current) => e.target.checked ? [...current, product._id] : current.filter((id) => id !== product._id))} /></Cell><Cell className="font-bold">{product.title}</Cell><Cell>{variants.map((variant) => `${variant.name} (${variant.sku})`).join(", ")}</Cell><Cell>{prices.length ? `${money(Math.min(...prices))}${prices.length > 1 ? ` – ${money(Math.max(...prices))}` : ""}` : "-"}</Cell><Cell>{variants.reduce((sum, variant) => sum + Number(variant.stock || 0), 0)}</Cell><Cell><AdminBadge>{product.isActive ? "Active" : "Inactive"}</AdminBadge></Cell><Cell>{product.featured ? "Yes" : "No"}</Cell><Cell><div className="flex gap-2"><AdminButton variant="secondary" onClick={() => setEditor(product)}>Edit</AdminButton><AdminButton variant="secondary" onClick={() => setEditor({ ...product, _id: undefined, title: `${product.title} Copy`, variants: variants.map(({ _id, ...variant }) => ({ ...variant, sku: `${variant.sku}-COPY` })) })}>Duplicate</AdminButton><AdminButton variant="danger" loading={pending[`product:archive:${product._id}`]} onClick={() => archive(product)}><Trash2 size={14} /></AdminButton></div></Cell></tr>; })} /> : null}
+    <ProductEditor open={Boolean(editor)} product={editor?._id ? editor : null} onClose={() => setEditor(null)} onSaved={saveRow} />
+  </>;
 }
 
 export function ProductFormPage() { return <ProductsPage />; }
@@ -284,9 +288,9 @@ export function InventoryPage() {
   const [editing, setEditing] = useState(null);
   const threshold = settingsData?.settings?.lowStockThreshold ?? 10;
   const status = (stock) => stock === 0 ? "Out of Stock" : stock <= threshold ? "Low Stock" : "In Stock";
-  const items = (data?.items || []).filter((p) => filter === "All" || status(p.stock) === filter);
+  const items = (data?.items || []).flatMap((product) => (product.variants || []).filter((variant) => !variant.isArchived).map((variant) => ({ product, variant }))).filter(({ variant }) => filter === "All" || status(variant.stock) === filter);
   const saveRow = (product) => updateItemList(setData, product._id, product);
-  return <><AdminPageHeader title="Inventory" description="Update stock quantities and low-stock status." /><AdminFilters><AdminSelect label="Stock Status" value={filter} onChange={(e) => setFilter(e.target.value)}>{["All", "In Stock", "Low Stock", "Out of Stock"].map((item) => <option key={item}>{item}</option>)}</AdminSelect></AdminFilters><State loading={loading} error={error} empty={!items.length} />{items.length ? <AdminTable columns={["Product", "SKU", "Current Stock", "Stock Status", "Actions"]} rows={items.map((p) => <tr key={p._id}><Cell>{p.title}</Cell><Cell>{p.sku || "-"}</Cell><Cell>{p.stock}</Cell><Cell><AdminBadge>{status(p.stock)}</AdminBadge></Cell><Cell><div className="flex gap-2"><AdminButton variant="secondary" onClick={() => setEditing({ product: p, mode: "add", quantity: 1 })}>Add Stock</AdminButton><AdminButton variant="secondary" onClick={() => setEditing({ product: p, mode: "reduce", quantity: 1 })}>Reduce Stock</AdminButton><AdminButton variant="secondary" onClick={() => setEditing({ product: p, mode: "set", quantity: p.stock })}>Set Exact</AdminButton></div></Cell></tr>)} /> : null}<StockModal state={editing} onClose={() => setEditing(null)} onSaved={saveRow} /></>;
+  return <><AdminPageHeader title="Inventory" description="Update stock independently for each product variant." /><AdminFilters><AdminSelect label="Stock Status" value={filter} onChange={(e) => setFilter(e.target.value)}>{["All", "In Stock", "Low Stock", "Out of Stock"].map((item) => <option key={item}>{item}</option>)}</AdminSelect></AdminFilters><State loading={loading} error={error} empty={!items.length} />{items.length ? <AdminTable columns={["Product", "Variant", "SKU", "Current Stock", "Stock Status", "Actions"]} rows={items.map(({ product, variant }) => <tr key={`${product._id}-${variant._id}`}><Cell>{product.title}</Cell><Cell className="font-bold">{variant.name}</Cell><Cell>{variant.sku}</Cell><Cell>{variant.stock}</Cell><Cell><AdminBadge>{status(variant.stock)}</AdminBadge></Cell><Cell><div className="flex gap-2"><AdminButton variant="secondary" onClick={() => setEditing({ product, variant, mode: "add", quantity: 1 })}>Add Stock</AdminButton><AdminButton variant="secondary" onClick={() => setEditing({ product, variant, mode: "reduce", quantity: 1 })}>Reduce Stock</AdminButton><AdminButton variant="secondary" onClick={() => setEditing({ product, variant, mode: "set", quantity: variant.stock })}>Set Exact</AdminButton></div></Cell></tr>)} /> : null}<StockModal state={editing} onClose={() => setEditing(null)} onSaved={saveRow} /></>;
 }
 
 function StockModal({ state, onClose, onSaved }) {
@@ -294,12 +298,12 @@ function StockModal({ state, onClose, onSaved }) {
   const [quantity, setQuantity] = useState(1);
   useEffect(() => setQuantity(state?.quantity ?? ""), [state]);
   if (!state) return null;
-  const current = Number(state.product.stock || 0);
+  const current = Number(state.variant.stock || 0);
   const qty = quantity === "" ? 0 : Number(quantity);
   const next = state.mode === "set" ? qty : state.mode === "reduce" ? Math.max(0, current - qty) : current + qty;
   const invalid = quantity === "" || qty < 0 || !Number.isInteger(qty) || (state.mode !== "set" && qty === 0) || (state.mode === "reduce" && qty > current);
-  const save = async () => { if (invalid) return; const result = await run(`inventory:${state.product._id}`, () => adminApi.inventory(state.product._id, { mode: state.mode, quantity: qty }), "Inventory updated."); if (result?.product) { onSaved(result.product); window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["dashboard", "products", "inventory"] } })); onClose(); } };
-  return <AdminModal title="Update Stock" open onClose={onClose} footer={<AdminButton disabled={invalid} loading={pending[`inventory:${state.product._id}`]} onClick={save}>Update Stock</AdminButton>}><div className="grid gap-4"><AdminCard title="Product" value={state.product.title} note={`SKU: ${state.product.sku || "-"}`} /><AdminInput label={state.mode === "set" ? "Set Stock To" : state.mode === "reduce" ? "Reduce" : "Add"} type="number" min="0" step="1" inputMode="numeric" value={quantity} onKeyDown={blockInvalidNumberKey} onChange={(e) => setQuantity(e.target.value)} /><div className="rounded-xl bg-linen p-4 text-sm font-bold">Preview: {current} {state.mode === "add" ? "+" : state.mode === "reduce" ? "-" : "="} {qty} = {next}</div>{invalid && <p className="text-sm font-semibold text-red-700">Enter a valid whole number. Add/reduce quantities must be greater than zero, and stock cannot go below zero.</p>}</div></AdminModal>;
+  const save = async () => { if (invalid) return; const result = await run(`inventory:${state.product._id}:${state.variant._id}`, () => adminApi.inventory(state.product._id, { variantId: state.variant._id, mode: state.mode, quantity: qty }), "Inventory updated."); if (result?.product) { onSaved(result.product); window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["dashboard", "products", "inventory"] } })); onClose(); } };
+  return <AdminModal title="Update Variant Stock" open onClose={onClose} footer={<AdminButton disabled={invalid} loading={pending[`inventory:${state.product._id}:${state.variant._id}`]} onClick={save}>Update Stock</AdminButton>}><div className="grid gap-4"><AdminCard title="Product Variant" value={`${state.product.title} · ${state.variant.name}`} note={`SKU: ${state.variant.sku}`} /><AdminInput label={state.mode === "set" ? "Set Stock To" : state.mode === "reduce" ? "Reduce" : "Add"} type="number" min="0" step="1" inputMode="numeric" value={quantity} onKeyDown={blockInvalidNumberKey} onChange={(e) => setQuantity(e.target.value)} /><div className="rounded-xl bg-linen p-4 text-sm font-bold">Preview: {current} {state.mode === "add" ? "+" : state.mode === "reduce" ? "-" : "="} {qty} = {next}</div>{invalid && <p className="text-sm font-semibold text-red-700">Enter a valid whole number. Add/reduce quantities must be greater than zero, and stock cannot go below zero.</p>}</div></AdminModal>;
 }
 
 function CategoryForm({ open, category, onClose, onSaved }) {

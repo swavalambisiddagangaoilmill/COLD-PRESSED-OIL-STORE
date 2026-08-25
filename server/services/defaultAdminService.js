@@ -1,30 +1,23 @@
 // Ensures the env-configured default admin exists during backend startup.
 import User from "../models/User.js";
 
-const DEFAULT_ADMIN_EMAIL = "swavalambisiddagangaoilmill@gmail.com";
-
 export async function ensureDefaultAdmin() {
-  const existing = await User.findOne({ email: DEFAULT_ADMIN_EMAIL });
+  const phone = process.env.DEFAULT_ADMIN_PHONE;
+  if (!phone) { console.warn("DEFAULT_ADMIN_PHONE is missing. Default admin was not created."); return null; }
+  const existing = await User.findOne({ phone });
   if (existing) {
     console.log("Default admin already exists.");
     return existing;
   }
 
-  const password = process.env.DEFAULT_ADMIN_PASSWORD;
-  if (!password) {
-    console.warn("DEFAULT_ADMIN_PASSWORD is missing. Default admin was not created.");
-    return null;
-  }
-
   const admin = await User.create({
     name: "SS Oil Mill Admin",
-    email: DEFAULT_ADMIN_EMAIL,
-    password,
+    phone,
+    phoneVerified: true,
     role: "admin",
     adminRole: "OWNER",
-    emailVerified: true,
     isDisabled: false,
-    oauthProviders: [],
+    whatsappOptIn: false,
   });
 
   console.log("Default admin created successfully.");

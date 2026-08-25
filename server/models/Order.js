@@ -4,10 +4,15 @@ import mongoose from "mongoose";
 const orderItemSchema = new mongoose.Schema(
   {
     product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+    variant: { type: mongoose.Schema.Types.ObjectId, required: true },
     title: { type: String, required: true },
+    variantName: { type: String, required: true },
+    sku: { type: String, required: true },
     image: { type: String },
     quantity: { type: Number, required: true, min: 1 },
     price: { type: Number, required: true, min: 0 },
+    mrp: { type: Number, min: 0 },
+    total: { type: Number, required: true, min: 0 },
   },
   { _id: false }
 );

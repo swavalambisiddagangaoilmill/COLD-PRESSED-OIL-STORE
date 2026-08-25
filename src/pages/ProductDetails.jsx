@@ -22,12 +22,13 @@ export default function ProductDetails() {
   const [quantity, setQuantity] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalQuantity, setModalQuantity] = useState(1);
+  const [variantId, setVariantId] = useState("");
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     getProductBySlug(slug)
-      .then((item) => { if (active) { setProduct(item); setMissing(!item); } })
+      .then((item) => { if (active) { setProduct(item); setVariantId(item?.selectedVariant?.id || ""); setMissing(!item); } })
       .catch(() => active && setMissing(true))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
@@ -35,6 +36,9 @@ export default function ProductDetails() {
 
   if (!loading && missing) return <Navigate to="/404" replace />;
   if (loading || !product) return <section className="section-padding"><Container><p className="rounded-3xl bg-white p-10 text-center text-ink/60">Loading product...</p></Container></section>;
+
+  const selectedVariant = product.variants.find((variant) => variant.id === variantId) || product.selectedVariant;
+  const selectedProduct = { ...product, id: `${product.id}:${selectedVariant?.id}`, productId: product.id, variantId: selectedVariant?.id, selectedVariant, price: selectedVariant?.price, mrp: selectedVariant?.mrp, stock: selectedVariant?.stock, sku: selectedVariant?.sku, volume: selectedVariant?.name, images: selectedVariant?.images || [], image: selectedVariant?.images?.[0]?.url || product.image };
 
   const handleAdded = (details) => {
     const session = readGuestSession().data;
@@ -49,17 +53,18 @@ export default function ProductDetails() {
       <section className="section-padding pt-10">
         <Container>
           <div className="grid gap-10 lg:grid-cols-2">
-            <ProductGallery product={product} />
+            <ProductGallery product={selectedProduct} />
             <div className="lg:pl-8">
-              <div className="flex items-start justify-between gap-4"><p className="text-xs font-bold uppercase tracking-[0.22em] text-clay">{product.category} oil</p><WishlistToggle product={product} className="h-12 w-12 shrink-0" size={21} /></div>
+              <div className="flex items-start justify-between gap-4"><p className="text-xs font-bold uppercase tracking-[0.22em] text-clay">Cold-pressed product</p><WishlistToggle product={product} className="h-12 w-12 shrink-0" size={21} /></div>
               <h1 className="mt-4 font-serif text-5xl font-semibold leading-tight lg:text-6xl">{product.name}</h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-ink/65">{product.description}</p>
-              <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-ink/60"><Star size={17} className="fill-clay text-clay" /> {product.rating} rating · {product.volume}</div>
-              <p className={`mt-3 text-xs font-bold uppercase tracking-[0.16em] ${product.stock <= 8 ? "text-clay" : "text-leaf"}`}>{product.stock <= 8 ? "Low stock" : "In stock"}</p>
-              <div className="mt-6 flex items-end gap-3"><span className="text-3xl font-bold">{formatCurrency(product.price)}</span><span className="text-lg text-ink/40 line-through">{formatCurrency(product.mrp)}</span></div>
+              <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-ink/60"><Star size={17} className="fill-clay text-clay" /> {product.rating} rating · SKU {selectedVariant?.sku}</div>
+              <fieldset className="mt-6"><legend className="text-sm font-bold">Choose Size</legend><div className="mt-3 flex flex-wrap gap-2">{product.variants.map((variant) => <button key={variant.id} type="button" disabled={variant.stock === 0} onClick={() => { setVariantId(variant.id); setQuantity(1); }} className={`rounded-full border px-5 py-2 text-sm font-bold transition ${variant.id === selectedVariant?.id ? "border-leaf bg-leaf text-white" : "border-ink/15 bg-white"} disabled:cursor-not-allowed disabled:opacity-40`}>{variant.name}{variant.stock === 0 ? " · Out of stock" : ""}</button>)}</div></fieldset>
+              <p className={`mt-4 text-xs font-bold uppercase tracking-[0.16em] ${selectedVariant?.stock === 0 ? "text-danger" : selectedVariant?.stock <= 8 ? "text-clay" : "text-leaf"}`}>{selectedVariant?.stock === 0 ? "Out of stock" : selectedVariant?.stock <= 8 ? `Low stock · ${selectedVariant.stock} left` : "In stock"}</p>
+              <div className="mt-6 flex items-end gap-3"><span className="text-3xl font-bold">{formatCurrency(selectedVariant?.price)}</span>{selectedVariant?.mrp > selectedVariant?.price && <span className="text-lg text-ink/40 line-through">{formatCurrency(selectedVariant.mrp)}</span>}</div>
               <div className="sticky bottom-0 z-20 -mx-4 mt-8 flex flex-col gap-4 border-t border-ink/10 bg-cream/95 p-4 backdrop-blur sm:static sm:mx-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
                 <QuantitySelector value={quantity} onChange={setQuantity} />
-                <AddToCartButton product={product} quantity={quantity} onAdded={handleAdded} className="min-h-14 flex-1 rounded-2xl px-7 text-base shadow-soft active:scale-[0.98] sm:min-h-[52px]" iconSize={20} />
+                <AddToCartButton product={selectedProduct} quantity={quantity} onAdded={handleAdded} className="min-h-14 flex-1 rounded-2xl px-7 text-base shadow-soft active:scale-[0.98] sm:min-h-[52px]" iconSize={20} />
               </div>
               <div className="mt-10 grid gap-3 sm:grid-cols-2">{product.benefits.map((benefit) => <div key={benefit} className="flex gap-3 rounded-2xl bg-white p-4"><Check size={19} className="mt-1 shrink-0 text-leaf" /><span className="font-semibold">{benefit}</span></div>)}</div>
             </div>

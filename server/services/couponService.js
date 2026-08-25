@@ -148,14 +148,16 @@ export async function consumeCouponUsageForOrder(order) {
 }
 
 export async function validateCouponPayload({ code, userId, products = [] }) {
-  const requested = products.map((item) => ({ product: item.product || item.id || item._id, quantity: Math.max(1, Number(item.quantity) || 1) })).filter((item) => item.product);
+  const requested = products.map((item) => ({ product: item.product || item.id || item._id, variantId: item.variantId || item.variant, quantity: Math.max(1, Number(item.quantity) || 1) })).filter((item) => item.product && item.variantId);
   if (!requested.length) throw new ApiError("Add products before applying a coupon.", 400);
   const productDocs = await Product.find({ _id: { $in: requested.map((item) => item.product) }, isActive: true });
   const productMap = new Map(productDocs.map((product) => [product._id.toString(), product]));
   const items = requested.map((item) => {
     const product = productMap.get(item.product.toString());
     if (!product) throw new ApiError("One or more products are unavailable.", 400);
-    return { product, quantity: item.quantity, price: product.discountPrice || product.price };
+    const variant = product.variants?.id(item.variantId);
+    if (!variant || !variant.isActive || variant.isArchived) throw new ApiError("One or more product variants are unavailable.", 400);
+    return { product, variant, quantity: item.quantity, price: variant.price };
   });
   const result = await validateCouponForItems({ code, userId, items });
   return { code: result.coupon.code, discountAmount: result.discountAmount, description: result.coupon.description || "", message: "Coupon applied successfully." };

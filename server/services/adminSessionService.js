@@ -1,12 +1,21 @@
 // Admin session service for max-device enforcement and management.
 import crypto from "crypto";
 import AdminSession from "../models/AdminSession.js";
-import User from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { createAdminNotification } from "./adminNotificationService.js";
 
-const MAX_ADMIN_SESSIONS = 3;
+export const MAX_ADMIN_SESSIONS = 5;
 const hash = (value) => crypto.createHash("sha256").update(String(value || "")).digest("hex");
+const limitMessage = "Maximum of 5 active devices reached. Please log out from another device before logging in here.";
+
+export function availableAdminSessionSlots(active = []) {
+  const occupied = new Set(active.map((session) => Number(session.slot)).filter(Boolean));
+  return Array.from({ length: MAX_ADMIN_SESSIONS }, (_, index) => index + 1).filter((slot) => !occupied.has(slot));
+}
+
+export function adminSessionRecordIsActive(session, now = new Date()) {
+  return Boolean(session && session.status === "active" && new Date(session.expiresAt) > now);
+}
 
 function parseDevice(req) {
   const ua = req.get("user-agent") || "Unknown browser";
@@ -30,19 +39,29 @@ function publicSession(session, currentSessionId) {
   };
 }
 
-export async function assertAdminSessionCapacity(req, admin) {
-  if (admin.role !== "admin") return { allowed: true };
-  const active = await AdminSession.find({ admin: admin._id, status: "active", expiresAt: { $gt: new Date() } }).sort({ lastActiveAt: -1 });
-  if (active.length < MAX_ADMIN_SESSIONS) return { allowed: true };
-  const pendingToken = crypto.randomBytes(32).toString("hex");
-  await AdminSession.create({ admin: admin._id, status: "pending", sessionId: crypto.randomUUID(), pendingTokenHash: hash(pendingToken), ...parseDevice(req), expiresAt: new Date(Date.now() + 10 * 60 * 1000) });
-  throw new ApiError("Maximum active admin sessions reached.", 409, [{ code: "ADMIN_SESSION_LIMIT", pendingToken, sessions: active.map((session) => publicSession(session)) }]);
+export async function expireAdminSessions(adminId, now = new Date()) {
+  await AdminSession.updateMany({ admin: adminId, status: "active", expiresAt: { $lte: now } }, { status: "expired", revokeReason: "natural_expiry" });
 }
 
-export async function createAdminSession(req, admin, refreshToken) {
+export async function createAdminSession(req, admin) {
   if (admin.role !== "admin") return null;
-  const session = await AdminSession.create({ admin: admin._id, status: "active", sessionId: crypto.randomUUID(), refreshTokenHash: hash(refreshToken), loginAt: new Date(), lastActiveAt: new Date(), ...parseDevice(req) });
-  await createAdminNotification({ category: "security", type: "admin_login", title: "Admin Login", description: `${admin.email} signed in on ${session.deviceName}.`, related: { kind: "User", id: admin._id, label: admin.email, path: "/admin/settings" } });
+  const now = new Date();
+  await expireAdminSessions(admin._id, now);
+  const active = await AdminSession.find({ admin: admin._id, status: "active" }).select("slot").lean();
+  const availableSlots = availableAdminSessionSlots(active);
+  if (!availableSlots.length) throw new ApiError(limitMessage, 409, [{ code: "ADMIN_SESSION_LIMIT" }]);
+  let session;
+  for (const slot of availableSlots) {
+    try {
+      session = await AdminSession.create({ admin: admin._id, status: "active", slot, sessionId: crypto.randomUUID(), loginAt: now, lastActiveAt: now, ...parseDevice(req) });
+      break;
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+    }
+  }
+  if (!session) throw new ApiError(limitMessage, 409, [{ code: "ADMIN_SESSION_LIMIT" }]);
+  const adminLabel = admin.email || admin.phone || admin.name || "Admin";
+  await createAdminNotification({ category: "security", type: "admin_login", title: "Admin Login", description: `${adminLabel} signed in on ${session.deviceName}.`, related: { kind: "User", id: admin._id, label: adminLabel, path: "/admin/settings" } });
   return session;
 }
 
@@ -61,30 +80,23 @@ export async function revokeAdminSessions(adminId, sessionIds = [], reason = "ma
   return sessions.length;
 }
 
-export async function continuePendingAdminLogin(req, pendingToken, revokeSessionIds = []) {
-  const pending = await AdminSession.findOne({ pendingTokenHash: hash(pendingToken), status: "pending", expiresAt: { $gt: new Date() } }).select("+pendingTokenHash");
-  if (!pending) throw new ApiError("Pending admin login has expired.", 400);
-  if (revokeSessionIds.length) await revokeAdminSessions(pending.admin, revokeSessionIds, "login_device_limit");
-  const activeCount = await AdminSession.countDocuments({ admin: pending.admin, status: "active", expiresAt: { $gt: new Date() } });
-  if (activeCount >= MAX_ADMIN_SESSIONS) {
-    const active = await AdminSession.find({ admin: pending.admin, status: "active" }).sort({ lastActiveAt: -1 });
-    throw new ApiError("Maximum active admin sessions reached.", 409, [{ code: "ADMIN_SESSION_LIMIT", pendingToken, sessions: active.map((session) => publicSession(session)) }]);
-  }
-  pending.status = "active";
-  pending.pendingTokenHash = undefined;
-  pending.loginAt = new Date();
-  pending.lastActiveAt = new Date();
-  pending.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  await pending.save();
-  const admin = await User.findById(pending.admin).select("+refreshToken");
-  return { admin, session: pending };
-}
-
 export async function attachRefreshToken(sessionId, refreshToken) {
   await AdminSession.updateOne({ sessionId }, { refreshTokenHash: hash(refreshToken) });
 }
 
+export async function findAdminSessionByRefresh(adminId, sessionId, refreshToken) {
+  if (!sessionId) return null;
+  const session = await AdminSession.findOne({ admin: adminId, sessionId, status: "active", expiresAt: { $gt: new Date() } }).select("+refreshTokenHash");
+  return session?.refreshTokenHash === hash(refreshToken) ? session : null;
+}
+
+export async function isAdminSessionActive(adminId, sessionId) {
+  if (!sessionId) return false;
+  return Boolean(await AdminSession.exists({ admin: adminId, sessionId, status: "active", expiresAt: { $gt: new Date() } }));
+}
+
 export async function listAdminSessions(adminId, currentSessionId) {
+  await expireAdminSessions(adminId);
   const sessions = await AdminSession.find({ admin: adminId, status: "active", expiresAt: { $gt: new Date() } }).sort({ lastActiveAt: -1 });
   const history = await AdminSession.find({ admin: adminId }).sort({ createdAt: -1 }).limit(10);
   return { max: MAX_ADMIN_SESSIONS, active: sessions.map((session) => publicSession(session, currentSessionId)), history: history.map((session) => ({ ...publicSession(session, currentSessionId), status: session.status, revokedAt: session.revokedAt })) };

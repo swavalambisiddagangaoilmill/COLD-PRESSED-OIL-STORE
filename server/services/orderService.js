@@ -1,22 +1,39 @@
 // Order business logic.
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
+import User from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { createAdminNotification, createInventoryNotifications } from "./adminNotificationService.js";
 import { calculateCheckoutTotals, consumeCouponUsageForOrder, normalizeCouponCode, validateCouponForItems } from "./couponService.js";
+import { sendOrderTrackingMessage } from "./whatsappService.js";
+import { env } from "../config/env.js";
 
 function normalizeOrderProducts(products = []) {
   const merged = new Map();
   products.forEach((item) => {
     const product = item.product?.toString?.() || item.product;
-    if (!product) return;
-    merged.set(product, (merged.get(product) || 0) + Math.max(1, Number(item.quantity) || 1));
+    const variantId = item.variantId?.toString?.() || item.variant?.toString?.() || item.variantId || item.variant;
+    if (!product || !variantId) return;
+    const key = `${product}:${variantId}`;
+    const current = merged.get(key) || { product, variantId, quantity: 0 };
+    current.quantity += Math.max(1, Number(item.quantity) || 1);
+    merged.set(key, current);
   });
-  return [...merged.entries()].map(([product, quantity]) => ({ product, quantity }));
+  return [...merged.values()];
 }
 
 async function rollbackStock(updates) {
-  await Promise.all(updates.map((item) => Product.updateOne({ _id: item.product }, { $inc: { stock: item.quantity } })));
+  await Promise.all(updates.map((item) => Product.updateOne({ _id: item.product, "variants._id": item.variant }, { $inc: { "variants.$.stock": item.quantity } })));
+}
+
+export function buildVariantOrderItem(product, item, paymentMethod = "cod") {
+  const variant = product?.variants?.id ? product.variants.id(item.variantId) : product?.variants?.find((entry) => String(entry._id) === String(item.variantId));
+  if (!variant || !variant.isActive || variant.isArchived) throw new ApiError(`${product?.title || "Product"} variant is unavailable.`, 400);
+  if (variant.stock < item.quantity) throw new ApiError(`${product.title} ${variant.name} does not have enough stock.`, 400);
+  if (paymentMethod === "cod" && product.codEnabled === false) throw new ApiError(`${product.title} is not eligible for Cash on delivery.`, 400);
+  if (paymentMethod !== "cod" && product.onlinePaymentEnabled === false) throw new ApiError(`${product.title} is not eligible for online payment.`, 400);
+  const price = variant.price;
+  return { product: product._id, variant: variant._id, title: product.title, variantName: variant.name, sku: variant.sku, image: variant.images?.[0]?.url, quantity: item.quantity, price, mrp: variant.mrp, total: price * item.quantity };
 }
 
 export async function createOrder(userId, payload) {
@@ -31,22 +48,18 @@ export async function createOrder(userId, payload) {
   const orderItems = requestedItems.map((item) => {
     const product = productMap.get(item.product.toString());
     if (!product) throw new ApiError("One or more products are unavailable.", 400);
-    if (product.stock < item.quantity) throw new ApiError(`${product.title} does not have enough stock.`, 400);
-    if (paymentMethod === "cod" && product.codEnabled === false) throw new ApiError(`${product.title} is not eligible for Cash on delivery.`, 400);
-    if (paymentMethod !== "cod" && product.onlinePaymentEnabled === false) throw new ApiError(`${product.title} is not eligible for online payment.`, 400);
-    const price = product.discountPrice || product.price;
-    return { product: product._id, category: product.category, title: product.title, image: product.images?.[0]?.url, quantity: item.quantity, price };
+    return buildVariantOrderItem(product, item, paymentMethod);
   });
 
   const couponResult = await validateCouponForItems({ code: payload.couponCode, userId, items: orderItems });
   const successfulUpdates = [];
   for (const item of orderItems) {
-    const result = await Product.updateOne({ _id: item.product, stock: { $gte: item.quantity }, isActive: true }, { $inc: { stock: -item.quantity } });
+    const result = await Product.updateOne({ _id: item.product, variants: { $elemMatch: { _id: item.variant, stock: { $gte: item.quantity }, isActive: true, isArchived: { $ne: true } } }, isActive: true }, { $inc: { "variants.$.stock": -item.quantity } });
     if (result.modifiedCount !== 1) {
       await rollbackStock(successfulUpdates);
       throw new ApiError("One or more products do not have enough stock.", 400);
     }
-    successfulUpdates.push({ product: item.product, quantity: item.quantity });
+    successfulUpdates.push({ product: item.product, variant: item.variant, quantity: item.quantity });
   }
 
   try {
@@ -62,6 +75,11 @@ export async function createOrder(userId, payload) {
       createAdminNotification({ category: "orders", type: "new_order", title: "New Order", description: `Order ${order._id} was placed for Rs. ${totals.totalAmount}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } }),
       ...productIds.map((id) => Product.findById(id).then((product) => product && createInventoryNotifications(product))),
     ]);
+    const customer = await User.findById(userId).select("phone").lean();
+    if (customer?.phone) {
+      const summary = orderItems.map((item) => `${item.title} - ${item.variantName} x ${item.quantity}`).join(", ");
+      await Promise.allSettled([sendOrderTrackingMessage(customer.phone, String(order._id), `${env.clientUrl}/track/${order._id}`, summary)]);
+    }
     return order;
   } catch (error) {
     await rollbackStock(successfulUpdates);

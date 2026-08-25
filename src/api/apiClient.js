@@ -1,15 +1,12 @@
 // Wraps HTTP requests so backend details stay out of UI components.
 import { API_BASE_URL } from "../constants/apiConfig.js";
 
-const TOKEN_KEY = "ss_oil_mill_token";
-const REFRESH_KEY = "ss_oil_mill_refresh_token";
-
 function notifyAuthChange() {
   window.dispatchEvent(new Event("ss-oil-mill-auth-change"));
 }
 
 export function getAuthToken() {
-  return localStorage.getItem(TOKEN_KEY);
+  return hasCookieSession ? "cookie-session" : null;
 }
 
 function getCookie(name) {
@@ -17,25 +14,21 @@ function getCookie(name) {
 }
 
 export function setAuthTokens(token, refreshToken) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
+  hasCookieSession = true;
   notifyAuthChange();
 }
 
 export function clearAuthTokens() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+  hasCookieSession = false;
   notifyAuthChange();
 }
 
 export async function apiRequest(endpoint, options = {}) {
-  const token = getAuthToken();
   const hasBody = options.body instanceof FormData;
   const mutating = ["POST", "PUT", "PATCH", "DELETE"].includes((options.method || "GET").toUpperCase());
   const csrfToken = mutating ? getCookie("csrfToken") : "";
   const headers = {
     ...(hasBody ? {} : { "Content-Type": "application/json" }),
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
     ...options.headers,
   };
@@ -63,3 +56,4 @@ export async function apiRequest(endpoint, options = {}) {
 
 
 
+let hasCookieSession = false;

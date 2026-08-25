@@ -4,9 +4,10 @@ import { apiRequest } from "../api/apiClient.js";
 
 function normalizeProduct(product) {
   if (!product) return null;
-  const categoryName = typeof product.category === "object" ? product.category?.name : product.category;
-  const price = product.discountPrice || product.price || 0;
-  const mrp = product.discountPrice ? product.price : product.mrp || product.price;
+  const variants = (product.variants || []).filter((variant) => variant.isActive !== false && !variant.isArchived).map((variant) => ({ ...variant, id: variant._id || variant.id, images: variant.images || [] }));
+  const available = variants.find((variant) => variant.stock > 0) || variants[0];
+  const price = available?.price ?? 0;
+  const mrp = available?.mrp ?? available?.price ?? 0;
   return {
     id: product._id || product.id,
     _id: product._id || product.id,
@@ -16,12 +17,11 @@ function normalizeProduct(product) {
     description: product.description || "",
     price,
     mrp,
-    discountPrice: product.discountPrice,
-    category: categoryName || "Oils",
-    categoryId: typeof product.category === "object" ? product.category?._id : product.category,
-    image: product.image || product.images?.[0]?.url || "",
-    images: product.images?.length ? product.images : [{ url: product.image || "" }],
-    stock: product.stock ?? 0,
+    variants,
+    selectedVariant: available,
+    image: available?.images?.[0]?.url || "",
+    images: available?.images || [],
+    stock: available?.stock ?? 0,
     featured: Boolean(product.featured),
     bestSeller: Boolean(product.bestSeller),
     newArrival: Boolean(product.newArrival),
@@ -32,10 +32,10 @@ function normalizeProduct(product) {
     isActive: product.isActive !== false,
     rating: product.rating || 4.8,
     reviews: product.reviews || 84,
-    volume: product.volume || "1L",
-    tags: product.tags || [categoryName || "Oil"],
+    volume: available?.name || product.volume || "",
+    tags: product.tags || [],
     benefits: product.benefits || ["Cold pressed", "Chemical-free", "Small batch", "Fresh aroma"],
-    specifications: product.specifications || { Volume: product.volume || "1L", Method: "Cold pressed", Category: categoryName || "Oil", Storage: "Cool, dry place" },
+    specifications: product.specifications || { Size: available?.name || "-", Weight: available?.weight ? `${available.weight} kg` : "-", Method: "Cold pressed", Storage: "Cool, dry place" },
   };
 }
 
@@ -73,11 +73,7 @@ export async function getEverydayEssentials() {
 }
 
 export async function getEssentialOilProducts() {
-  const categories = await getCategories().catch(() => []);
-  const essential = categories.find((item) => item.name?.toLowerCase() === "essential oils" || item.slug === "essential-oils");
-  const data = essential
-    ? await getProducts({ limit: 5, category: essential.id, sort: "featured" })
-    : await getProducts({ limit: 5, search: "Essential Oils", sort: "featured" });
+  const data = await getProducts({ limit: 5, search: "Essential Oils", sort: "featured" });
   if (data.products.length >= 5) return data.products.slice(0, 5);
   const fallback = await getProducts({ limit: 5, sort: "featured" }).catch(() => ({ products: [] }));
   return [...data.products, ...fallback.products.filter((item) => !data.products.some((existing) => existing.id === item.id))].slice(0, 5);

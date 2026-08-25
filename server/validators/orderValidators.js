@@ -6,6 +6,7 @@ export const orderIdValidator = [param("id").isMongoId().withMessage("Valid orde
 export const createOrderValidator = [
   body("products").isArray({ min: 1 }).withMessage("At least one product is required."),
   body("products.*.product").isMongoId().withMessage("Valid product id is required."),
+  body("products.*.variantId").isMongoId().withMessage("Valid variant id is required."),
   body("products.*.quantity").isInt({ min: 1 }).withMessage("Quantity must be at least 1."),
   body("shippingAddress.fullName").trim().notEmpty().withMessage("Full name is required."),
   body("shippingAddress.phone").trim().notEmpty().withMessage("Phone is required."),

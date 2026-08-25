@@ -48,7 +48,7 @@ export function CartProvider({ children }) {
     if (!items.length) clearCoupon();
   }, [items.length]);
 
-  const couponProducts = useMemo(() => items.map((item) => ({ product: item._id || item.id, quantity: item.quantity })), [items]);
+  const couponProducts = useMemo(() => items.map((item) => ({ product: item.productId || item._id, variantId: item.variantId, quantity: item.quantity })), [items]);
 
   const validateCoupon = async (code) => {
     const normalizedCode = String(code || "").trim().toUpperCase();
@@ -95,7 +95,7 @@ export function CartProvider({ children }) {
     setItems(nextItems);
     if (!getAuthToken()) return nextItems;
     try {
-      const synced = await addCartItem(product._id || product.id, safeQuantity);
+      const synced = await addCartItem(product.productId || product._id, product.variantId || product.selectedVariant?._id, safeQuantity);
       setItems(synced);
       return synced;
     } catch (error) {
@@ -111,7 +111,8 @@ export function CartProvider({ children }) {
     setItems(nextItems);
     if (!getAuthToken()) return nextItems;
     try {
-      const synced = await updateCartItem(id, safeQuantity);
+      const item = previousItems.find((entry) => entry.id === id);
+      const synced = await updateCartItem(item.productId || item._id, item.variantId, safeQuantity);
       setItems(synced);
       return synced;
     } catch (error) {
@@ -126,7 +127,8 @@ export function CartProvider({ children }) {
       previousItems = current;
       return current.filter((item) => item.id !== id);
     });
-    if (getAuthToken()) removeCartItem(id).then(setItems).catch(() => setItems(previousItems));
+    const item = previousItems.find((entry) => entry.id === id);
+    if (getAuthToken() && item) removeCartItem(item.productId || item._id, item.variantId).then(setItems).catch(() => setItems(previousItems));
   };
 
   const clearCart = () => {

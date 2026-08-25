@@ -1,6 +1,6 @@
 // Admin shell with permission-aware navigation, global search, and profile controls.
 import "../adminTheme.css";
-import { BarChart3, Bell, Boxes, ChevronDown, ClipboardList, Home, Image as ImageIcon, LayoutDashboard, LockKeyhole, Mail, Megaphone, Menu, Package, Percent, Settings, ShieldCheck, Truck, Users, X } from "lucide-react";
+import { BarChart3, Bell, Boxes, ChevronDown, ClipboardList, Image as ImageIcon, LayoutDashboard, LockKeyhole, Mail, Megaphone, Menu, Package, Percent, Settings, ShieldCheck, Truck, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -10,7 +10,7 @@ import AdminNotificationBell from "../components/AdminNotificationBell.jsx";
 const roleModules = {
   OWNER: ["*"],
   ORDER_MANAGER: ["Dashboard", "Orders", "Shipping", "Customers", "Payments", "Reports", "Notifications"],
-  PRODUCT_MANAGER: ["Dashboard", "Products", "Inventory", "Categories", "Reports", "Notifications"],
+  PRODUCT_MANAGER: ["Dashboard", "Products", "Inventory", "Reports", "Notifications"],
   CONTENT_MANAGER: ["Dashboard", "Homepage Carousel", "Gallery", "Messages", "Notifications"],
 };
 
@@ -21,7 +21,6 @@ const navItems = [
   { label: "Orders", to: "/admin/orders", icon: ClipboardList },
   { label: "Products", to: "/admin/products", icon: Package },
   { label: "Inventory", to: "/admin/inventory", icon: Boxes },
-  { label: "Categories", to: "/admin/categories", icon: Home },
   { label: "Offers", to: "/admin/offers", icon: Megaphone, group: "Marketing" },
   { label: "Coupons", to: "/admin/coupons", icon: Percent, group: "Marketing" },
   { label: "Homepage Carousel", to: "/admin/carousel", icon: ImageIcon, group: "Marketing" },
@@ -62,7 +61,7 @@ function AdminSearch() {
     return () => window.clearTimeout(timer);
   }, [q]);
   useEffect(() => { const close = (e) => { if (!ref.current?.contains(e.target)) setResults(null); }; document.addEventListener("mousedown", close); return () => document.removeEventListener("mousedown", close); }, []);
-  const groups = results ? [["Pages", results.pages], ["Products", results.products], ["Orders", results.orders], ["Customers", results.customers], ["Categories", results.categories]].filter(([, items]) => items?.length) : [];
+  const groups = results ? [["Pages", results.pages], ["Products", results.products], ["Orders", results.orders], ["Customers", results.customers]].filter(([, items]) => items?.length) : [];
   const open = (path) => { navigate(path); setQ(""); setResults(null); };
   return <div ref={ref} className="relative hidden md:block"><input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && groups[0]?.[1]?.[0]) open(groups[0][1][0].path || "/admin/products"); }} placeholder="Search admin" className="h-9 w-72 rounded-lg border border-[var(--admin-border)] bg-linen/50 px-3 text-sm outline-none focus:border-[var(--admin-primary)]" />{results && <div className="absolute right-0 mt-2 max-h-96 w-96 overflow-y-auto rounded-xl border border-[var(--admin-border)] bg-white p-2 shadow-soft">{groups.length === 0 && <p className="p-3 text-sm text-ink/55">No results found</p>}{groups.map(([label, items]) => <div key={label} className="mb-2"><p className="px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-ink/40">{label}</p>{items.slice(0, 5).map((item) => <button key={item._id || item.path || item.slug || item.label} onClick={() => open(item.path || (label === "Orders" ? "/admin/orders" : label === "Customers" ? "/admin/customers" : label === "Categories" ? "/admin/categories" : "/admin/products"))} className="block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold hover:bg-linen">{item.label || item.title || item.name || item.shippingAddress?.fullName || item.email || item._id}</button>)}</div>)}</div>}</div>;
 }

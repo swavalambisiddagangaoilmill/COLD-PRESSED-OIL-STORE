@@ -1,0 +1,3 @@
+export default function PhoneField({ value, onChange, autoFocus = false }) {
+  return <label className="grid gap-2 text-sm font-semibold text-ink/70"><span>Mobile number</span><span className="flex h-12 overflow-hidden border border-ink/15 bg-white focus-within:border-leaf focus-within:ring-2 focus-within:ring-leaf/15"><span className="grid place-items-center border-r border-ink/10 bg-linen px-4 font-bold text-ink">+91</span><input aria-label="Mobile number" value={value} onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" autoComplete="tel-national" placeholder="98765 43210" className="min-w-0 flex-1 px-4 text-base outline-none" required autoFocus={autoFocus} /></span></label>;
+}

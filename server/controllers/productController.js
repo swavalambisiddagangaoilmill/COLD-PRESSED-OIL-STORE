@@ -6,7 +6,6 @@ import {
   deleteProduct,
   getFeaturedProducts,
   getProductBySlug,
-  getProductsByCategory,
   getRelatedProducts,
   listProducts,
   updateProduct,
@@ -25,11 +24,6 @@ export const getFeatured = asyncHandler(async (_req, res) => {
 export const getProduct = asyncHandler(async (req, res) => {
   const product = await getProductBySlug(req.params.slug);
   sendSuccess(res, 200, "Product fetched successfully", { product });
-});
-
-export const getCategoryProducts = asyncHandler(async (req, res) => {
-  const data = await getProductsByCategory(req.params.categoryId, req.query);
-  sendSuccess(res, 200, "Category products fetched successfully", data);
 });
 
 export const getRelated = asyncHandler(async (req, res) => {

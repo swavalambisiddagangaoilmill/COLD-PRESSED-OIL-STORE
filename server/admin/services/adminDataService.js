@@ -45,7 +45,7 @@ export async function dashboardData() {
     Order.aggregate([{ $match: validRevenue }, { $group: { _id: null, total: { $sum: "$totalAmount" } } }]),
     Order.countDocuments({ orderStatus: "placed" }),
     Order.countDocuments({ shippingStatus: { $in: ["ready_for_pickup", "awb_assigned", "pickup_generated"] } }),
-    Product.countDocuments({ stock: { $lte: settings.lowStockThreshold }, isArchived: { $ne: true } }),
+    Product.countDocuments({ variants: { $elemMatch: { stock: { $lte: settings.lowStockThreshold }, isActive: true, isArchived: { $ne: true } } }, isArchived: { $ne: true } }),
     User.countDocuments({ role: "user" }),
     Order.countDocuments(),
     Product.countDocuments({ isArchived: { $ne: true } }),
@@ -80,7 +80,7 @@ export async function updateOrderStatus(id, nextStatus) {
   await order.save();
   if (nextStatus === "cancelled" && !order.inventoryRestoredAt) {
     try {
-      await Product.bulkWrite(order.products.map((item) => ({ updateOne: { filter: { _id: item.product }, update: { $inc: { stock: item.quantity } } } })));
+      await Product.bulkWrite(order.products.map((item) => ({ updateOne: { filter: { _id: item.product, "variants._id": item.variant }, update: { $inc: { "variants.$.stock": item.quantity } } } })));
       order.inventoryRestoredAt = new Date();
       await order.save();
       const restoredProducts = await Product.find({ _id: { $in: order.products.map((item) => item.product) } });
@@ -102,45 +102,28 @@ export async function nextMockShipping(id) { return advanceMockShipment(id); }
 export async function listProducts(query) {
   const page = Number(query.page) || 1; const limit = Math.min(Number(query.limit) || 20, 100);
   const filter = { isArchived: { $ne: true } };
-  if (query.category) filter.category = query.category;
   if (query.active) filter.isActive = query.active === "true";
   if (query.featured) filter.featured = query.featured === "true";
-  if (query.stock === "low") filter.stock = { $gt: 0, $lte: 10 };
-  if (query.stock === "out") filter.stock = 0;
+  if (query.stock === "low") filter.variants = { $elemMatch: { stock: { $gt: 0, $lte: 10 }, isActive: true, isArchived: { $ne: true } } };
+  if (query.stock === "out") filter.variants = { $elemMatch: { stock: 0, isActive: true, isArchived: { $ne: true } } };
   if (query.search) filter.$text = { $search: query.search };
-  const [items, total] = await Promise.all([Product.find(filter).populate("category", "name slug").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit), Product.countDocuments(filter)]);
+  const [items, total] = await Promise.all([Product.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit), Product.countDocuments(filter)]);
   return { items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
 }
 
-function skuPart(value, fallback) {
-  const clean = String(value || "").normalize("NFKD").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toUpperCase();
-  return clean || fallback;
-}
-
-async function generateProductSku(data, id) {
-  const category = await Category.findById(data.category).select("name slug").lean();
-  if (!category) throw new ApiError("Select a valid product category.", 400);
-  const weight = Number(data.weight);
-  const base = [skuPart(category.slug || category.name, "CAT").slice(0, 8), skuPart(data.title, "PRODUCT").slice(0, 12), Number.isFinite(weight) && weight > 0 ? skuPart(weight, "UNIT") : "UNIT"].join("-");
-  let sku = base;
-  let suffix = 1;
-  while (await Product.exists({ sku, ...(id ? { _id: { $ne: id } } : {}) })) {
-    suffix += 1;
-    sku = `${base}-${suffix}`;
-  }
-  return sku;
-}
-
 export async function saveProduct(payload, id) {
-  const allowed = ["title", "description", "benefits", "price", "discountPrice", "stock", "category", "images", "featured", "bestSeller", "newArrival", "codEnabled", "onlinePaymentEnabled", "returnEligible", "exchangeEligible", "isActive", "weight", "dimensions"];
+  const allowed = ["title", "description", "benefits", "variants", "featured", "bestSeller", "newArrival", "codEnabled", "onlinePaymentEnabled", "returnEligible", "exchangeEligible", "isActive"];
   const data = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
   if (data.title) data.slug = slugify(data.title);
   const current = id ? await Product.findById(id) : null;
   if (id && !current) throw new ApiError("Product not found.", 404);
-  const skuSource = { title: data.title || current?.title, category: data.category || current?.category, weight: data.weight ?? current?.weight };
-  data.sku = await generateProductSku(skuSource, id);
-  const product = id ? await Product.findByIdAndUpdate(id, data, { new: true, runValidators: true }).populate("category", "name slug") : await Product.create(data);
-  return id ? product : product.populate("category", "name slug");
+  const incomingIds = new Set((data.variants || []).map((variant) => String(variant._id || "")).filter(Boolean));
+  const archived = id ? current.variants.filter((variant) => !incomingIds.has(String(variant._id))).map((variant) => ({ ...variant.toObject(), isActive: false, isArchived: true })) : [];
+  data.variants = [...(data.variants || current?.variants || []).map((variant) => ({ ...variant, discount: Math.max(0, Number(variant.mrp) - Number(variant.price)) })), ...archived];
+  const product = id ? current : new Product();
+  product.set(data);
+  await product.save();
+  return product;
 }
 
 export async function archiveProduct(id) {
@@ -152,60 +135,61 @@ export async function archiveProduct(id) {
 function buildBulkFilter(target) {
   const filter = { isArchived: { $ne: true } };
   if (target.productIds?.length) filter._id = { $in: target.productIds };
-  if (target.category) filter.category = target.category;
   if (target.featured !== undefined) filter.featured = Boolean(target.featured);
   if (target.active !== undefined) filter.isActive = Boolean(target.active);
-  if (target.stockStatus === "low") filter.stock = { $gt: 0, $lte: 10 };
-  if (target.stockStatus === "out") filter.stock = 0;
+  if (target.stockStatus === "low") filter.variants = { $elemMatch: { stock: { $gt: 0, $lte: 10 }, isActive: true, isArchived: { $ne: true } } };
+  if (target.stockStatus === "out") filter.variants = { $elemMatch: { stock: 0, isActive: true, isArchived: { $ne: true } } };
   return filter;
 }
 
-function calculatePrice(product, operation, value) {
+function calculatePrice(variant, operation, value) {
   const amount = Number(value) || 0;
-  if (operation === "increase_percentage") return Math.round(product.price * (1 + amount / 100));
-  if (operation === "decrease_percentage") return Math.max(0, Math.round(product.price * (1 - amount / 100)));
-  if (operation === "increase_fixed") return Math.round(product.price + amount);
-  if (operation === "decrease_fixed") return Math.max(0, Math.round(product.price - amount));
-  return product.price;
+  if (operation === "increase_percentage") return Math.round(variant.price * (1 + amount / 100));
+  if (operation === "decrease_percentage") return Math.max(0.01, Math.round(variant.price * (1 - amount / 100)));
+  if (operation === "increase_fixed") return Math.round(variant.price + amount);
+  if (operation === "decrease_fixed") return Math.max(0.01, Math.round(variant.price - amount));
+  return variant.price;
 }
 
 export async function bulkPricePreview(payload) {
   const products = await Product.find(buildBulkFilter(payload.target || {})).limit(20);
-  return { count: products.length, examples: products.slice(0, 5).map((product) => ({ id: product._id, title: product.title, before: product.price, after: calculatePrice(product, payload.operation, payload.value) })) };
+  return { count: products.length, examples: products.slice(0, 5).map((product) => { const variant = product.variants.find((item) => item.isActive && !item.isArchived); return { id: product._id, title: `${product.title} · ${variant?.name || "-"}`, before: variant?.price || 0, after: variant ? calculatePrice(variant, payload.operation, payload.value) : 0 }; }) };
 }
 
 export async function bulkPriceApply(payload) {
   const products = await Product.find(buildBulkFilter(payload.target || {}));
   await Promise.all(products.map((product) => {
     const value = Number(payload.value) || 0;
-    if (payload.operation === "set_exact_price") product.price = Math.max(0, Math.round(value));
-    else if (payload.operation === "set_discount_percentage") product.discountPrice = Math.max(0, Math.round(product.price * (1 - value / 100)));
-    else if (payload.operation === "set_exact_discount") product.discountPrice = Math.max(0, Math.round(value));
-    else if (payload.operation === "remove_discount") product.discountPrice = undefined;
-    else if (payload.operation === "add_stock") product.stock += Math.max(0, Math.trunc(value));
-    else if (payload.operation === "reduce_stock") product.stock = Math.max(0, product.stock - Math.max(0, Math.trunc(value)));
-    else if (payload.operation === "set_stock") product.stock = Math.max(0, Math.trunc(value));
+    const variants = product.variants.filter((variant) => variant.isActive && !variant.isArchived);
+    if (payload.operation === "set_exact_price") variants.forEach((variant) => { variant.price = Math.max(0.01, value); });
+    else if (payload.operation === "set_discount_percentage") variants.forEach((variant) => { variant.price = Math.max(0.01, variant.mrp * (1 - value / 100)); });
+    else if (payload.operation === "set_exact_discount") variants.forEach((variant) => { variant.price = Math.max(0.01, value); });
+    else if (payload.operation === "remove_discount") variants.forEach((variant) => { variant.price = variant.mrp; });
+    else if (payload.operation === "add_stock") variants.forEach((variant) => { variant.stock += Math.max(0, Math.trunc(value)); });
+    else if (payload.operation === "reduce_stock") variants.forEach((variant) => { variant.stock = Math.max(0, variant.stock - Math.max(0, Math.trunc(value))); });
+    else if (payload.operation === "set_stock") variants.forEach((variant) => { variant.stock = Math.max(0, Math.trunc(value)); });
     else if (payload.operation === "activate") product.isActive = true;
     else if (payload.operation === "deactivate") product.isActive = false;
     else if (payload.operation === "archive") { product.isArchived = true; product.isActive = false; }
     else if (payload.operation === "mark_featured") product.featured = true;
     else if (payload.operation === "remove_featured") product.featured = false;
-    else if (payload.operation === "move_category" && payload.category) product.category = payload.category;
-    else if (payload.operation === "set_weight") product.weight = Math.max(0, value);
-    else if (payload.operation === "set_dimensions") product.dimensions = { length: Number(payload.length) || 0, width: Number(payload.width) || 0, height: Number(payload.height) || 0 };
-    else product.price = calculatePrice(product, payload.operation, value);
+    else if (payload.operation === "set_weight") variants.forEach((variant) => { variant.weight = Math.max(0, value); });
+    else if (payload.operation === "set_dimensions") variants.forEach((variant) => { variant.dimensions = { length: Number(payload.length) || 0, width: Number(payload.width) || 0, height: Number(payload.height) || 0 }; });
+    else variants.forEach((variant) => { variant.price = calculatePrice(variant, payload.operation, value); });
     return product.save();
   }));
   return { updated: products.length };
 }
 
-export async function updateInventory(id, { mode, quantity }) {
+export async function updateInventory(id, { mode, quantity, variantId }) {
   const product = await Product.findById(id);
   if (!product) throw new ApiError("Product not found.", 404);
+  const variant = variantId ? product.variants?.id(variantId) : product.variants?.find((item) => item.isActive && !item.isArchived);
+  if (!variant || variant.isArchived) throw new ApiError("Product variant not found.", 404);
   const qty = Number(quantity);
   if (!Number.isInteger(qty) || qty < 0) throw new ApiError("Quantity must be a whole number of zero or more.", 400);
-  if (mode === "reduce" && qty > product.stock) throw new ApiError("Quantity cannot reduce stock below zero.", 400);
-  product.stock = mode === "set" ? qty : mode === "reduce" ? Math.max(0, product.stock - qty) : product.stock + qty;
+  if (mode === "reduce" && qty > variant.stock) throw new ApiError("Quantity cannot reduce stock below zero.", 400);
+  variant.stock = mode === "set" ? qty : mode === "reduce" ? Math.max(0, variant.stock - qty) : variant.stock + qty;
   await product.save();
   return product;
 }
@@ -284,7 +268,7 @@ export async function listPayments(query) {
 
 export async function reports(type = "sales") {
   const start = new Date(Date.now() - 30 * 86400000);
-  if (type === "products") return Product.find().populate("category", "name").sort({ stock: 1 }).limit(50);
+  if (type === "products") return Product.find().sort({ "variants.stock": 1 }).limit(50);
   return Order.aggregate([{ $match: { createdAt: { $gte: start } } }, { $group: { _id: "$paymentStatus", orders: { $sum: 1 }, total: { $sum: "$totalAmount" } } }]);
 }
 

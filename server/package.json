@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "ss-oil-mill-ecommerce-backend",
   "version": "1.0.0",
   "description": "Production-ready Express and MongoDB backend for Swavalambi Siddaganga Oil Mill e-commerce.",
@@ -10,10 +10,10 @@
     "test": "node --test tests",
     "seed": "node seed/seed.js",
     "reset": "node seed/seed.js --reset",
-    "create-owner": "node scripts/create-owner.js"
+    "create-owner": "node scripts/create-owner.js",
+    "migrate:phone-auth": "node scripts/migrate-users-to-phone-auth.js"
   },
   "dependencies": {
-    "bcrypt": "^6.0.0",
     "cloudinary": "^2.5.1",
     "compression": "^1.7.5",
     "cookie-parser": "^1.4.7",
@@ -32,4 +32,3 @@
     "nodemon": "^3.1.9"
   }
 }
-

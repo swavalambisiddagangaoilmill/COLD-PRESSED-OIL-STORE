@@ -1,5 +1,4 @@
 // Product catalog business logic.
-import mongoose from "mongoose";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
 import { slugify } from "../utils/slugify.js";
@@ -14,12 +13,11 @@ function escapeRegex(value) {
 
 function buildBaseMatch(query) {
   const filter = { isActive: true };
-  if (query.category && mongoose.Types.ObjectId.isValid(query.category)) filter.category = new mongoose.Types.ObjectId(query.category);
   if (query.featured) filter.featured = query.featured === "true";
   if (query.minPrice || query.maxPrice) {
-    filter.price = {};
-    if (query.minPrice) filter.price.$gte = Number(query.minPrice);
-    if (query.maxPrice) filter.price.$lte = Number(query.maxPrice);
+    filter.variants = { $elemMatch: { isActive: true, isArchived: { $ne: true }, price: {} } };
+    if (query.minPrice) filter.variants.$elemMatch.price.$gte = Number(query.minPrice);
+    if (query.maxPrice) filter.variants.$elemMatch.price.$lte = Number(query.maxPrice);
   }
   return filter;
 }
@@ -35,10 +33,8 @@ function buildKeywordMatch(search) {
           { title: regex },
           { description: regex },
           { tags: regex },
-          { sku: regex },
+          { "variants.name": regex }, { "variants.sku": regex },
           { slug: regex },
-          { "categoryDoc.name": regex },
-          { "categoryDoc.slug": regex },
         ],
       };
     }),
@@ -60,7 +56,6 @@ function buildSearchRank(search) {
       regexScore("$title", exact, 100),
       regexScore("$title", prefix, 80),
       regexScore("$title", contains, 60),
-      regexScore("$categoryDoc.name", contains, 45),
       {
         $cond: [
           {
@@ -77,7 +72,6 @@ function buildSearchRank(search) {
         ],
       },
       regexScore("$description", contains, 20),
-      regexScore("$sku", contains, 10),
       regexScore("$slug", contains, 10),
     ],
   };
@@ -86,8 +80,8 @@ function buildSearchRank(search) {
 function buildSort(sort = "newest") {
   const sortMap = {
     newest: { createdAt: -1 },
-    priceAsc: { price: 1 },
-    priceDesc: { price: -1 },
+    priceAsc: { minimumVariantPrice: 1 },
+    priceDesc: { minimumVariantPrice: -1 },
     featured: { featured: -1, createdAt: -1 },
   };
   return sortMap[sort] || sortMap.newest;
@@ -100,15 +94,13 @@ export async function listProducts(query) {
   const search = normalizeSearch(query.search);
   const pipeline = [
     { $match: buildBaseMatch(query) },
-    { $lookup: { from: "categories", localField: "category", foreignField: "_id", as: "categoryDoc" } },
-    { $unwind: { path: "$categoryDoc", preserveNullAndEmptyArrays: true } },
+    { $addFields: { minimumVariantPrice: { $min: { $map: { input: { $filter: { input: "$variants", as: "variant", cond: { $and: ["$$variant.isActive", { $ne: ["$$variant.isArchived", true] }] } } }, as: "variant", in: "$$variant.price" } } } } },
   ];
   const keywordMatch = buildKeywordMatch(search);
   if (keywordMatch) pipeline.push({ $match: keywordMatch }, { $addFields: { searchRank: buildSearchRank(search) } });
   const itemPipeline = [
     ...(includeAll ? [] : [{ $skip: (page - 1) * limit }, { $limit: limit }]),
-    { $addFields: { category: { _id: "$categoryDoc._id", name: "$categoryDoc.name", slug: "$categoryDoc.slug" } } },
-    { $project: { categoryDoc: 0, searchRank: 0 } },
+    { $project: { searchRank: 0, minimumVariantPrice: 0 } },
   ];
   pipeline.push(
     { $sort: keywordMatch ? { searchRank: -1, ...buildSort(query.sort) } : buildSort(query.sort) },
@@ -126,43 +118,42 @@ export async function listProducts(query) {
 }
 
 export async function getFeaturedProducts() {
-  return Product.find({ featured: true, isActive: true }).populate("category", "name slug").sort({ createdAt: -1 }).limit(12);
+  return Product.find({ featured: true, isActive: true }).sort({ createdAt: -1 }).limit(12);
 }
 
 export async function getProductBySlug(slug) {
-  const product = await Product.findOne({ slug, isActive: true }).populate("category", "name slug");
+  const product = await Product.findOne({ slug, isActive: true });
   if (!product) throw new ApiError("Product not found.", 404);
   return product;
 }
 
 export async function getProductsByCategory(categoryId, query) {
-  return listProducts({ ...query, category: categoryId });
+  return listProducts(query);
 }
 
 export async function getRelatedProducts(productId, limit = 6) {
   const current = await Product.findById(productId);
   if (!current) throw new ApiError("Product not found.", 404);
   const safeLimit = Math.min(Math.max(Number(limit) || 6, 4), 8);
-  const sameCategory = await Product.find({ _id: { $ne: current._id }, category: current.category, isActive: true })
-    .populate("category", "name slug")
-    .limit(safeLimit);
-  if (sameCategory.length >= safeLimit) return sameCategory;
-  const fallback = await Product.find({ _id: { $ne: current._id }, category: { $ne: current.category }, isActive: true })
-    .populate("category", "name slug")
-    .limit(safeLimit - sameCategory.length);
-  return [...sameCategory, ...fallback];
+  return Product.find({ _id: { $ne: current._id }, isActive: true }).limit(safeLimit);
 }
 
 export async function createProduct(payload) {
   const slug = payload.slug || slugify(payload.title);
-  return Product.create({ ...payload, slug });
+  const variants = (payload.variants || []).map((variant) => ({ ...variant, discount: Math.max(0, Number(variant.mrp) - Number(variant.price)) }));
+  return Product.create({ ...payload, variants, slug });
 }
 
 export async function updateProduct(id, payload) {
-  const updates = payload.title && !payload.slug ? { ...payload, slug: slugify(payload.title) } : payload;
-  const product = await Product.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
-  if (!product) throw new ApiError("Product not found.", 404);
-  return product;
+  const current = await Product.findById(id);
+  if (!current) throw new ApiError("Product not found.", 404);
+  const incomingIds = new Set((payload.variants || []).map((variant) => String(variant._id || "")).filter(Boolean));
+  const archived = payload.variants ? current.variants.filter((variant) => !incomingIds.has(String(variant._id))).map((variant) => ({ ...variant.toObject(), isActive: false, isArchived: true })) : [];
+  const normalized = payload.variants ? { ...payload, variants: [...payload.variants.map((variant) => ({ ...variant, discount: Math.max(0, Number(variant.mrp) - Number(variant.price)) })), ...archived] } : payload;
+  const updates = normalized.title && !normalized.slug ? { ...normalized, slug: slugify(normalized.title) } : normalized;
+  current.set(updates);
+  await current.save();
+  return current;
 }
 
 export async function deleteProduct(id) {

@@ -69,12 +69,12 @@ function normalizeItems(order) {
   return (order.items || order.products || []).map((item) => {
     const product = item.product && typeof item.product === "object" ? item.product : item;
     const name = item.name || item.title || product.name || product.title || "Product";
-    const variant = item.variant || item.volume || product.volume || item.weight || "-";
+    const variant = item.variantName || item.variant?.name || item.variant || item.volume || product.volume || item.weight || "-";
     const quantity = Number(item.quantity || 1);
     const unitPrice = Number(item.price || item.unitPrice || product.discountPrice || product.price || 0);
     const listPrice = Number(item.originalPrice || item.listPrice || product.originalPrice || unitPrice);
     const discount = Math.max(0, listPrice - unitPrice);
-    return { name, variant, quantity, unitPrice, listPrice, discount, total: unitPrice * quantity };
+    return { name, variant, sku: item.sku || item.variant?.sku || "", quantity, unitPrice, listPrice, discount, total: unitPrice * quantity };
   });
 }
 
@@ -199,7 +199,7 @@ function buildContent(order, hasLogo, pageInfo = { page: 1, pages: 1, last: true
 
   let y = tableTop - 39;
   items.forEach((item) => {
-    const name = wrapText(`${item.name}${item.variant && item.variant !== "-" ? ` (${item.variant})` : ""}`, 38)[0];
+    const name = wrapText(`${item.name}${item.variant && item.variant !== "-" ? ` (${item.variant})` : ""}${item.sku ? ` SKU: ${item.sku}` : ""}`, 38)[0];
     text(name, col.product, y, bodyFont, "F1");
     text(String(item.quantity), col.qty + 8, y, bodyFont, "F1");
     rightText(money(item.listPrice), col.list, y, bodyFont, "F1");

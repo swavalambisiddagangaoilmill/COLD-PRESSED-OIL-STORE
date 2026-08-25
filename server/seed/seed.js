@@ -6,6 +6,7 @@ import ContactMessage from "../models/ContactMessage.js";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import User from "../models/User.js";
+import AdminSession from "../models/AdminSession.js";
 import { slugify } from "../utils/slugify.js";
 
 if (process.env.NODE_ENV === "production") {
@@ -50,7 +51,7 @@ const address = {
 };
 
 async function ensureUser(payload) {
-  const existing = await User.findOne({ email: payload.email });
+  const existing = await User.findOne({ phone: payload.phone });
   if (existing) return { doc: existing, created: false };
   const doc = await User.create(payload);
   return { doc, created: true };
@@ -64,24 +65,19 @@ async function ensureCategory(seed, index) {
   return { doc, created: true };
 }
 
-async function ensureProduct(seed, categories, index) {
+async function ensureProduct(seed, _categories, index) {
   const slug = slugify(seed.title);
   const existing = await Product.findOne({ slug });
   if (existing) return { doc: existing, created: false };
-  const category = categories.find((item) => item.name === seed.category);
+  const variantName = seed.title.match(/(\d+(?:\.\d+)?\s*(?:ml|l))/i)?.[1]?.replace(/\s+/g, "") || "Default";
+  const sku = `SSOIL-${String(index + 1).padStart(3, "0")}`;
+  const image = { url: imageUrls[index % imageUrls.length], publicId: null };
   const doc = await Product.create({
     title: seed.title,
     slug,
     description: `${seed.title} is made in small batches using traditional cold-press methods for natural aroma and everyday cooking quality.`,
-    sku: `SSOIL-${String(index + 1).padStart(3, "0")}`,
     tags: seed.tags,
-    price: seed.price,
-    discountPrice: seed.discountPrice,
-    stock: seed.stock,
-    weight: seed.title.includes("5L") ? 5 : seed.title.includes("2L") ? 2 : seed.title.includes("250ml") ? 0.25 : seed.title.includes("500ml") ? 0.5 : 1,
-    dimensions: { length: 10, width: 10, height: 24 },
-    category: category._id,
-    images: [{ url: imageUrls[index % imageUrls.length], publicId: null }],
+    variants: [{ name: variantName, sku, price: seed.discountPrice || seed.price, mrp: seed.price, discount: seed.discountPrice ? seed.price - seed.discountPrice : 0, stock: seed.stock, weight: seed.title.includes("5L") ? 5 : seed.title.includes("2L") ? 2 : seed.title.includes("250ml") ? 0.25 : seed.title.includes("500ml") ? 0.5 : 1, dimensions: { length: 10, width: 10, height: 24 }, images: [image], isActive: true }],
     featured: seed.featured,
     bestSeller: seed.bestSeller,
     newArrival: index > 6,
@@ -108,8 +104,8 @@ async function seed() {
   await connectDB();
 
   if (resetOnly) {
-    await Promise.all([User.deleteMany(), Category.deleteMany(), Product.deleteMany(), Order.deleteMany(), ContactMessage.deleteMany()]);
-    console.log("Database reset complete.");
+    await Promise.all([User.deleteMany(), AdminSession.deleteMany(), Product.deleteMany(), Order.deleteMany()]);
+    console.log("Product, user, admin-session, and order database reset complete. Gallery, categories, contact messages, and uploaded files were preserved.");
     await mongoose.disconnect();
     return;
   }
@@ -120,9 +116,9 @@ async function seed() {
   let ordersCreated = 0;
   let contactsCreated = 0;
 
-  const adminResult = await ensureUser({ name: "Development Admin", email: "admin@ssoilmill.com", password: "Admin@123", role: "admin", adminRole: "OWNER", emailVerified: true });
-  const user1Result = await ensureUser({ name: "Demo User One", email: "user1@example.com", password: "User@123", phone: "9876543210", role: "user", emailVerified: true, addresses: [{ ...address, label: "Home", isDefault: true }] });
-  const user2Result = await ensureUser({ name: "Demo User Two", email: "user2@example.com", password: "User@123", phone: "9876543211", role: "user", emailVerified: true, addresses: [{ ...address, fullName: "Demo User Two", label: "Home", isDefault: true }] });
+  const adminResult = await ensureUser({ name: "Development Admin", phone: "+919876543212", phoneVerified: true, role: "admin", adminRole: "OWNER" });
+  const user1Result = await ensureUser({ name: "Demo User One", phone: "+919876543210", phoneVerified: true, role: "user", addresses: [{ ...address, label: "Home", isDefault: true }] });
+  const user2Result = await ensureUser({ name: "Demo User Two", phone: "+919876543211", phoneVerified: true, role: "user", addresses: [{ ...address, fullName: "Demo User Two", label: "Home", isDefault: true }] });
   usersCreated += [adminResult, user1Result, user2Result].filter((item) => item.created).length;
 
   const categoryResults = [];
@@ -136,34 +132,34 @@ async function seed() {
   const products = productResults.map((item) => item.doc);
 
   user1Result.doc.wishlist = [products[0]._id, products[3]._id, products[6]._id];
-  user1Result.doc.cart = [{ product: products[0]._id, quantity: 1 }, { product: products[7]._id, quantity: 2 }];
+  user1Result.doc.cart = [{ product: products[0]._id, variant: products[0].variants[0]._id, quantity: 1 }, { product: products[7]._id, variant: products[7].variants[0]._id, quantity: 2 }];
   await user1Result.doc.save();
   user2Result.doc.wishlist = [products[2]._id, products[4]._id];
-  user2Result.doc.cart = [{ product: products[4]._id, quantity: 1 }];
+  user2Result.doc.cart = [{ product: products[4]._id, variant: products[4].variants[0]._id, quantity: 1 }];
   await user2Result.doc.save();
 
   const orderSeeds = [
     {
       user: user1Result.doc._id,
       products: [
-        { product: products[0]._id, title: products[0].title, image: products[0].images[0].url, quantity: 1, price: products[0].discountPrice },
-        { product: products[6]._id, title: products[6].title, image: products[6].images[0].url, quantity: 1, price: products[6].discountPrice },
+        { product: products[0]._id, variant: products[0].variants[0]._id, variantName: products[0].variants[0].name, sku: products[0].variants[0].sku, title: products[0].title, image: products[0].variants[0].images[0].url, quantity: 1, price: products[0].variants[0].price, mrp: products[0].variants[0].mrp, total: products[0].variants[0].price },
+        { product: products[6]._id, variant: products[6].variants[0]._id, variantName: products[6].variants[0].name, sku: products[6].variants[0].sku, title: products[6].title, image: products[6].variants[0].images[0].url, quantity: 1, price: products[6].variants[0].price, mrp: products[6].variants[0].mrp, total: products[6].variants[0].price },
       ],
       shippingAddress: address,
       paymentMethod: "cod",
       paymentStatus: "pending",
       orderStatus: "placed",
-      totalAmount: products[0].discountPrice + products[6].discountPrice,
+      totalAmount: products[0].variants[0].price + products[6].variants[0].price,
       couponCode: "DEMOORDER1",
     },
     {
       user: user2Result.doc._id,
-      products: [{ product: products[4]._id, title: products[4].title, image: products[4].images[0].url, quantity: 2, price: products[4].discountPrice }],
+      products: [{ product: products[4]._id, variant: products[4].variants[0]._id, variantName: products[4].variants[0].name, sku: products[4].variants[0].sku, title: products[4].title, image: products[4].variants[0].images[0].url, quantity: 2, price: products[4].variants[0].price, mrp: products[4].variants[0].mrp, total: products[4].variants[0].price * 2 }],
       shippingAddress: { ...address, fullName: "Demo User Two" },
       paymentMethod: "razorpay",
       paymentStatus: "paid",
       orderStatus: "confirmed",
-      totalAmount: products[4].discountPrice * 2,
+      totalAmount: products[4].variants[0].price * 2,
       couponCode: "DEMOORDER2",
       razorpayOrderId: "order_demo_seed_002",
       razorpayPaymentId: "pay_demo_seed_002",
@@ -179,8 +175,7 @@ async function seed() {
   for (const seedItem of contactSeeds) contactsCreated += (await ensureContact(seedItem)).created ? 1 : 0;
 
   console.log(`Seed complete. Categories created: ${categoriesCreated}. Products created: ${productsCreated}. Users created: ${usersCreated}. Orders created: ${ordersCreated}. Contact messages created: ${contactsCreated}.`);
-  console.log("Admin: admin@ssoilmill.com / Admin@123");
-  console.log("Users: user1@example.com / User@123, user2@example.com / User@123");
+  console.log("Mock OTP login phones: admin +919876543212; users +919876543210 and +919876543211");
   await mongoose.disconnect();
 }
 

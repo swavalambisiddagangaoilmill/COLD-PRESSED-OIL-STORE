@@ -4,10 +4,10 @@ import mongoose from "mongoose";
 const adminSessionSchema = new mongoose.Schema(
   {
     admin: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    status: { type: String, enum: ["pending", "active", "revoked"], default: "pending", index: true },
+    status: { type: String, enum: ["active", "revoked", "expired"], default: "active", index: true },
     sessionId: { type: String, required: true, unique: true },
-    pendingTokenHash: { type: String, select: false },
     refreshTokenHash: { type: String, select: false },
+    slot: { type: Number, min: 1, max: 5 },
     deviceName: { type: String, trim: true },
     browser: { type: String, trim: true },
     os: { type: String, trim: true },
@@ -24,5 +24,6 @@ const adminSessionSchema = new mongoose.Schema(
 );
 
 adminSessionSchema.index({ admin: 1, status: 1, lastActiveAt: -1 });
+adminSessionSchema.index({ admin: 1, slot: 1 }, { unique: true, partialFilterExpression: { status: "active" }, name: "unique_active_admin_session_slot" });
 
 export default mongoose.model("AdminSession", adminSessionSchema);

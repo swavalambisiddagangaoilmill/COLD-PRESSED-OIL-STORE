@@ -33,7 +33,15 @@ npm run dev
 
 All endpoints are mounted under `/api`.
 
-- Auth: `/api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/profile`
+- Auth: `/api/auth/otp/request`, `/api/auth/otp/verify`, `/api/auth/logout`, `/api/auth/refresh`, `/api/auth/profile`
+
+## WhatsApp OTP authentication
+
+Customer and admin browser authentication uses Indian mobile numbers and WhatsApp OTP only. OTPs expire after five minutes, are stored as hashes in the `otpverifications` collection, allow five verification attempts, and cannot be replayed. Authenticated sessions are delivered through HttpOnly cookies; browser JavaScript does not store bearer or refresh tokens.
+
+Use `WHATSAPP_MODE=mock` only for local development. Live mode requires the Meta WhatsApp Cloud API token, phone-number ID, business-account ID, API version, and approved authentication and order-tracking templates listed in `.env.example`. Invoices remain website-only downloads and are never sent through WhatsApp.
+
+Before deploying over existing customer data, back up MongoDB and run `npm run migrate:phone-auth` from this directory. The script preserves `_id`, carts, wishlists, addresses, and order relationships, normalizes usable Indian numbers, removes obsolete credential fields only for successfully mapped users, and exits with code 2 when manual phone resolution or duplicate-number conflicts remain.
 - Products: `/api/products`, `/api/products/featured`, `/api/products/:slug`
 - Categories: `/api/categories`
 - Wishlist: `/api/wishlist`

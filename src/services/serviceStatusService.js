@@ -6,7 +6,7 @@ const fallback = {
   services: {
     razorpay: { status: "offline", available: false, message: "Online payments are temporarily unavailable." },
     resend: { status: "offline", available: false, message: "Email notifications are temporarily unavailable." },
-    googleOAuth: { status: "offline", available: false, message: "Google sign-in is temporarily unavailable." },
+    whatsapp: { status: "offline", available: false, message: "WhatsApp messaging is temporarily unavailable." },
     cloudinary: { status: "offline", available: false, message: "Image uploads are temporarily unavailable." },
     shiprocket: { status: "offline", available: false, message: "Shipping integration is temporarily unavailable." },
     ai: { status: "offline", available: false, message: "AI assistant is temporarily unavailable." },

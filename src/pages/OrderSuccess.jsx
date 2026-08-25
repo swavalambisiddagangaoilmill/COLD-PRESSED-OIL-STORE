@@ -50,7 +50,7 @@ export default function OrderSuccess() {
                       <img src={image} alt={name} className="h-20 w-20 rounded-xl object-cover" />
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold">{name}</p>
-                        <p className="text-sm text-ink/55">Qty {item.quantity}{item.volume ? ` - ${item.volume}` : ""}</p>
+                        <p className="text-sm text-ink/55">{item.variantName || item.volume || "Variant"} · Qty {item.quantity}{item.sku ? ` · SKU ${item.sku}` : ""}</p>
                         <p className="mt-1 font-bold">{formatCurrency(Number(item.price || 0) * Number(item.quantity || 1))}</p>
                       </div>
                     </div>;
@@ -122,11 +122,11 @@ export default function OrderSuccess() {
                   const id = item.id || item.product || name;
                   const quantity = Number(item.quantity || 1);
                   const price = Number(item.price || 0);
-                  const listPrice = Number(item.originalPrice || item.listPrice || price);
+                  const listPrice = Number(item.mrp || item.originalPrice || item.listPrice || price);
                   const itemDiscount = Math.max(0, listPrice - price);
                   return (
                     <tr key={id} className="border-b border-ink/10">
-                      <td className="py-3 font-semibold">{name}{item.volume ? ` (${item.volume})` : ""}</td>
+                      <td className="py-3 font-semibold">{name} ({item.variantName || item.volume || "Variant"}){item.sku ? <span className="block text-xs font-normal text-ink/50">SKU: {item.sku}</span> : null}</td>
                       <td className="py-3 text-center">{quantity}</td>
                       <td className="py-3 text-right">{formatCurrency(listPrice)}</td>
                       <td className="py-3 text-right">{itemDiscount > 0 ? formatCurrency(itemDiscount) : "-"}</td>

@@ -1,10 +1,8 @@
 ﻿// Product route registration.
 import { Router } from "express";
-import { param } from "express-validator";
 import {
   createProductHandler,
   deleteProductHandler,
-  getCategoryProducts,
   getFeatured,
   getProduct,
   getProducts,
@@ -17,11 +15,8 @@ import { validate } from "../middleware/validate.js";
 import { productIdValidator, productQueryValidator, productSlugValidator, productUpdateValidator, productValidator } from "../validators/productValidators.js";
 
 const router = Router();
-const categoryParamValidator = [param("categoryId").isMongoId().withMessage("Valid category id is required.")];
-
 router.get("/", productQueryValidator, validate, getProducts);
 router.get("/featured", getFeatured);
-router.get("/category/:categoryId", categoryParamValidator, productQueryValidator, validate, getCategoryProducts);
 router.get("/:id/related", productIdValidator, validate, getRelated);
 router.get("/:slug", productSlugValidator, validate, getProduct);
 router.post("/", protect, adminOnly, productValidator, validate, createProductHandler);

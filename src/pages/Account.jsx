@@ -4,14 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Breadcrumb from "../components/common/Breadcrumb.jsx";
 import SafeImage from "../components/common/SafeImage.jsx";
-import AccountSecurityPanel from "../components/features/account/AccountSecurityPanel.jsx";
+import AccountSecurityPanel from "../components/features/account/AccountSecurityOtpPanel.jsx";
 import AddToCartButton from "../components/features/product/AddToCartButton.jsx";
 import WishlistToggle from "../components/features/product/WishlistToggle.jsx";
 import Button from "../components/ui/Button.jsx";
 import Container from "../components/ui/Container.jsx";
 import Input from "../components/ui/Input.jsx";
 import { useWishlist } from "../context/WishlistContext.jsx";
-import { addAccountAddress, changeAccountPassword, deleteAccountAddress, fetchAccountProfile, updateAccountAddress, updateAccountProfile } from "../services/accountService.js";
+import { addAccountAddress, deleteAccountAddress, fetchAccountProfile, updateAccountAddress, updateAccountProfile } from "../services/accountService.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { fetchMyOrders } from "../services/orderService.js";
 import { formatCurrency } from "../utils/formatCurrency.js";
@@ -58,7 +58,7 @@ function initials(name = "User") {
 }
 
 function normalizeOrderProduct(item) {
-  return { id: item.product?._id || item.product || item.title, name: item.title, image: item.image || item.product?.images?.[0]?.url || "", price: item.price, quantity: item.quantity };
+  return { id: `${item.product?._id || item.product || item.title}:${item.variant || item.variantName || "variant"}`, name: item.title, variantName: item.variantName, sku: item.sku, image: item.image || "", price: item.price, quantity: item.quantity };
 }
 
 function formatDate(value) {
@@ -223,31 +223,6 @@ export default function Account() {
     }
   };
 
-  const handlePasswordChange = async (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const password = form.get("password");
-    if (password !== form.get("confirmPassword")) {
-      setError("New password and confirm password must match.");
-      return;
-    }
-    if (String(password).length < 6) {
-      setError("New password must be at least 6 characters.");
-      return;
-    }
-    setSaving(true);
-    setError("");
-    try {
-      await changeAccountPassword({ currentPassword: form.get("currentPassword"), password });
-      await logout();
-      navigate("/login", { replace: true, state: { from: "/account" } });
-    } catch (err) {
-      setError(err.message || "Unable to change password.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleLogout = useCallback(async ({ skipConfirm = false } = {}) => {
     if (!skipConfirm && !window.confirm("Are you sure you want to log out?")) return;
     await logout();
@@ -309,7 +284,7 @@ export default function Account() {
                 <h2 className="mt-2 font-serif text-4xl font-semibold">Administrator</h2>
                 <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-2xl bg-cream p-4"><p className="text-ink/45">Role</p><p className="mt-1 font-bold">{user.adminRole || "OWNER"}</p></div>
-                  <div className="rounded-2xl bg-cream p-4"><p className="text-ink/45">Admin Email</p><p className="mt-1 break-all font-bold">{user.email}</p></div>
+                  <div className="rounded-2xl bg-cream p-4"><p className="text-ink/45">Verified mobile</p><p className="mt-1 break-all font-bold">{user.phone}</p></div>
                   <div className="rounded-2xl bg-cream p-4"><p className="text-ink/45">Last Login</p><p className="mt-1 font-bold">{user.lastLogin ? formatDate(user.lastLogin) : "Not available"}</p></div>
                   <div className="rounded-2xl bg-cream p-4"><p className="text-ink/45">Account Status</p><p className="mt-1 font-bold text-leaf">Active</p></div>
                 </div>
@@ -354,14 +329,13 @@ export default function Account() {
                   <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_0.8fr]">
                     <form onSubmit={handleProfileSave} className="grid gap-5">
                       <Input label="Name" name="name" defaultValue={user.name || ""} required />
-                      <Input label="Email" name="email" value={user.email || ""} disabled />
-                      <Input label="Phone number" name="phone" defaultValue={user.phone || ""} />
+                      <Input label="Verified mobile number" name="phone" value={user.phone || ""} disabled />
                       <Button type="submit" loading={saving} className="w-full sm:w-max">Save Profile</Button>
                     </form>
                     <div className="rounded-2xl bg-cream p-5">
                       <div className="grid h-16 w-16 place-items-center rounded-full bg-white font-serif text-2xl font-semibold text-leaf shadow-sm">{initials(user.name)}</div>
                       <p className="mt-4 font-semibold">{user.name}</p>
-                      <p className="mt-1 text-sm text-ink/55">{user.email}</p>
+                      <p className="mt-1 text-sm text-ink/55">{user.phone}</p>
                       <p className="mt-4 text-sm leading-6 text-ink/60">Only supported profile fields are editable here. Role and internal security fields are never exposed.</p>
                       <button type="button" onClick={() => handleLogout()} className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-danger/10 px-5 text-sm font-bold text-danger transition hover:bg-danger hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/30"><LogOut size={16} />Logout</button>
                     </div>
@@ -379,7 +353,7 @@ export default function Account() {
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-clay">Order {order._id}</p>
                         <p className="mt-2 text-sm font-semibold text-ink/50">{formatDate(order.createdAt)}</p>
                         <div className="mt-4 flex flex-wrap gap-3">
-                          {(order.products || []).slice(0, 3).map((item) => <div key={`${order._id}-${item.title}`} className="flex items-center gap-3"><SafeImage src={item.image} alt={item.title} className="h-14 w-14 rounded-xl object-cover" /><span className="max-w-[180px] text-sm font-semibold line-clamp-2">{item.title} x {item.quantity}</span></div>)}
+                          {(order.products || []).slice(0, 3).map((item) => <div key={`${order._id}-${item.product}-${item.variant}`} className="flex items-center gap-3"><SafeImage src={item.image} alt={item.title} className="h-14 w-14 rounded-xl object-cover" /><span className="max-w-[180px] text-sm font-semibold line-clamp-2">{item.title} · {item.variantName} × {item.quantity}</span></div>)}
                         </div>
                       </Link>
                       <div className="text-left sm:text-right"><p className="text-lg font-bold">{formatCurrency(order.totalAmount || 0)}</p><p className="mt-2 text-sm font-semibold text-leaf">{statusLabels[order.orderStatus] || order.orderStatus}</p><p className="mt-1 text-sm font-semibold text-ink/45">Payment: {statusLabels[order.paymentStatus] || order.paymentStatus}</p><p className="mt-1 text-sm font-semibold text-ink/45">Delivery: {statusLabels[order.shippingStatus] || "Preparing Shipment"}</p>{order.trackingUrl && <Link to={`/track/${order._id}`} className="mt-3 inline-flex rounded-full bg-ink px-4 py-2 text-xs font-bold text-white transition hover:bg-leaf">Track Order</Link>}</div>

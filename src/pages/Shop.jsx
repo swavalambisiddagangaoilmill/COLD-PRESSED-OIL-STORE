@@ -7,13 +7,10 @@ import Container from "../components/ui/Container.jsx";
 import Input from "../components/ui/Input.jsx";
 import SectionHeading from "../components/ui/SectionHeading.jsx";
 import OfferBanner from "../components/features/feedback/OfferBanner.jsx";
-import { getCategories, getProducts } from "../services/catalogService.js";
+import { getProducts } from "../services/catalogService.js";
 
 export default function Shop() {
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([{ name: "All" }]);
-  const [categoriesReady, setCategoriesReady] = useState(false);
-  const [category, setCategory] = useState("All");
   const [sort, setSort] = useState("featured");
   const [search, setSearch] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
@@ -24,16 +21,11 @@ export default function Shop() {
   const invalidSearch = search.trim().length === 1;
 
   useEffect(() => {
-    getCategories().then((items) => setCategories([{ name: "All" }, ...items])).catch(() => setCategories([{ name: "All" }])).finally(() => setCategoriesReady(true));
-  }, []);
-
-  useEffect(() => {
-    if (invalidSearch || !categoriesReady) return undefined;
+    if (invalidSearch) return undefined;
     let active = true;
     const loadProducts = (showLoading = false) => {
       if (showLoading) setSearchLoading(true);
-      const categoryId = categories.find((item) => item.name === category)?.id;
-      return getProducts({ all: true, search, category: category === "All" ? undefined : categoryId, sort: sort === "featured" ? "featured" : sort === "price-low" ? "priceAsc" : sort === "price-high" ? "priceDesc" : "newest" })
+      return getProducts({ all: true, search, sort: sort === "featured" ? "featured" : sort === "price-low" ? "priceAsc" : sort === "price-high" ? "priceDesc" : "newest" })
         .then((data) => { if (!active) return; setProducts(data.products); })
         .catch(() => active && setProducts([]))
         .finally(() => active && showLoading && setSearchLoading(false));
@@ -41,17 +33,15 @@ export default function Shop() {
     const timer = window.setTimeout(() => loadProducts(true), search ? 300 : 0);
     const refreshTimer = window.setInterval(() => loadProducts(false), 20000);
     return () => { active = false; window.clearTimeout(timer); window.clearInterval(refreshTimer); };
-  }, [categories, categoriesReady, category, invalidSearch, search, sort]);
+  }, [invalidSearch, search, sort]);
 
   useEffect(() => {
     const nextSearch = searchParams.get("q") || "";
     setSearch((current) => (current === nextSearch ? current : nextSearch));
-    if (nextSearch) setCategory("All");
   }, [searchParams]);
 
   useEffect(() => {
     if (!location.state?.resetShop) return;
-    setCategory("All");
     setSort("featured");
     if (!searchParams.get("q")) setSearch("");
     navigate({ pathname: "/shop", search: searchParams.toString() ? `?${searchParams}` : "" }, { replace: true, state: null });
@@ -71,23 +61,16 @@ export default function Shop() {
   };
 
   const visible = useMemo(() => products.filter(() => !invalidSearch), [invalidSearch, products]);
-  const changeCategory = (next) => {
-    setCategory(next);
-  };
-
   return (
     <>
       <Breadcrumb items={[{ label: "Shop" }]} />
       <h1 className="sr-only">Shop cold pressed oils</h1>
       <section className="section-padding">
         <Container>
-          <SectionHeading eyebrow="Shop oils" title="Cold pressed staples for every kitchen" text="Filter by seed, compare flavor styles, and add your pantry favourites in a few calm clicks." />
+          <SectionHeading eyebrow="Shop oils" title="Cold pressed staples for every kitchen" text="Search products, compare variants, and add your pantry favourites in a few calm clicks." />
           <OfferBanner />
-          <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_180px_180px] lg:gap-4">
+          <div className="mb-8 grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px] lg:gap-4">
             <Input inputRef={searchInputRef} placeholder="Search oils" value={search} onChange={(event) => updateSearch(event.target.value)} aria-label="Search products" className="h-11 text-xs sm:h-[52px] sm:text-sm" />
-            <select value={category} onChange={(event) => changeCategory(event.target.value)} className="h-11 min-w-0 rounded-xl border border-ink/10 bg-white px-3 text-sm font-semibold outline-none sm:h-[52px] sm:px-4">
-              {categories.map((item) => <option key={item.id || item.name}>{item.name}</option>)}
-            </select>
             <select value={sort} onChange={(event) => setSort(event.target.value)} className="h-11 min-w-0 rounded-xl border border-ink/10 bg-white px-3 text-sm font-semibold outline-none sm:h-[52px] sm:px-4">
               <option value="featured">Featured</option>
               <option value="price-low">Price: low to high</option>

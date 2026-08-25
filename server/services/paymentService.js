@@ -21,9 +21,11 @@ async function calculateOrderAmount(productsPayload = [], userId, couponCode) {
     const product = productMap.get(item.product.toString());
     if (!product) throw new ApiError("One or more products are unavailable.", 400);
     const quantity = Math.max(1, Number(item.quantity) || 1);
-    if (product.stock < quantity) throw new ApiError(`${product.title} does not have enough stock.`, 400);
+    const variant = product.variants?.id(item.variantId || item.variant);
+    if (!variant || !variant.isActive || variant.isArchived) throw new ApiError(`${product.title} variant is unavailable.`, 400);
+    if (variant.stock < quantity) throw new ApiError(`${product.title} ${variant.name} does not have enough stock.`, 400);
     if (product.onlinePaymentEnabled === false) throw new ApiError(`${product.title} is not eligible for online payment.`, 400);
-    return { product, quantity, price: product.discountPrice || product.price };
+    return { product, variant, quantity, price: variant.price };
   });
 
   const subtotal = items.reduce((total, item) => total + item.price * item.quantity, 0);

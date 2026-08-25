@@ -8,7 +8,7 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 const LABELS = {
   razorpay: "Razorpay",
   resend: "Resend",
-  googleOAuth: "Google OAuth",
+  whatsapp: "WhatsApp",
   cloudinary: "Cloudinary",
   shiprocket: "Shiprocket",
   ai: "AI",
@@ -41,9 +41,11 @@ function configurationSnapshot() {
     resend: env.email.provider === "resend" && hasAll([env.email.from, env.email.resendApiKey])
       ? status("resend", "degraded", "Configured; connectivity has not been checked yet.")
       : status("resend", "not_configured", "Not configured."),
-    googleOAuth: env.oauth.googleClientId
-      ? status("googleOAuth", "degraded", "Configured; provider connectivity has not been checked yet.")
-      : status("googleOAuth", "not_configured", "Not configured."),
+    whatsapp: env.whatsapp.mode === "mock"
+      ? status("whatsapp", "degraded", "Mock mode enabled; no live WhatsApp calls.")
+      : hasAll([env.whatsapp.accessToken, env.whatsapp.phoneNumberId, env.whatsapp.otpTemplateName])
+        ? status("whatsapp", "degraded", "Configured; connectivity has not been checked yet.")
+        : status("whatsapp", "not_configured", "Not configured."),
     cloudinary: hasAll([env.cloudinary.cloudName, env.cloudinary.apiKey, env.cloudinary.apiSecret])
       ? status("cloudinary", "degraded", "Configured; connectivity has not been checked yet.")
       : status("cloudinary", "not_configured", "Not configured."),
@@ -115,17 +117,7 @@ async function checkResend() {
   }
 }
 
-async function checkGoogleOAuth() {
-  if (!env.oauth.googleClientId) return status("googleOAuth", "not_configured", "Not configured.");
-  if (!String(env.oauth.googleClientId).endsWith(".apps.googleusercontent.com")) return status("googleOAuth", "offline", "Client configuration is invalid.");
-  try {
-    const response = await fetchWithTimeout("https://accounts.google.com/.well-known/openid-configuration");
-    if (!response.ok) return status("googleOAuth", "offline", "Google identity service is unavailable.");
-    return status("googleOAuth", "degraded", "Provider reachable; client authorization requires a real sign-in to verify.");
-  } catch {
-    return status("googleOAuth", "offline", "Connection failed.");
-  }
-}
+async function checkWhatsApp() { if (env.whatsapp.mode === "mock") return status("whatsapp", "degraded", "Development mock mode; no live connection."); if (!hasAll([env.whatsapp.accessToken, env.whatsapp.phoneNumberId])) return status("whatsapp", "not_configured", "Not configured."); try { const response = await fetchWithTimeout(`https://graph.facebook.com/${env.whatsapp.apiVersion}/${env.whatsapp.phoneNumberId}`, { headers: { Authorization: `Bearer ${env.whatsapp.accessToken}` } }); return response.ok ? status("whatsapp", "online", "Operational; credentials verified.") : status("whatsapp", "offline", "Credential verification failed."); } catch { return status("whatsapp", "offline", "Connection failed."); } }
 
 async function checkCloudinary() {
   if (!hasAll([env.cloudinary.cloudName, env.cloudinary.apiKey, env.cloudinary.apiSecret])) return status("cloudinary", "not_configured", "Not configured.");
@@ -180,7 +172,7 @@ async function refreshServiceStatus() {
   const results = await Promise.all([
     checkRazorpay(),
     checkResend(),
-    checkGoogleOAuth(),
+    checkWhatsApp(),
     checkCloudinary(),
     checkShiprocket(),
     Promise.resolve(status("ai", "degraded", "Built-in fallback responses only; no external AI provider configured.")),

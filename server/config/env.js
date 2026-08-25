@@ -38,8 +38,15 @@ export const env = {
   refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "30d",
   clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
   clientUrls: (process.env.CLIENT_URLS || process.env.CLIENT_URL || "http://localhost:5173").split(",").map((url) => url.trim()).filter(Boolean),
-  oauth: {
-    googleClientId: process.env.GOOGLE_CLIENT_ID || "",
+  whatsapp: {
+    mode: process.env.WHATSAPP_MODE || (isProduction ? "live" : "mock"),
+    accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+    businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "",
+    apiVersion: process.env.WHATSAPP_API_VERSION || "v23.0",
+    otpTemplateName: process.env.WHATSAPP_OTP_TEMPLATE_NAME || "authentication",
+    trackingTemplateName: process.env.WHATSAPP_TRACKING_TEMPLATE_NAME || "order_tracking",
+    languageCode: process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en_US",
   },
   turnstile: {
     secretKey: process.env.TURNSTILE_SECRET_KEY || "",

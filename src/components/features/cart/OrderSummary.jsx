@@ -15,8 +15,9 @@ export default function OrderSummary() {
               <img src={item.image} alt={item.name} className="h-20 w-20 rounded-2xl object-cover" />
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">{item.name}</p>
-                <p className="text-sm text-ink/55">Qty {item.quantity} Â· {item.volume}</p>
-                <p className="mt-1 font-semibold">{formatCurrency(item.price * item.quantity)}</p>
+                <p className="text-sm text-ink/55">{item.variantName || item.volume} · Qty {item.quantity}{item.sku ? ` · ${item.sku}` : ""}</p>
+                <p className="mt-1 text-sm">{formatCurrency(item.price)} each</p>
+                <p className="mt-1 font-semibold">Subtotal {formatCurrency(item.price * item.quantity)}</p>
               </div>
             </div>
           ))}

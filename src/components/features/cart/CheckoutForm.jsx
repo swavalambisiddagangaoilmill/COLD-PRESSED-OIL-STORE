@@ -142,7 +142,7 @@ export default function CheckoutForm() {
     };
     return {
       order: {
-        products: items.map((item) => ({ product: item._id || item.id, quantity: item.quantity })),
+        products: items.map((item) => ({ product: item.productId || item._id, variantId: item.variantId, quantity: item.quantity })),
         shippingAddress,
         paymentMethod: paymentMethod === "cod" ? "cod" : "upi",
         couponCode: appliedCoupon?.code,
