@@ -6,6 +6,7 @@ import { useToast } from "../../components/features/feedback/ToastProvider.jsx";
 import { AdminBadge, AdminButton, AdminCard, AdminFilters, AdminInput, AdminModal, AdminPageHeader, AdminSelect, AdminTable, AdminTextarea } from "../components/AdminUi.jsx";
 import { adminApi } from "../services/adminApi.js";
 import AdminSettingsExtras from "./AdminSettingsExtras.jsx";
+import { addVariant, removeVariant } from "../utils/variantForm.js";
 
 const money = (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
 const statusText = (value) => String(value || "-").replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
@@ -224,13 +225,18 @@ function ProductEditor({ open, onClose, product, onSaved }) {
       <label className="grid gap-1.5 text-sm font-semibold text-ink/65"><span>Description</span><textarea value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} className={`min-h-24 rounded-lg border bg-white px-3 py-2 text-sm text-ink outline-none ${errors.description ? "border-red-400" : "border-ink/10 focus:border-leaf"}`} />{errors.description && <span className="text-xs text-red-700">{errors.description}</span>}</label>
       <div className="grid gap-4 md:grid-cols-2">
       </div>
-      <section>
-        <div className="flex items-center justify-between"><h3 className="font-bold">Variants</h3><AdminButton variant="secondary" onClick={() => setForm({ ...form, variants: [...form.variants, blankVariant()] })}><Plus size={14} />Add Variant</AdminButton></div>
+      <section aria-labelledby="product-variants-heading">
+        <div className="flex items-end justify-between gap-4 border-b border-[var(--admin-border)] pb-3"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--admin-primary)]">Product options</p><h3 id="product-variants-heading" className="mt-1 text-lg font-bold">Variants</h3></div><span className="rounded-full bg-linen px-3 py-1 text-xs font-bold text-ink/55">{form.variants.length} {form.variants.length === 1 ? "variant" : "variants"}</span></div>
         {errors.variants && <p className="mt-2 text-xs font-semibold text-red-700">{errors.variants}</p>}
-        <div className="mt-3 grid gap-4">{form.variants.map((variant, variantIndex) => {
+        <div className="mt-4 grid gap-5">{form.variants.map((variant, variantIndex) => {
           const updateVariant = (updates) => setForm({ ...form, variants: form.variants.map((item, index) => index === variantIndex ? { ...item, ...updates } : item) });
           const updateDimensions = (updates) => updateVariant({ dimensions: { ...(variant.dimensions || {}), ...updates } });
-          return <div key={variant._id || variantIndex} className="rounded-xl border border-[var(--admin-border)] bg-linen/30 p-4">
+          return <article key={variant._id || variantIndex} aria-labelledby={`variant-heading-${variantIndex}`} className="overflow-hidden rounded-xl border border-[var(--admin-border)] bg-white shadow-sm">
+            <header className="flex items-center justify-between gap-3 border-b border-[var(--admin-border)] bg-linen/55 px-4 py-3">
+              <div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--admin-primary)] text-sm font-extrabold text-white">{variantIndex + 1}</span><div><p id={`variant-heading-${variantIndex}`} className="text-base font-extrabold uppercase tracking-[0.08em] text-ink">Variant {variantIndex + 1}</p><p className="text-xs font-semibold text-ink/45">Independent size, pricing, stock and images</p></div></div>
+              <Toggle label="Active" checked={variant.isActive} onChange={(value) => updateVariant({ isActive: value })} />
+            </header>
+            <div className="p-4">
             <div className="grid gap-3 md:grid-cols-2">
               <AdminInput label="Size / Unit" value={variant.name || ""} onChange={(e) => updateVariant({ name: e.target.value })} />
               <AdminInput label="SKU" value={variant.sku || ""} onChange={(e) => updateVariant({ sku: e.target.value.toUpperCase() })} />
@@ -238,16 +244,19 @@ function ProductEditor({ open, onClose, product, onSaved }) {
               <AdminInput label="MRP (₹)" type="number" value={variant.mrp ?? ""} {...numberProps} onChange={(e) => updateVariant({ mrp: e.target.value })} />
               <AdminInput label="Stock / Quantity" type="number" step="1" value={variant.stock ?? ""} {...numberProps} onChange={(e) => updateVariant({ stock: e.target.value })} />
               <AdminInput label="Weight (kg)" type="number" step="0.01" value={variant.weight ?? ""} {...numberProps} onChange={(e) => updateVariant({ weight: e.target.value })} />
+            </div>
+            <div className="mt-4 rounded-lg border border-[var(--admin-border)] bg-linen/25 p-3"><p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-ink/50">Package dimensions</p><div className="grid gap-3 sm:grid-cols-3">
               <AdminInput label="Package Length (cm)" type="number" step="0.01" value={variant.dimensions?.length ?? ""} {...numberProps} onChange={(e) => updateDimensions({ length: e.target.value })} />
               <AdminInput label="Package Width (cm)" type="number" step="0.01" value={variant.dimensions?.width ?? ""} {...numberProps} onChange={(e) => updateDimensions({ width: e.target.value })} />
               <AdminInput label="Package Height (cm)" type="number" step="0.01" value={variant.dimensions?.height ?? ""} {...numberProps} onChange={(e) => updateDimensions({ height: e.target.value })} />
-              <Toggle label="Active" checked={variant.isActive} onChange={(value) => updateVariant({ isActive: value })} />
-            </div>
+            </div></div>
             <p className="mt-4 text-sm font-bold text-ink/70">Variant Images</p>
             <div className="mt-2 flex flex-wrap gap-3">{variant.images.map((image, imageIndex) => <div key={`${image.url}-${imageIndex}`} className="relative"><img src={image.url} alt="" className="h-20 w-20 rounded-lg object-cover" /><button type="button" onClick={() => updateVariant({ images: variant.images.filter((_, index) => index !== imageIndex) })} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-white">×</button></div>)}<label className="grid h-20 w-20 cursor-pointer place-items-center rounded-lg border border-dashed text-xs font-bold">Add Images<input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => { for (const file of Array.from(e.target.files || [])) await upload(file, null, variantIndex); e.target.value = ""; }} /></label></div>
-            {form.variants.length > 1 && <div className="mt-4"><AdminButton variant="danger" onClick={() => setForm({ ...form, variants: form.variants.filter((_, index) => index !== variantIndex) })}>Remove Variant</AdminButton></div>}
-          </div>;
+            {form.variants.length > 1 && <div className="mt-4 flex justify-end border-t border-[var(--admin-border)] pt-4"><AdminButton variant="danger" onClick={() => setForm({ ...form, variants: removeVariant(form.variants, variantIndex) })}>Remove Variant {variantIndex + 1}</AdminButton></div>}
+            </div>
+          </article>;
         })}</div>
+        <button type="button" onClick={() => setForm({ ...form, variants: addVariant(form.variants, blankVariant) })} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--admin-primary)]/40 bg-[var(--admin-primary)]/5 text-sm font-extrabold text-[var(--admin-primary)] transition hover:border-[var(--admin-primary)] hover:bg-[var(--admin-primary)]/10 focus:outline-none focus:ring-4 focus:ring-[var(--admin-primary)]/15"><Plus size={17} /> Add Variant</button>
       </section>
       <div className="grid gap-3 md:grid-cols-2"><Toggle label="Featured" checked={form.featured} onChange={(value) => setForm({ ...form, featured: value })} /><Toggle label="Best Seller" checked={form.bestSeller} onChange={(value) => setForm({ ...form, bestSeller: value })} /><Toggle label="New Arrival" checked={form.newArrival} onChange={(value) => setForm({ ...form, newArrival: value })} /><Toggle label="COD Enabled" checked={form.codEnabled !== false} onChange={(value) => setForm({ ...form, codEnabled: value })} /><Toggle label="Online Payment Enabled" checked={form.onlinePaymentEnabled !== false} onChange={(value) => setForm({ ...form, onlinePaymentEnabled: value })} /><Toggle label="Return Eligible" checked={form.returnEligible !== false} onChange={(value) => setForm({ ...form, returnEligible: value })} /><Toggle label="Exchange Eligible" checked={form.exchangeEligible} onChange={(value) => setForm({ ...form, exchangeEligible: value })} /><Toggle label="Active" checked={form.isActive} onChange={(value) => setForm({ ...form, isActive: value })} /></div>
     </div>
