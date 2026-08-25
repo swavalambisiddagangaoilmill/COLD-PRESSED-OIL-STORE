@@ -1,5 +1,5 @@
 // Admin API service layer using the existing shared API client.
-import { apiRequest } from "../../api/apiClient.js";
+import { adminRequest as apiRequest } from "../utils/adminError.js";
 
 const base = "/admin-panel";
 const promotionChanged = (request) => request.then((result) => { window.dispatchEvent(new Event("ss-oil-mill-promotions-changed")); return result; });

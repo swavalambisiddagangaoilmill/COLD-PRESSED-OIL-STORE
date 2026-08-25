@@ -90,7 +90,7 @@ function productMetric(product, keys) {
   return 0;
 }
 
-function getPackageDetails(order) {
+export function getPackageDetails(order) {
   const defaults = env.shiprocket;
   let weight = 0;
   let length = defaults.defaultLengthCm;
@@ -99,11 +99,13 @@ function getPackageDetails(order) {
 
   for (const item of order.products || []) {
     const product = item.product || {};
-    const itemWeight = productMetric(product, ["shippingWeight", "packageWeight", "weight", "dimensions.weight"]);
+    const variant = product?.variants?.id ? product.variants.id(item.variant) : product?.variants?.find?.((candidate) => String(candidate._id) === String(item.variant));
+    const packageSource = variant || product;
+    const itemWeight = productMetric(packageSource, ["shippingWeight", "packageWeight", "weight", "dimensions.weight"]);
     if (itemWeight > 0) weight += itemWeight * item.quantity;
-    length = Math.max(length, productMetric(product, ["dimensions.length", "packageDimensions.length", "length"]));
-    breadth = Math.max(breadth, productMetric(product, ["dimensions.breadth", "dimensions.width", "packageDimensions.breadth", "packageDimensions.width", "breadth", "width"]));
-    height = Math.max(height, productMetric(product, ["dimensions.height", "packageDimensions.height", "height"]));
+    length = Math.max(length, productMetric(packageSource, ["dimensions.length", "packageDimensions.length", "length"]));
+    breadth = Math.max(breadth, productMetric(packageSource, ["dimensions.breadth", "dimensions.width", "packageDimensions.breadth", "packageDimensions.width", "breadth", "width"]));
+    height = Math.max(height, productMetric(packageSource, ["dimensions.height", "packageDimensions.height", "height"]));
   }
 
   if (!weight) weight = defaults.defaultWeightKg;

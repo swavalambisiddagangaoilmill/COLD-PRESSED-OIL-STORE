@@ -89,7 +89,12 @@ export async function updateOrderStatus(id, nextStatus) {
       order.orderStatus = previousStatus;
       order.shippingStatus = previousShippingStatus;
       await order.save().catch(() => undefined);
-      throw error;
+      const failure = new ApiError("Unable to restore variant stock, so the order cancellation was rolled back.", 500);
+      failure.adminService = "Inventory Service";
+      failure.adminAction = "restore variant stock while cancelling the order";
+      failure.serviceCode = "INVENTORY_RESTORE_FAILED";
+      failure.cause = error;
+      throw failure;
     }
   }
   return order;
