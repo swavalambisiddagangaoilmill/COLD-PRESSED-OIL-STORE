@@ -51,7 +51,7 @@ const address = {
 };
 
 async function ensureUser(payload) {
-  const existing = await User.findOne({ phone: payload.phone });
+  const existing = await User.findOne(payload.email ? { email: payload.email } : { phone: payload.phone });
   if (existing) return { doc: existing, created: false };
   const doc = await User.create(payload);
   return { doc, created: true };
@@ -116,7 +116,7 @@ async function seed() {
   let ordersCreated = 0;
   let contactsCreated = 0;
 
-  const adminResult = await ensureUser({ name: "Development Admin", phone: "+919876543212", phoneVerified: true, role: "admin", adminRole: "OWNER" });
+  const adminResult = await ensureUser({ name: "Development Admin", email: "admin@example.com", password: process.env.DEFAULT_ADMIN_PASSWORD || "Admin@12345", role: "admin", adminRole: "OWNER" });
   const user1Result = await ensureUser({ name: "Demo User One", phone: "+919876543210", phoneVerified: true, role: "user", addresses: [{ ...address, label: "Home", isDefault: true }] });
   const user2Result = await ensureUser({ name: "Demo User Two", phone: "+919876543211", phoneVerified: true, role: "user", addresses: [{ ...address, fullName: "Demo User Two", label: "Home", isDefault: true }] });
   usersCreated += [adminResult, user1Result, user2Result].filter((item) => item.created).length;
@@ -175,7 +175,7 @@ async function seed() {
   for (const seedItem of contactSeeds) contactsCreated += (await ensureContact(seedItem)).created ? 1 : 0;
 
   console.log(`Seed complete. Categories created: ${categoriesCreated}. Products created: ${productsCreated}. Users created: ${usersCreated}. Orders created: ${ordersCreated}. Contact messages created: ${contactsCreated}.`);
-  console.log("Mock OTP login phones: admin +919876543212; users +919876543210 and +919876543211");
+  console.log("Development admin login: admin@example.com; password from DEFAULT_ADMIN_PASSWORD (or Admin@12345 locally). Customer mock OTP phones: +919876543210 and +919876543211");
   await mongoose.disconnect();
 }
 

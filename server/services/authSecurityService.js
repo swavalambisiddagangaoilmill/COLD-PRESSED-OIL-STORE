@@ -1,5 +1,10 @@
 // Centralizes user security, sessions, devices, OTPs, and login history.
 import crypto from "crypto";
+import { ApiError } from "../utils/ApiError.js";
+import { sendOtpEmail } from "./emailService.js";
+
+const adminOtpTtlMs = 5 * 60 * 1000;
+const loginLockMs = 15 * 60 * 1000;
 
 export function createPlainToken() {
   return crypto.randomBytes(32).toString("hex");
@@ -45,4 +50,36 @@ export function findSessionByRefresh(user, refreshToken) {
 
 export function revokeSession(user, sessionId) {
   (user.sessions || []).forEach((item) => { if (!sessionId || item.sessionId === sessionId) item.revokedAt = new Date(); });
+}
+
+export function recordFailedLogin(user) {
+  user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+  if (user.failedLoginAttempts >= 5) user.turnstileRequiredUntil = new Date(Date.now() + loginLockMs);
+  if (user.failedLoginAttempts >= 12) user.loginLockUntil = new Date(Date.now() + loginLockMs * Math.ceil(user.failedLoginAttempts / 12));
+}
+
+export function assertLoginAllowed(user) {
+  if (user.loginLockUntil && user.loginLockUntil > new Date()) throw new ApiError("Authentication is temporarily unavailable. Please try again later.", 423, [{ code: "LOGIN_LOCKED" }]);
+}
+
+export function resetLoginProtection(user) {
+  user.failedLoginAttempts = 0;
+  user.loginLockUntil = undefined;
+  user.turnstileRequiredUntil = undefined;
+}
+
+export async function createAdminOtp(user) {
+  const code = String(crypto.randomInt(100000, 1000000));
+  user.otpRecords = (user.otpRecords || []).filter((item) => item.expiresAt > new Date() && !item.verified).slice(-5);
+  user.otpRecords.push({ purpose: "new_device", codeHash: hashValue(code), expiresAt: new Date(Date.now() + adminOtpTtlMs), attempts: 0, maxAttempts: 5, verified: false, createdAt: new Date() });
+  await sendOtpEmail(user, code, "admin login");
+}
+
+export function verifyAdminOtp(user, code) {
+  const record = [...(user.otpRecords || [])].reverse().find((item) => item.purpose === "new_device" && !item.verified && item.expiresAt > new Date());
+  if (!record) throw new ApiError("Security code is expired. Start the admin login again.", 400, [{ code: "OTP_EXPIRED" }]);
+  record.attempts += 1;
+  if (record.attempts > record.maxAttempts) throw new ApiError("Too many security code attempts.", 429, [{ code: "OTP_RATE_LIMIT" }]);
+  if (record.codeHash !== hashValue(code)) throw new ApiError("Invalid security code.", 400, [{ code: "OTP_INVALID", attemptsRemaining: Math.max(0, record.maxAttempts - record.attempts) }]);
+  record.verified = true;
 }

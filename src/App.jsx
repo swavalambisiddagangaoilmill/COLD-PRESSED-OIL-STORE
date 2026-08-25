@@ -8,7 +8,6 @@ import NetworkStatusBanner from "./components/features/feedback/NetworkStatusBan
 import RouteTransitionLoader from "./components/features/feedback/RouteTransitionLoader.jsx";
 import InstallAppPrompt from "./components/features/feedback/InstallAppPrompt.jsx";
 import ScrollToTop from "./components/features/feedback/ScrollToTop.jsx";
-import SecurityAwareness from "./components/features/feedback/SecurityAwareness.jsx";
 import ChatWidget from "./components/features/widgets/ChatWidget.jsx";
 import WishlistWidget from "./components/features/widgets/WishlistWidget.jsx";
 import AnnouncementBar from "./components/layout/AnnouncementBar.jsx";
@@ -31,7 +30,6 @@ export default function App() {
       <ErrorBoundary>
         <ScrollToTop />
         <RouteTransitionLoader />
-        <SecurityAwareness />
         <NetworkStatusBanner />
         {!authPage && !adminPage && <AnnouncementBar />}
         {!authPage && !adminPage && <Navbar />}
@@ -48,4 +46,3 @@ export default function App() {
     </div>
   );
 }
-

@@ -1,4 +1,5 @@
 // User account model with authentication helpers.
+import bcrypt from "bcrypt";
 import mongoose from "mongoose";
 
 const addressSchema = new mongoose.Schema(
@@ -66,9 +67,24 @@ const loginHistorySchema = new mongoose.Schema(
   { _id: true }
 );
 
+const adminOtpRecordSchema = new mongoose.Schema(
+  {
+    purpose: { type: String, enum: ["new_device"], required: true },
+    codeHash: { type: String, required: true, select: false },
+    expiresAt: { type: Date, required: true },
+    attempts: { type: Number, default: 0 },
+    maxAttempts: { type: Number, default: 5 },
+    verified: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: true }
+);
+
 const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true, alias: "fullName" },
+    email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
+    password: { type: String, required() { return this.role === "admin"; }, minlength: 6, select: false },
     phone: { type: String, unique: true, sparse: true, trim: true, alias: "phoneNumber" },
     phoneVerified: { type: Boolean, default: false },
     whatsappOptIn: { type: Boolean, default: false },
@@ -88,13 +104,34 @@ const userSchema = new mongoose.Schema(
     sessions: [authSessionSchema],
     trustedDevices: [trustedDeviceSchema],
     loginHistory: [loginHistorySchema],
+    otpRecords: [adminOtpRecordSchema],
+    failedLoginAttempts: { type: Number, default: 0, select: false },
+    loginLockUntil: { type: Date, select: false },
+    turnstileRequiredUntil: { type: Date, select: false },
+    passwordChangedAt: { type: Date },
   },
   { timestamps: true }
 );
 
+userSchema.pre("save", async function hashPassword(next) {
+  if (!this.isModified("password") || !this.password) return next();
+  this.password = await bcrypt.hash(this.password, 12);
+  this.passwordChangedAt = new Date();
+  next();
+});
+
+userSchema.methods.comparePassword = function comparePassword(candidatePassword) {
+  return this.password ? bcrypt.compare(candidatePassword, this.password) : false;
+};
+
 userSchema.methods.toJSON = function toJSON() {
   const user = this.toObject();
   delete user.refreshToken;
+  delete user.password;
+  delete user.otpRecords;
+  delete user.failedLoginAttempts;
+  delete user.loginLockUntil;
+  delete user.turnstileRequiredUntil;
   if (user.sessions) user.sessions = user.sessions.map(({ refreshTokenHash, ...session }) => session);
   return user;
 };

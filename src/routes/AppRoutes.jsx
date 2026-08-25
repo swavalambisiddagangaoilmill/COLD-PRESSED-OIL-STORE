@@ -9,6 +9,7 @@ import StatusPage from "../pages/StatusPage.jsx";
 
 const AdminProtectedRoute = lazy(() => import("../admin/routes/AdminProtectedRoute.jsx"));
 const AdminRoutes = lazy(() => import("../admin/routes/AdminRoutes.jsx"));
+const AdminLogin = lazy(() => import("../admin/pages/AdminLogin.jsx"));
 const Account = lazy(() => import("../pages/Account.jsx"));
 const Cart = lazy(() => import("../pages/Cart.jsx"));
 const Checkout = lazy(() => import("../pages/Checkout.jsx"));
@@ -30,6 +31,7 @@ export default function AppRoutes() {
   return (
     <Suspense fallback={<PageLoader label="Loading page" />}>
       <Routes>
+        <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/*" element={<AdminProtectedRoute><AdminRoutes /></AdminProtectedRoute>} />
         <Route path="/" element={<Home />} />
         <Route path="/shop" element={<Shop />} />

@@ -26,6 +26,7 @@ export async function issueSession(user, id = crypto.randomUUID(), req = null) {
 export async function requestAuthOtp({ phone, purpose, name }, req) {
   const phoneNumber = normalizeIndianPhone(phone);
   const existingUser = await User.findOne({ phone: phoneNumber });
+  if (existingUser?.role === "admin") throw new ApiError("No customer account found with this mobile number.", 404, [{ code: "ACCOUNT_NOT_FOUND" }]);
   if (purpose === "signup" && existingUser) throw new ApiError("An account already exists with this mobile number. Please log in.", 409, [{ code: "ACCOUNT_EXISTS" }]);
   if (purpose === "login" && !existingUser) throw new ApiError("No account found with this mobile number. Please create an account.", 404, [{ code: "ACCOUNT_NOT_FOUND" }]);
   if (purpose === "signup" && String(name || "").trim().length < 2) throw new ApiError("Enter your full name.", 422);
@@ -56,6 +57,7 @@ export async function verifyAuthOtp({ phone, purpose, otp }, req) {
     try { user = await User.create({ name: record.fullName, phone: phoneNumber, phoneVerified: true, whatsappOptIn: false }); }
     catch (error) { if (error?.code === 11000) throw new ApiError("An account already exists with this mobile number. Please log in.", 409); throw error; }
   } else if (!user) throw new ApiError("No account found with this mobile number. Please create an account.", 404);
+  if (user.role === "admin") throw new ApiError("Admin accounts must use the dedicated admin login.", 403);
   if (user.isDisabled) throw new ApiError("This account is disabled.", 403);
   user.phoneVerified = true; pushLoginHistory(user, req, purpose === "signup" ? "signup_otp" : "login_otp");
   return issueSession(user, undefined, req);

@@ -9,5 +9,4 @@ export { default as NetworkStatusBanner } from './NetworkStatusBanner.jsx';
 export { default as PageLoader } from './PageLoader.jsx';
 export { default as RouteTransitionLoader } from './RouteTransitionLoader.jsx';
 export { default as ScrollToTop } from './ScrollToTop.jsx';
-export { default as SecurityAwareness } from './SecurityAwareness.jsx';
 export { default as ToastProvider } from './ToastProvider.jsx';

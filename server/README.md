@@ -37,11 +37,11 @@ All endpoints are mounted under `/api`.
 
 ## WhatsApp OTP authentication
 
-Customer and admin browser authentication uses Indian mobile numbers and WhatsApp OTP only. OTPs expire after five minutes, are stored as hashes in the `otpverifications` collection, allow five verification attempts, and cannot be replayed. Authenticated sessions are delivered through HttpOnly cookies; browser JavaScript does not store bearer or refresh tokens.
+Customer browser authentication uses Indian mobile numbers and WhatsApp OTP. Admin authentication is separate and uses admin email, bcrypt-hashed password, and a required email OTP at `/admin/login`. Both use HttpOnly cookies; browser JavaScript does not store bearer or refresh tokens.
 
 Use `WHATSAPP_MODE=mock` only for local development. Live mode requires the Meta WhatsApp Cloud API token, phone-number ID, business-account ID, API version, and approved authentication and order-tracking templates listed in `.env.example`. Invoices remain website-only downloads and are never sent through WhatsApp.
 
-Before deploying over existing customer data, back up MongoDB and run `npm run migrate:phone-auth` from this directory. The script preserves `_id`, carts, wishlists, addresses, and order relationships, normalizes usable Indian numbers, removes obsolete credential fields only for successfully mapped users, and exits with code 2 when manual phone resolution or duplicate-number conflicts remain.
+No old-data authentication migration is required for a fresh database. Configure the default admin email/password environment variables before first startup.
 - Products: `/api/products`, `/api/products/featured`, `/api/products/:slug`
 - Categories: `/api/categories`
 - Wishlist: `/api/wishlist`
