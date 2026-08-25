@@ -10,7 +10,7 @@ export const products = [
     rating: 4.9,
     stock: 18,
     volume: "1 L",
-    tags: ["Wood pressed", "Daily cooking"],
+    tags: ["Cold Pressed", "Daily cooking"],
     image: "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=900&q=80",
     gallery: [
       "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=1200&q=80",
@@ -19,7 +19,7 @@ export const products = [
     ],
     description: "A full-bodied groundnut oil with a warm nutty aroma, pressed slowly in small batches for everyday Indian cooking.",
     benefits: ["Rich in natural vitamin E", "High smoke point", "No refining or bleaching"],
-    specifications: { Source: "Single-origin peanuts", Pressing: "Wooden chekku", Shelf: "9 months", Pack: "Amber glass bottle" },
+    specifications: { Source: "Single-origin peanuts", Pressing: "Cold Pressed", Shelf: "9 months", Pack: "Amber glass bottle" },
   },
   {
     id: 2,
@@ -61,7 +61,7 @@ export const products = [
     ],
     description: "Sharp, golden mustard oil that brings authentic depth to pickles, saag, marinades, and slow-cooked gravies.",
     benefits: ["Naturally pungent flavor", "Good for pickling", "Pressed below 40 C"],
-    specifications: { Source: "Yellow mustard seeds", Pressing: "Kachi ghani", Shelf: "9 months", Pack: "Tin-lined bottle" },
+    specifications: { Source: "Yellow mustard seeds", Pressing: "Cold Pressed", Shelf: "9 months", Pack: "Tin-lined bottle" },
   },
   {
     id: 4,

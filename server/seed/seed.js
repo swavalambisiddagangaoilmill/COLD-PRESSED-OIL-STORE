@@ -28,7 +28,7 @@ const categorySeeds = [
 ];
 
 const productSeeds = [
-  { title: "Wood Pressed Groundnut Oil 1L", price: 399, discountPrice: 349, stock: 40, category: "Groundnut Oils", featured: true, bestSeller: true, tags: ["groundnut", "wood pressed", "cooking oil"] },
+  { title: "Cold Pressed Groundnut Oil 1L", price: 399, discountPrice: 349, stock: 40, category: "Groundnut Oils", featured: true, bestSeller: true, tags: ["groundnut", "Cold Pressed", "cooking oil"] },
   { title: "Classic Groundnut Oil 500ml", price: 229, discountPrice: 199, stock: 55, category: "Groundnut Oils", featured: false, bestSeller: true, tags: ["groundnut", "daily cooking"] },
   { title: "Premium Groundnut Oil 5L Tin", price: 1899, discountPrice: 1699, stock: 18, category: "Groundnut Oils", featured: true, bestSeller: false, tags: ["groundnut", "family pack"] },
   { title: "Virgin Coconut Oil 500ml", price: 349, discountPrice: 299, stock: 32, category: "Coconut Oils", featured: true, bestSeller: true, tags: ["coconut", "virgin oil"] },

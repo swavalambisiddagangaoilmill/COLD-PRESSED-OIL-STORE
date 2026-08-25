@@ -6,7 +6,7 @@ export const announcementMessages = [
   "Chemical Free",
   "Free Shipping Above Rs. 999",
   "Farm Fresh",
-  "Wooden Ghani Extracted",
+  "Cold Pressed",
 ];
 
 export const oilMenuLinks = [
@@ -27,11 +27,10 @@ export const categoryMenuLinks = [
 ];
 
 export const essentialOilLinks = [
-  { label: "Lavender Oil", href: "/shop" },
-  { label: "Tea Tree Oil", href: "/shop" },
-  { label: "Eucalyptus Oil", href: "/shop" },
-  { label: "Peppermint Oil", href: "/shop" },
-  { label: "Rosemary Oil", href: "/shop" },
+  { label: "Castor Oil", href: "/shop" },
+  { label: "Neem Oil", href: "/shop" },
+  { label: "Caranja Oil", href: "/shop" },
+  { label: "Herbal Oil", href: "/shop" },
 ];
 
 export const aboutMenuLinks = [
@@ -46,44 +45,46 @@ export const megaMenus = {
     variant: "shop",
     links: oilMenuLinks,
     banner: {
-      href: "/shop?q=Cooking%20Oils&focus=search",
-      image: "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=1300&q=85",
-      eyebrow: "Signature collection",
-      title: "Pure oils for everyday cooking rituals.",
-      description: "Choose small-batch pantry staples pressed slowly for aroma, freshness, and honest flavor.",
+      href: "/shop?q=Groundnut%20Oil&focus=search",
+      image: "/shop-groundnut.png",
+      eyebrow: "Groundnut oil",
+      title: "Pure groundnut oil, cold pressed.",
+      description: "Made from fresh groundnuts for a rich, natural cooking oil.",
     },
   },
   coldPressed: {
     variant: "compact",
     links: oilMenuLinks,
     banner: {
-      href: "/shop?q=Cold%20Pressed%20Oils&focus=search",
-      image: "https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=1300&q=85",
-      eyebrow: "Cold pressed oils",
-      title: "Wooden ghani extracted oils with natural character.",
-      description: "Explore clean, slow-pressed edible oils made for modern kitchens and traditional recipes.",
+      href: "/shop?q=Coconut%20Oil&focus=search",
+      image: "/cold-pressed-coconut.png",
+      rotateImage: true,
+      eyebrow: "Coconut oil",
+      title: "Pure coconut oil, cold pressed.",
+      description: "Made from fresh coconuts with a naturally rich aroma.",
     },
   },
   essential: {
     variant: "compact",
     links: essentialOilLinks,
     banner: {
-      href: "/shop?q=Essential%20Oils&focus=search",
-      image: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=1300&q=85",
-      eyebrow: "Essential oils",
-      title: "Aromatic oils for calming everyday rituals.",
-      description: "Discover premium botanical oils selected for wellness, care routines, and refined gifting.",
+      href: "/shop?q=Neem%20Oil&focus=search",
+      image: "/specialty-oils-neem.png",
+      eyebrow: "Neem oil",
+      title: "Pure neem oil, naturally pressed.",
+      description: "Made from neem seeds for traditional and versatile everyday use.",
     },
   },
   about: {
     variant: "compact",
     links: aboutMenuLinks,
     banner: {
-      href: "/about/story",
-      image: "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=1300&q=85",
-      eyebrow: "Swavalambi Siddaganga Oil Mill story",
-      title: "A slower oil house for everyday kitchens.",
-      description: "Learn about our sourcing values, family kitchen roots, and the care behind every bottle.",
+      href: "/about",
+      image: "/about-oil-mill.png",
+      ctaLabel: "About Us",
+      eyebrow: "Our oil mill",
+      title: "Inside our cold pressed oil mill.",
+      description: "See the equipment and careful process used to prepare our oils.",
     },
   },
 };
@@ -97,18 +98,18 @@ export const benefits = [
 
 export const processSteps = [
   "Seeds are cleaned, sun-rested, and sorted by density.",
-  "Slow wooden pressing draws oil without harsh refining.",
+  "Cold Pressed extraction draws oil without harsh refining.",
   "Natural settling keeps the oil clean while retaining character.",
   "Small batches are bottled in amber glass for pantry freshness.",
 ];
 
 export const testimonials = [
-  { name: "Ananya Rao", role: "Home chef", rating: 5, review: "Verified pantry review", quote: "The groundnut oil has the kind of aroma I remember from my grandmother's kitchen, but the packaging feels beautifully modern." },
-  { name: "Ritwik Sharma", role: "Cafe owner", rating: 5, review: "Repeat buyer", quote: "Consistent batches, honest flavor, and an elegant shelf presence. The sesame oil is now part of our signature menu." },
-  { name: "Mira Nair", role: "Nutrition coach", rating: 5, review: "Wellness kitchen review", quote: "I recommend Swavalambi Siddaganga Oil Mill to clients who want cleaner pantry staples without compromising taste or cooking performance." },
-  { name: "Devika Menon", role: "Family kitchen buyer", rating: 5, review: "Monthly subscriber", quote: "The oils feel fresh from the first pour. Mustard for pickles and groundnut for daily cooking have become our regular pair." },
-  { name: "Kabir Sethi", role: "Private chef", rating: 5, review: "Chef tested", quote: "What stands out is balance. The oils carry flavor without overpowering the dish, and the bottles look refined on open shelves." },
-  { name: "Nisha Iyer", role: "New parent", rating: 5, review: "Family review", quote: "I wanted pantry staples that felt trustworthy and simple. Swavalambi Siddaganga Oil Mill made it easy to switch without changing the way we cook." },
+  { name: "Jayashree Manjunath", role: "Google customer", rating: 5, review: "Source: Google", quote: "Siddaganga Oil Mill products maintain high quality with consistent aroma and rich flavor. The oils are pure, free from adulteration, and offered at a comparatively reasonable price!!!" },
+  { name: "Dakshina Murthy", role: "Google customer", rating: 5, review: "Source: Google", quote: "Highly recommended for pure groundnut oil and other oil. I purchased Ground nut oil and Other products here.. good price (wholesale price), environment friendly person (No plastic)." },
+  { name: "Vijaya Shankar", role: "Google customer", rating: 5, review: "Source: Google", quote: "Hi I am using the groundnut oil since two years the quality is good and price also very affordable and staff behaviour good and I recommend every one to purchase" },
+  { name: "Kavya Shree", role: "Google customer", rating: 5, review: "Source: Google", quote: "We are regular customer to siddaganga oil mill. The Oil quality which they are giving is very pure. This time we purchased from his new factory. Their we witnessed more than 10 machines are in function.The  place also neat and tidy. We recommand siddaganga oil mill for your good health and reasonable price." },
+  { name: "Sahana Sahana", role: "Google customer", rating: 5, review: "Source: Google", quote: "It's nice oil and we are coming 2years and natural oil  it will get every type of oil here and come and visit here it's nice quality and pure...!!🍃🥥" },
+  { name: "Hanumappa Hanumappa", role: "Google customer", rating: 5, review: "Source: Google", quote: "This oil proves that purity needs no additives. Its natural aroma is a mark of genuine quality." },
 ];
 
 export const faqs = [

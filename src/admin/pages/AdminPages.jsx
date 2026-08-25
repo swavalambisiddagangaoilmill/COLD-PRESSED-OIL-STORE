@@ -1,5 +1,5 @@
 // API-backed page components for the Swavalambi Siddaganga Oil Mill admin panel.
-import { AlertCircle, ArrowDown, ArrowUp, CheckCircle2, Download, Eye, EyeOff, Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowUp, CheckCircle2, Download, Eye, EyeOff, Loader2, Package, Plus, Search, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "../../components/features/feedback/ToastProvider.jsx";
@@ -133,21 +133,93 @@ export function DashboardPage() {
   return <><AdminPageHeader title="Dashboard" description="Store operations overview." /><State loading={loading} error={error} />{data && <><div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6"><AdminCard title="Today's Orders" value={String(s.todayOrders || 0)} /><AdminCard title="Today's Revenue" value={money(s.todayRevenue)} /><AdminCard title="Pending Orders" value={String(s.pendingOrders || 0)} /><AdminCard title="Ready to Ship" value={String(s.readyToShip || 0)} /><AdminCard title="Low Stock" value={String(s.lowStock || 0)} /><AdminCard title="Total Customers" value={String(s.totalCustomers || 0)} /></div><ServiceStatusSection /><div className="mt-5"><h2 className="mb-3 text-lg font-bold">Needs Attention</h2><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{Object.entries(data.needsAttention || {}).map(([key, value]) => <div key={key} className="rounded-xl border border-[var(--admin-border)] bg-white p-4 text-sm font-semibold">{statusText(key)}: {value}</div>)}</div></div></>}</>;
 }
 
-function OrdersTable({ orders = [], onAction, pending = {}, shiprocketAvailable = true }) {
+const orderMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN")}`;
+const shortOrderId = (order) => String(order.orderNumber || order._id || "").slice(-8).toUpperCase();
+const orderStatusLabel = (value) => value === "packed" ? "Ready" : statusText(value);
+const shippingStatusLabel = (value) => {
+  if (value === "delivered") return "Delivered";
+  if (["picked_up", "shipped", "in_transit", "out_for_delivery"].includes(value)) return "Shipped";
+  if (["cancelled", "failed", "rto"].includes(value)) return statusText(value);
+  return "Pending";
+};
+const orderBadgeStyles = {
+  Pending: "bg-amber-50 text-amber-700 ring-amber-200",
+  Paid: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  Failed: "bg-red-50 text-red-700 ring-red-200",
+  Refunded: "bg-violet-50 text-violet-700 ring-violet-200",
+  Placed: "bg-sky-50 text-sky-700 ring-sky-200",
+  Confirmed: "bg-blue-50 text-blue-700 ring-blue-200",
+  Ready: "bg-indigo-50 text-indigo-700 ring-indigo-200",
+  Shipped: "bg-cyan-50 text-cyan-700 ring-cyan-200",
+  Delivered: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  Cancelled: "bg-red-50 text-red-700 ring-red-200",
+  Rto: "bg-orange-50 text-orange-700 ring-orange-200",
+};
+
+function OrderStatusBadge({ children }) {
+  return <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-extrabold ring-1 ring-inset ${orderBadgeStyles[children] || "bg-slate-50 text-slate-700 ring-slate-200"}`}>{children}</span>;
+}
+
+function OrderItemSummary({ order }) {
+  const items = order.products || [];
+  const totalQuantity = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  if (!items.length) return <span className="text-ink/45">No items</span>;
+  if (items.length > 1) return <div><p className="font-bold text-ink">{items.length} items</p><p className="mt-0.5 text-xs text-ink/50">{totalQuantity} units total</p></div>;
+  const item = items[0];
+  return <div className="min-w-0"><p className="max-w-52 truncate font-bold text-ink" title={item.title}>{item.title}</p><p className="mt-0.5 truncate text-xs font-medium text-ink/55">{item.variantName || item.sku} · Qty {item.quantity}</p></div>;
+}
+
+function OrderActions({ order, onAction, pending, shiprocketAvailable }) {
   const canConfirm = (order) => order.orderStatus === "placed";
   const canReady = (order) => shiprocketAvailable && !order.awbCode && !["cancelled", "delivered"].includes(order.orderStatus);
   const canShip = (order) => order.orderStatus === "packed";
   const canDeliver = (order) => order.orderStatus === "shipped";
   const canCancel = (order) => ["placed", "confirmed", "packed"].includes(order.orderStatus);
-  return <AdminTable columns={["Order", "Customer", "Date", "Items", "Payment", "Amount", "Order Status", "Shipping", "Actions"]} rows={orders.map((order) => {
-    const orderPending = Object.entries(pending).some(([key, value]) => value && key.endsWith(`:${order._id}`));
-    return <tr key={order._id}><Cell className="font-bold">{order._id}</Cell><Cell>{order.user?.name || order.shippingAddress?.fullName || "Customer"}</Cell><Cell>{new Date(order.createdAt).toLocaleDateString("en-IN")}</Cell><Cell><div className="max-w-72 space-y-2 whitespace-normal">{order.products?.map((item) => <div key={`${item.product}-${item.variant}`}><p className="font-bold">{item.title}</p><p className="text-xs text-ink/55">Variant: {item.variantName} · SKU: {item.sku}</p><p className="text-xs text-ink/55">Qty {item.quantity} · {money(item.price)} each · {money(item.total)}</p></div>)}</div></Cell><Cell><AdminBadge>{statusText(order.paymentStatus)}</AdminBadge></Cell><Cell>{money(order.totalAmount)}</Cell><Cell><AdminBadge>{statusText(order.orderStatus)}</AdminBadge></Cell><Cell>{statusText(order.shippingStatus)}</Cell><Cell><div className="flex flex-wrap gap-2">{canConfirm(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`confirm:${order._id}`]} onClick={() => onAction?.("confirm", order)}>Confirm</AdminButton>}{canReady(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`ready:${order._id}`]} onClick={() => onAction?.("ready", order)}>Ready</AdminButton>}{canShip(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`ship:${order._id}`]} onClick={() => onAction?.("ship", order)}>Mark Shipped</AdminButton>}{canDeliver(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`deliver:${order._id}`]} onClick={() => onAction?.("deliver", order)}>Deliver</AdminButton>}{canCancel(order) && <AdminButton variant="danger" disabled={orderPending} loading={pending[`cancel:${order._id}`]} onClick={() => onAction?.("cancel", order)}>Cancel</AdminButton>}</div></Cell></tr>;
-  })} />;
+  const orderPending = Object.entries(pending).some(([key, value]) => value && key.endsWith(`:${order._id}`));
+  return <div className="flex flex-wrap gap-2">{canConfirm(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`confirm:${order._id}`]} onClick={() => onAction?.("confirm", order)}>Confirm</AdminButton>}{canReady(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`ready:${order._id}`]} onClick={() => onAction?.("ready", order)}>Ready</AdminButton>}{canShip(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`ship:${order._id}`]} onClick={() => onAction?.("ship", order)}>Mark Shipped</AdminButton>}{canDeliver(order) && <AdminButton variant="secondary" disabled={orderPending} loading={pending[`deliver:${order._id}`]} onClick={() => onAction?.("deliver", order)}>Deliver</AdminButton>}{canCancel(order) && <AdminButton variant="danger" disabled={orderPending} loading={pending[`cancel:${order._id}`]} onClick={() => onAction?.("cancel", order)}>Cancel</AdminButton>}</div>;
+}
+
+function OrdersTable({ orders = [], onView }) {
+  return <>
+    <div className="hidden overflow-hidden rounded-xl border border-[var(--admin-border)] bg-white shadow-sm xl:block">
+      <div className="overflow-x-auto"><table className="w-full min-w-[960px] table-fixed text-sm"><thead className="border-b border-[var(--admin-border)] bg-linen/55"><tr>{[["Order", "w-[12%]"], ["Customer", "w-[17%]"], ["Items", "w-[21%]"], ["Total", "w-[10%]"], ["Payment", "w-[10%]"], ["Order status", "w-[12%]"], ["Shipping", "w-[10%]"], ["Actions", "w-[8%]"]].map(([label, width]) => <th key={label} className={`${width} px-4 py-3 text-left text-[11px] font-extrabold uppercase tracking-[0.1em] text-ink/45`}>{label}</th>)}</tr></thead>
+      <tbody className="divide-y divide-[var(--admin-border)]">{orders.map((order) => <tr key={order._id} className="transition-colors hover:bg-linen/25">
+        <Cell><button type="button" onClick={() => onView(order)} className="font-mono text-sm font-extrabold text-[var(--admin-primary)] hover:underline">#{shortOrderId(order)}</button><p className="mt-1 text-[11px] text-ink/45">{new Date(order.createdAt).toLocaleDateString("en-IN")}</p></Cell>
+        <Cell><p className="truncate font-bold text-ink">{order.user?.name || order.shippingAddress?.fullName || "Customer"}</p><p className="mt-0.5 truncate text-xs text-ink/50">{order.shippingAddress?.phone || order.user?.email || "No contact provided"}</p></Cell>
+        <Cell><OrderItemSummary order={order} /></Cell>
+        <Cell className="font-extrabold text-ink">{orderMoney(order.totalAmount)}</Cell>
+        <Cell><OrderStatusBadge>{statusText(order.paymentStatus)}</OrderStatusBadge></Cell>
+        <Cell><OrderStatusBadge>{orderStatusLabel(order.orderStatus)}</OrderStatusBadge></Cell>
+        <Cell><OrderStatusBadge>{shippingStatusLabel(order.shippingStatus)}</OrderStatusBadge></Cell>
+        <Cell><AdminButton variant="secondary" onClick={() => onView(order)}>View</AdminButton></Cell>
+      </tr>)}</tbody></table></div>
+    </div>
+    <div className="grid gap-3 sm:grid-cols-2 xl:hidden">{orders.map((order) => <article key={order._id} className="rounded-xl border border-[var(--admin-border)] bg-white p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><button type="button" onClick={() => onView(order)} className="font-mono text-sm font-extrabold text-[var(--admin-primary)]">#{shortOrderId(order)}</button><p className="mt-1 text-xs text-ink/45">{new Date(order.createdAt).toLocaleDateString("en-IN")}</p></div><p className="text-lg font-extrabold">{orderMoney(order.totalAmount)}</p></div><div className="mt-4 border-y border-[var(--admin-border)] py-3"><p className="font-bold">{order.user?.name || order.shippingAddress?.fullName || "Customer"}</p><p className="mt-0.5 text-xs text-ink/50">{order.shippingAddress?.phone || order.user?.email || "No contact provided"}</p><div className="mt-3"><OrderItemSummary order={order} /></div></div><div className="mt-3 flex flex-wrap gap-2"><OrderStatusBadge>{statusText(order.paymentStatus)}</OrderStatusBadge><OrderStatusBadge>{orderStatusLabel(order.orderStatus)}</OrderStatusBadge><OrderStatusBadge>{shippingStatusLabel(order.shippingStatus)}</OrderStatusBadge></div><AdminButton variant="secondary" className="mt-4 w-full" onClick={() => onView(order)}>View order</AdminButton></article>)}</div>
+  </>;
+}
+
+function DetailBlock({ title, children }) {
+  return <section className="border-t border-[var(--admin-border)] px-5 py-5 first:border-t-0"><h3 className="mb-3 text-xs font-extrabold uppercase tracking-[0.14em] text-ink/45">{title}</h3>{children}</section>;
+}
+
+function OrderDetailsDrawer({ order, onClose, onAction, pending, shiprocketAvailable }) {
+  if (!order) return null;
+  const address = order.shippingAddress || {};
+  const transaction = order.razorpayPaymentId || order.razorpayOrderId;
+  const history = order.mockShippingHistory || [];
+  return <div className="fixed inset-0 z-[90] bg-ink/35" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><aside role="dialog" aria-modal="true" aria-label={`Order ${shortOrderId(order)} details`} className="ml-auto flex h-full w-full max-w-xl flex-col bg-white shadow-2xl"><header className="flex items-start justify-between border-b border-[var(--admin-border)] px-5 py-4"><div><p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[var(--admin-primary)]">Order details</p><h2 className="mt-1 font-mono text-xl font-extrabold">#{shortOrderId(order)}</h2><p className="mt-1 text-xs text-ink/45">Placed {new Date(order.createdAt).toLocaleString("en-IN")}</p></div><button type="button" onClick={onClose} aria-label="Close order details" className="grid h-9 w-9 place-items-center rounded-lg text-ink/60 transition hover:bg-linen hover:text-ink"><X size={18} /></button></header><div className="flex-1 overflow-y-auto">
+    <DetailBlock title="Customer"><div className="grid gap-1 text-sm"><p className="font-bold text-ink">{order.user?.name || address.fullName || "Customer"}</p><p className="text-ink/60">{address.phone || "Phone not available"}</p><p className="text-ink/60">{order.user?.email || "Email not available"}</p><p className="mt-2 leading-6 text-ink/60">{[address.street, address.city, address.state, address.postalCode, address.country].filter(Boolean).join(", ") || "Address not available"}</p></div></DetailBlock>
+    <DetailBlock title={`Items · ${order.products?.length || 0}`}><div className="divide-y divide-[var(--admin-border)]">{order.products?.map((item) => <div key={`${item.product}-${item.variant}`} className="flex gap-3 py-3 first:pt-0 last:pb-0">{item.image ? <img src={item.image} alt="" className="h-14 w-14 rounded-lg border border-[var(--admin-border)] object-cover" /> : <span className="grid h-14 w-14 shrink-0 place-items-center rounded-lg bg-linen text-ink/35"><Package size={20} /></span>}<div className="min-w-0 flex-1"><div className="flex justify-between gap-3"><p className="font-bold text-ink">{item.title}</p><p className="font-extrabold">{orderMoney(item.total)}</p></div><p className="mt-1 text-xs text-ink/50">{item.variantName} · SKU {item.sku}</p><p className="mt-1 text-xs font-semibold text-ink/60">Qty: {item.quantity} · {orderMoney(item.price)} each</p></div></div>)}</div><div className="mt-4 flex items-center justify-between rounded-lg bg-linen/55 px-3 py-2"><span className="text-sm font-bold text-ink/60">Order total</span><span className="text-lg font-extrabold">{orderMoney(order.totalAmount)}</span></div></DetailBlock>
+    <DetailBlock title="Payment"><div className="grid grid-cols-2 gap-3 text-sm"><div><p className="text-xs text-ink/45">Status</p><div className="mt-1"><OrderStatusBadge>{statusText(order.paymentStatus)}</OrderStatusBadge></div></div><div><p className="text-xs text-ink/45">Method</p><p className="mt-1 font-bold">{statusText(order.paymentMethod)}</p></div>{transaction && <div className="col-span-2"><p className="text-xs text-ink/45">Transaction / UTR</p><p className="mt-1 break-all font-mono text-xs font-bold">{transaction}</p></div>}</div></DetailBlock>
+    <DetailBlock title="Order status"><OrderStatusBadge>{orderStatusLabel(order.orderStatus)}</OrderStatusBadge><div className="mt-3 border-l-2 border-[var(--admin-primary)]/20 pl-3"><p className="text-xs font-bold text-ink/65">Order placed</p><p className="mt-0.5 text-[11px] text-ink/45">{new Date(order.createdAt).toLocaleString("en-IN")}</p>{order.updatedAt && order.updatedAt !== order.createdAt && <><p className="mt-3 text-xs font-bold text-ink/65">Last updated · {orderStatusLabel(order.orderStatus)}</p><p className="mt-0.5 text-[11px] text-ink/45">{new Date(order.updatedAt).toLocaleString("en-IN")}</p></>}</div></DetailBlock>
+    <DetailBlock title="Shipping"><div className="flex items-center justify-between gap-3"><OrderStatusBadge>{shippingStatusLabel(order.shippingStatus)}</OrderStatusBadge><span className="text-xs font-semibold text-ink/45">{statusText(order.shippingStatus)}</span></div><div className="mt-3 grid gap-2 text-xs text-ink/60">{order.courierName && <p><strong className="text-ink">Courier:</strong> {order.courierName}</p>}{order.awbCode && <p><strong className="text-ink">Tracking / AWB:</strong> {order.awbCode}</p>}{order.trackingUrl && <a href={order.trackingUrl} target="_blank" rel="noreferrer" className="font-bold text-[var(--admin-primary)] underline">Open tracking</a>}{history.map((entry, index) => <p key={`${entry.status}-${index}`}><strong className="text-ink">{entry.label || statusText(entry.status)}:</strong> {new Date(entry.createdAt).toLocaleString("en-IN")}</p>)}{!order.awbCode && !history.length && <p>Tracking information is not available yet.</p>}</div></DetailBlock>
+  </div><footer className="border-t border-[var(--admin-border)] bg-linen/35 px-5 py-4"><p className="mb-3 text-xs font-extrabold uppercase tracking-[0.12em] text-ink/45">Actions</p><OrderActions order={order} onAction={onAction} pending={pending} shiprocketAvailable={shiprocketAvailable} /></footer></aside></div>;
 }
 
 export function OrdersPage() {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState(null);
   const { data, loading, error, setData } = useAdminData(() => adminApi.orders(q ? `?search=${encodeURIComponent(q)}` : ""), [q]);
   const { pending, run } = useAdminAction();
   const { data: serviceData } = useAdminData(adminApi.serviceStatus);
@@ -160,11 +232,13 @@ export function OrdersPage() {
     const result = await run(key, type === "ready" ? () => adminApi.readyToShip(order._id) : () => adminApi.orderStatus(order._id, status), labels[type]);
     if (result?.order) {
       setOrder(result.order);
+      setSelectedOrder((current) => current?._id === result.order._id ? result.order : current);
       window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["dashboard", "orders", "inventory", "products"] } }));
       if (type === "ready") navigate(`/admin/shipping?ready=${order._id}`);
     }
+    return result;
   };
-  return <><AdminPageHeader title="Orders" description="Review and process customer orders." /><AdminFilters><SearchBox value={q} onChange={setQ} placeholder="Search orders" /></AdminFilters><State loading={loading} error={error} empty={!data?.items?.length} title="No orders found." />{data?.items?.length ? <OrdersTable orders={data.items} onAction={action} pending={pending} shiprocketAvailable={shiprocketAvailable} /> : null}</>;
+  return <><AdminPageHeader title="Orders" description="Review and process customer orders." /><AdminFilters><SearchBox value={q} onChange={setQ} placeholder="Search orders" /></AdminFilters><State loading={loading} error={error} empty={!data?.items?.length} title="No orders found." />{data?.items?.length ? <OrdersTable orders={data.items} onView={setSelectedOrder} /> : null}<OrderDetailsDrawer order={selectedOrder} onClose={() => setSelectedOrder(null)} onAction={action} pending={pending} shiprocketAvailable={shiprocketAvailable} /></>;
 }
 
 function ProductEditor({ open, onClose, product, onSaved }) {

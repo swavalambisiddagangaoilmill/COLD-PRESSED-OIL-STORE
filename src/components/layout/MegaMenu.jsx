@@ -71,12 +71,14 @@ export default function MegaMenu({ menu, open, onNavigate }) {
             })}
           </nav>
           <Link to={data.banner.href} onClick={onNavigate} className="group grid max-h-[300px] overflow-hidden rounded-3xl bg-linen lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="max-h-[300px] overflow-hidden">
+            <div className={`relative max-h-[300px] overflow-hidden ${data.banner.rotateImage ? "bg-linen" : ""}`}>
               <img
                 src={data.banner.image}
                 alt={data.banner.title}
                 loading="lazy"
-                className="h-full min-h-[260px] w-full object-cover transition duration-700 group-hover:scale-105"
+                className={data.banner.rotateImage
+                  ? "absolute left-1/2 top-1/2 h-[150%] w-[63%] -translate-x-1/2 -translate-y-1/2 rotate-90 object-contain"
+                  : "h-full min-h-[260px] w-full object-cover"}
               />
             </div>
             <div className="flex flex-col justify-center p-7 2xl:p-8">
@@ -86,7 +88,7 @@ export default function MegaMenu({ menu, open, onNavigate }) {
               </h3>
               <p className="mt-3 max-w-xl leading-7 text-ink/60">{data.banner.description}</p>
               <span className="mt-5 inline-flex h-12 w-max items-center gap-2 rounded-xl bg-ink px-6 text-sm font-semibold text-white transition duration-300 group-hover:bg-leaf">
-                Shop Now <ArrowRight size={18} />
+                {data.banner.ctaLabel || "Shop Now"} <ArrowRight size={18} />
               </span>
             </div>
           </Link>

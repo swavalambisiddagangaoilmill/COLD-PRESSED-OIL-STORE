@@ -63,3 +63,16 @@ The feature is disabled by default and remains inactive outside `NODE_ENV=produc
 - `KEEP_ALIVE_JITTER_SECONDS=30`
 - `KEEP_ALIVE_PATH=/api/health`
 - `KEEP_ALIVE_LOGGING=false`
+## Production transactional cleanup
+
+The production cleanup script deletes only exact development seed records and document IDs explicitly listed by an operator. It never deletes whole collections and never targets products, variants, media, categories, site content, settings, admin users, or admin sessions.
+
+1. Create and verify a fresh MongoDB backup (`mongodump` or an Atlas snapshot). Do not continue until it can be restored.
+2. Copy `scripts/production-cleanup-manifest.example.json` to `scripts/production-cleanup-manifest.json` and add only document IDs that have been manually verified as test/demo data. The built-in seed identifiers do not need to be added.
+3. Set `NODE_ENV=production`, `MONGO_URI`, `PRODUCTION_CLEANUP_DB_NAME`, and optionally `PRODUCTION_CLEANUP_MANIFEST`.
+4. Run `npm run cleanup:production:fingerprint` and set the printed value as `PRODUCTION_CLEANUP_URI_FINGERPRINT`.
+5. Run `npm run cleanup:production:dry-run`. Review every candidate ID and all before-counts. This command makes no database changes.
+6. Set `PRODUCTION_CLEANUP_BACKUP_PATH` to the non-empty backup file/directory, `PRODUCTION_CLEANUP_BACKUP_CONFIRMED_AT` to the backup completion time in ISO-8601 format, and `PRODUCTION_CLEANUP_CONFIRM=DELETE_TEST_DATA_FROM_<exact database name>`.
+7. Run `npm run cleanup:production:execute`. The deletion runs in a MongoDB transaction and stops if the deployment does not support transactions.
+
+After execution, the script prints deleted counts, remaining candidate counts, full collection counts, and protected-data fingerprints. A completed run is valid only when all candidate counts are zero and all protected fingerprints remain identical.

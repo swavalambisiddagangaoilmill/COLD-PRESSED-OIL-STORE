@@ -1,0 +1,14 @@
+{
+  "users": [],
+  "orders": [],
+  "paymentCheckouts": [],
+  "notifications": [],
+  "contactMessages": [],
+  "otpVerifications": [],
+  "securityEvents": [],
+  "restrictions": [],
+  "auditLogs": [],
+  "coupons": [],
+  "offers": [],
+  "newsletterSubscribers": []
+}

@@ -7,7 +7,7 @@ export default function StorySection() {
     <section className="section-padding bg-surface">
       <Container className="grid items-center gap-10 lg:grid-cols-2">
         <div className="overflow-hidden rounded-3xl shadow-soft">
-          <img src="https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=1300&q=85" alt="Traditional kitchen ingredients" loading="lazy" className="aspect-[4/3] h-full w-full object-cover" />
+          <img src="/lifestyle-edit-oil-mill.png" alt="Ceremony at Swavalambi Siddaganga Oil Mill" loading="lazy" className="aspect-[4/3] h-full w-full object-cover" />
         </div>
         <div>
           <SectionHeading align="left" eyebrow="Our story" title="Traditional pressing, redesigned for the modern pantry." text="Swavalambi Siddaganga Oil Mill began with a simple belief: edible oil should taste alive. We source clean seeds, press slowly, let each batch settle naturally, and bottle only what feels worthy of your table." />

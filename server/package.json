@@ -10,7 +10,10 @@
     "test": "node --test tests",
     "seed": "node seed/seed.js",
     "reset": "node seed/seed.js --reset",
-    "create-owner": "node scripts/create-owner.js"
+    "create-owner": "node scripts/create-owner.js",
+    "cleanup:production:dry-run": "node scripts/production-data-cleanup.js",
+    "cleanup:production:execute": "node scripts/production-data-cleanup.js --execute",
+    "cleanup:production:fingerprint": "node scripts/production-data-cleanup.js --print-uri-fingerprint"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

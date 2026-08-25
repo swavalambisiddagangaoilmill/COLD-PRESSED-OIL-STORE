@@ -33,7 +33,7 @@ export default function MobileDrawer({ open, onClose, onWishlist, onLogout, acco
               <Link to="/" onClick={onClose} className="block border-b border-ink/10 py-4 text-lg font-semibold">Home</Link>
               <AccordionMenu title="Shop" href="/shop" state={{ resetShop: true }} links={categoryMenuLinks.slice(0, 4)} onClose={onClose} />
               <AccordionMenu title="Cold Pressed Oils" href="/shop?q=Cold%20Pressed%20Oils&focus=search" state={{ resetShop: true }} links={oilMenuLinks} onClose={onClose} />
-              <AccordionMenu title="Essential Oils" href="/shop?q=Essential%20Oils&focus=search" state={{ resetShop: true }} links={essentialOilLinks} onClose={onClose} />
+              <AccordionMenu title="Specialty Oils" href="/shop?q=Specialty%20Oils&focus=search" state={{ resetShop: true }} links={essentialOilLinks} onClose={onClose} />
               <AccordionMenu title="About" href="/about/story" links={aboutMenuLinks} onClose={onClose} />
               <Link to="/contact" onClick={onClose} className="block border-b border-ink/10 py-4 text-lg font-semibold">Contact</Link>
             </nav>

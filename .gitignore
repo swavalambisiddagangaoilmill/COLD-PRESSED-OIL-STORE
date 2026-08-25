@@ -29,6 +29,7 @@ pnpm-debug.log*
 server/uploads/
 uploads/
 *.zip
+server/scripts/production-cleanup-manifest.json
 
 # OS/editor
 .DS_Store

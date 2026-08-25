@@ -8,7 +8,7 @@ export default function Testimonials() {
   return (
     <section className="section-padding bg-surface">
       <Container>
-        <SectionHeading eyebrow="Customer notes" title="Loved by thoughtful kitchens" />
+        <SectionHeading eyebrow="Customer notes" title="Loved by thoughtful kitchens" text="4.9 / 5 · 169+ Google reviews" />
         <TestimonialCarousel items={testimonials} />
       </Container>
     </section>
