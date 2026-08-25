@@ -15,15 +15,7 @@ import { normalizeCouponCode } from "../../services/couponService.js";
 import { deleteImage } from "../../services/uploadService.js";
 import { ApiError } from "../../utils/ApiError.js";
 import { slugify } from "../../utils/slugify.js";
-
-const orderTransitions = {
-  placed: ["confirmed", "cancelled"],
-  confirmed: ["packed", "cancelled"],
-  packed: ["shipped", "cancelled"],
-  shipped: ["delivered"],
-  delivered: [],
-  cancelled: [],
-};
+import { assertOrderStatusTransition } from "../../services/orderStatusPolicy.js";
 
 export async function getSettings() {
   return StoreSettings.findOneAndUpdate({ key: "store" }, { $setOnInsert: { key: "store" } }, { upsert: true, new: true });
@@ -70,7 +62,7 @@ export async function listOrders(query) {
 export async function updateOrderStatus(id, nextStatus) {
   const order = await Order.findById(id);
   if (!order) throw new ApiError("Order not found.", 404);
-  if (!orderTransitions[order.orderStatus]?.includes(nextStatus)) throw new ApiError("Invalid order status transition.", 400);
+  assertOrderStatusTransition(order.orderStatus, nextStatus);
   const previousStatus = order.orderStatus;
   const previousShippingStatus = order.shippingStatus;
   order.orderStatus = nextStatus;
@@ -83,8 +75,6 @@ export async function updateOrderStatus(id, nextStatus) {
       await Product.bulkWrite(order.products.map((item) => ({ updateOne: { filter: { _id: item.product, "variants._id": item.variant }, update: { $inc: { "variants.$.stock": item.quantity } } } })));
       order.inventoryRestoredAt = new Date();
       await order.save();
-      const restoredProducts = await Product.find({ _id: { $in: order.products.map((item) => item.product) } });
-      await Promise.all(restoredProducts.map((product) => createInventoryNotifications(product)));
     } catch (error) {
       order.orderStatus = previousStatus;
       order.shippingStatus = previousShippingStatus;
@@ -96,6 +86,8 @@ export async function updateOrderStatus(id, nextStatus) {
       failure.cause = error;
       throw failure;
     }
+    const restoredProducts = await Product.find({ _id: { $in: order.products.map((item) => item.product) } });
+    await Promise.allSettled(restoredProducts.map((product) => createInventoryNotifications(product)));
   }
   return order;
 }

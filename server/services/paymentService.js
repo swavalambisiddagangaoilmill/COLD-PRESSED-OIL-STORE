@@ -4,13 +4,28 @@ import { env } from "../config/env.js";
 import Order from "../models/Order.js";
 import PaymentCheckout from "../models/PaymentCheckout.js";
 import Product from "../models/Product.js";
-import { createOrder as createStoreOrder } from "./orderService.js";
+import { createVerifiedPaymentOrder } from "./orderService.js";
 import { ApiError } from "../utils/ApiError.js";
 import { createAdminNotification } from "./adminNotificationService.js";
 import { calculateCheckoutTotals, consumeCouponUsageForOrder, validateCouponForItems } from "./couponService.js";
 import { isServiceAvailable, logExternalFailure } from "./serviceStatusService.js";
 
 const PAYMENT_UNAVAILABLE = "Online payments are temporarily unavailable.";
+
+export function isValidRazorpaySignature(orderId, paymentId, signature, secret) {
+  if (!orderId || !paymentId || !signature || !secret) return false;
+  const expected = crypto.createHmac("sha256", secret).update(`${orderId}|${paymentId}`).digest("hex");
+  const received = Buffer.from(String(signature));
+  const expectedBuffer = Buffer.from(expected);
+  return received.length === expectedBuffer.length && crypto.timingSafeEqual(expectedBuffer, received);
+}
+
+export function providerPaymentMatchesOrder(payment, orderId, amountInPaise) {
+  return payment?.order_id === orderId
+    && payment?.status === "captured"
+    && payment?.currency === "INR"
+    && Number(payment?.amount) === Number(amountInPaise);
+}
 
 async function calculateOrderAmount(productsPayload = [], userId, couponCode) {
   const productIds = productsPayload.map((item) => item.product);
@@ -74,21 +89,23 @@ export async function verifyPaymentAndCreateOrder(userId, payload) {
   }
   const existing = await Order.findOne({ razorpayPaymentId: payload.razorpayPaymentId }).lean();
   if (existing) throw new ApiError("Payment has already been processed.", 409);
-  const expected = crypto.createHmac("sha256", env.razorpay.keySecret).update(`${payload.razorpayOrderId}|${payload.razorpayPaymentId}`).digest("hex");
-  const received = Buffer.from(payload.razorpaySignature);
-  const expectedBuffer = Buffer.from(expected);
-  if (received.length !== expectedBuffer.length || !crypto.timingSafeEqual(expectedBuffer, received)) throw new ApiError("Payment verification failed.", 400);
-  const order = await createStoreOrder(userId, { ...payload.order, paymentMethod: "razorpay", paymentStatus: "paid", razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature });
-  await createAdminNotification({ category: "payments", type: "payment_successful", title: "Payment Successful", description: `Payment received for order ${order._id}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/payments" } });
-  return order;
-}
-
-export async function markOrderPayment(orderId, payload) {
-  const order = await Order.findByIdAndUpdate(orderId, payload, { new: true, runValidators: true });
-  if (!order) throw new ApiError("Order not found.", 404);
-  if (payload.paymentStatus === "paid") await consumeCouponUsageForOrder(order);
-  if (payload.paymentStatus === "failed") await createAdminNotification({ category: "payments", type: "payment_failed", title: "Payment Failed", description: `Payment failed for order ${order._id}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/payments" } });
-  if (payload.paymentStatus === "refunded") await createAdminNotification({ category: "payments", type: "payment_refunded", title: "Payment Refunded", description: `Payment refunded for order ${order._id}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/payments" } });
+  if (!isValidRazorpaySignature(payload.razorpayOrderId, payload.razorpayPaymentId, payload.razorpaySignature, env.razorpay.keySecret)) throw new ApiError("Payment verification failed.", 400);
+  const amount = Math.round(await calculateOrderAmount(payload.order.products, userId, payload.order.couponCode) * 100);
+  let providerResponse;
+  try {
+    providerResponse = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(payload.razorpayPaymentId)}`, { headers: { Authorization: razorpayAuthHeader() } });
+  } catch (error) {
+    logExternalFailure("razorpay", error, { action: "verify_payment" });
+    throw new ApiError(PAYMENT_UNAVAILABLE, 503);
+  }
+  const providerPayment = await providerResponse.json().catch(() => ({}));
+  if (!providerResponse.ok) {
+    logExternalFailure("razorpay", new Error(providerPayment?.error?.description || "Payment lookup failed."), { status: providerResponse.status, action: "verify_payment" });
+    throw new ApiError(PAYMENT_UNAVAILABLE, providerStatus(providerResponse.status));
+  }
+  if (!providerPaymentMatchesOrder(providerPayment, payload.razorpayOrderId, amount)) throw new ApiError("Payment details do not match this order.", 400);
+  const order = await createVerifiedPaymentOrder(userId, payload.order, { razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature });
+  await Promise.allSettled([createAdminNotification({ category: "payments", type: "payment_successful", title: "Payment Successful", description: `Payment received for order ${order._id}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/payments" } })]);
   return order;
 }
 
@@ -189,7 +206,7 @@ export async function verifyUpiQrCheckout(userId, checkoutId) {
     const order = await Order.findById(existing.order);
     return { status: "paid", order, checkout };
   }
-  const order = await createStoreOrder(userId, { ...checkout.orderPayload, paymentMethod: "razorpay", paymentStatus: "paid", razorpayPaymentId: captured.id });
+  const order = await createVerifiedPaymentOrder(userId, checkout.orderPayload, { razorpayPaymentId: captured.id });
   checkout.status = "paid";
   checkout.razorpayPaymentId = captured.id;
   checkout.order = order._id;
@@ -215,6 +232,10 @@ export async function processRazorpayWebhook(rawBody, signature) {
   if (!["payment.captured", "payment.authorized"].includes(event.event)) return { processed: false, event: event.event };
   const existingOrder = await Order.findOne({ $or: [{ razorpayPaymentId: payment.id }, { razorpayOrderId: payment.order_id }] });
   if (existingOrder) {
+    const expectedAmount = Math.round(Number(existingOrder.totalAmount) * 100);
+    if (payment.currency !== "INR" || Number(payment.amount) !== expectedAmount || (existingOrder.razorpayOrderId && payment.order_id !== existingOrder.razorpayOrderId)) {
+      throw new ApiError("Webhook payment details do not match the order.", 400);
+    }
     existingOrder.paymentStatus = payment.status === "captured" ? "paid" : existingOrder.paymentStatus;
     existingOrder.razorpayPaymentId = existingOrder.razorpayPaymentId || payment.id;
     await existingOrder.save();
@@ -223,7 +244,7 @@ export async function processRazorpayWebhook(rawBody, signature) {
   }
   const checkout = await PaymentCheckout.findOne({ $or: [{ razorpayPaymentId: payment.id }, { razorpayQrId: payment.qr_code_id }] });
   if (checkout?.orderPayload && checkout.status !== "paid" && Number(payment.amount) === checkout.amount && payment.status === "captured") {
-    const order = await createStoreOrder(checkout.user, { ...checkout.orderPayload, paymentMethod: "razorpay", paymentStatus: "paid", razorpayPaymentId: payment.id, razorpayOrderId: payment.order_id });
+    const order = await createVerifiedPaymentOrder(checkout.user, checkout.orderPayload, { razorpayPaymentId: payment.id, razorpayOrderId: payment.order_id });
     checkout.status = "paid";
     checkout.razorpayPaymentId = payment.id;
     checkout.order = order._id;

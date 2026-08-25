@@ -88,7 +88,10 @@ export default function Navbar() {
   };
 
   const focusActiveSearchInput = () => {
-    const input = window.innerWidth >= 1280 ? desktopSearchInputRef.current : mobileSearchInputRef.current;
+    const input =
+      window.innerWidth >= 1280
+        ? desktopSearchInputRef.current
+        : mobileSearchInputRef.current;
     input?.focus();
   };
 
@@ -155,7 +158,10 @@ export default function Navbar() {
                   className="h-10 w-10 shrink-0 object-cover sm:h-12 sm:w-12"
                 />
               </Link>
-              <div className="flex items-center gap-1.5 xl:hidden" aria-label="Spiritual guides">
+              <div
+                className="flex items-center gap-1.5 xl:hidden"
+                aria-label="Spiritual guides"
+              >
                 <img
                   src={basavannaLogo}
                   alt="Basavanna"
@@ -172,7 +178,11 @@ export default function Navbar() {
                 onSubmit={(event) => {
                   event.preventDefault();
                   if (homeSearchOverlay) openMobileSearch();
-                  else navigateToShopSearch(searchValue, location.pathname === "/shop");
+                  else
+                    navigateToShopSearch(
+                      searchValue,
+                      location.pathname === "/shop",
+                    );
                 }}
                 className="hidden h-11 min-w-0 items-center gap-3 rounded-md border border-ink/15 bg-white px-4 text-sm font-medium text-ink/70 transition duration-200 focus-within:border-leaf focus-within:outline-none xl:inline-flex xl:w-[220px] 2xl:w-[260px]"
               >
@@ -180,13 +190,31 @@ export default function Navbar() {
                 <input
                   ref={desktopSearchInputRef}
                   value={searchValue}
-                  onFocus={() => homeSearchOverlay ? openMobileSearch() : navigateToShopSearch(searchValue, location.pathname === "/shop")}
+                  onFocus={() =>
+                    homeSearchOverlay
+                      ? openMobileSearch()
+                      : navigateToShopSearch(
+                          searchValue,
+                          location.pathname === "/shop",
+                        )
+                  }
                   onChange={handleDesktopSearchChange}
                   placeholder={searchPlaceholder}
                   aria-label="Search oils"
                   className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-ink/70 placeholder:text-ink/50 outline-none"
                 />
-                {homeSearchOverlay && mobileSearchOpen && <button type="button" aria-label={searchValue ? "Clear search" : "Close search"} onClick={() => searchValue ? setSearchValue("") : closeMobileSearch()} className="grid h-8 w-8 shrink-0 place-items-center text-ink/55 hover:text-leaf"><X size={17} /></button>}
+                {homeSearchOverlay && mobileSearchOpen && (
+                  <button
+                    type="button"
+                    aria-label={searchValue ? "Clear search" : "Close search"}
+                    onClick={() =>
+                      searchValue ? setSearchValue("") : closeMobileSearch()
+                    }
+                    className="grid h-8 w-8 shrink-0 place-items-center text-ink/55 hover:text-leaf"
+                  >
+                    <X size={17} />
+                  </button>
+                )}
               </form>
               <img
                 src={companyLogo}
@@ -202,7 +230,10 @@ export default function Navbar() {
               {/* ಸ್ವಾವಲಂಬಿ ಸಿದ್ದಗಂಗಾ ಆಯಿಲ್ ಮಿಲ್ */}
             </Link>
             <div className="flex items-center justify-end gap-0.5 sm:gap-1 xl:gap-3">
-              <div className="hidden items-center gap-2 xl:flex" aria-label="Spiritual guides">
+              <div
+                className="hidden items-center gap-2 xl:flex"
+                aria-label="Spiritual guides"
+              >
                 <img
                   src={basavannaLogo}
                   alt="Basavanna"
@@ -222,9 +253,42 @@ export default function Navbar() {
               >
                 <Heart size={19} />
               </IconLink>
-              <Link to={accountPath} aria-label="Account" className="grid h-9 w-9 place-items-center text-ink transition hover:text-leaf xl:hidden"><UserRound size={18} fill={authenticated ? "currentColor" : "none"} /></Link>
-              <button type="button" aria-label="Wishlist" data-popup-trigger="wishlist" onClick={() => togglePopup("wishlist")} className="relative grid h-9 w-9 place-items-center text-ink transition hover:text-leaf xl:hidden"><Heart size={18} />{wishlistItems.length > 0 && <span className="absolute right-0 top-0 grid h-4 min-w-4 place-items-center bg-brand px-0.5 text-[9px] font-bold text-white">{wishlistItems.length}</span>}</button>
-              <Link to="/cart" aria-label="Cart" className="relative grid h-9 w-9 place-items-center text-ink transition hover:text-leaf xl:hidden"><ShoppingBag size={18} />{count > 0 && <span className="absolute right-0 top-0 grid h-4 min-w-4 place-items-center bg-brand px-0.5 text-[9px] font-bold text-white">{count}</span>}</Link>
+              <Link
+                to={accountPath}
+                aria-label="Account"
+                className="grid h-9 w-9 place-items-center text-ink transition hover:text-leaf xl:hidden"
+              >
+                <UserRound
+                  size={18}
+                  fill={authenticated ? "currentColor" : "none"}
+                />
+              </Link>
+              <button
+                type="button"
+                aria-label="Wishlist"
+                data-popup-trigger="wishlist"
+                onClick={() => togglePopup("wishlist")}
+                className="relative grid h-9 w-9 place-items-center text-ink transition hover:text-leaf xl:hidden"
+              >
+                <Heart size={18} />
+                {wishlistItems.length > 0 && (
+                  <span className="absolute right-0 top-0 grid h-4 min-w-4 place-items-center bg-brand px-0.5 text-[9px] font-bold text-white">
+                    {wishlistItems.length}
+                  </span>
+                )}
+              </button>
+              <Link
+                to="/cart"
+                aria-label="Cart"
+                className="relative grid h-9 w-9 place-items-center text-ink transition hover:text-leaf xl:hidden"
+              >
+                <ShoppingBag size={18} />
+                {count > 0 && (
+                  <span className="absolute right-0 top-0 grid h-4 min-w-4 place-items-center bg-brand px-0.5 text-[9px] font-bold text-white">
+                    {count}
+                  </span>
+                )}
+              </Link>
               <div className="hidden items-center gap-2 xl:flex">
                 <IconLink to={accountPath} label="Account" className="grid">
                   <UserRound
@@ -258,15 +322,52 @@ export default function Navbar() {
           </div>
         </div>
         <div className="border-t border-ink/10 px-4 py-2.5 xl:hidden">
-          <form role="search" onSubmit={(event) => { event.preventDefault(); openMobileSearch(); }} className="mx-auto flex h-10 max-w-2xl items-center gap-3 rounded-md border border-ink/30 bg-white px-3 focus-within:border-leaf">
+          <form
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              openMobileSearch();
+            }}
+            className="mx-auto flex h-10 max-w-2xl items-center gap-3 rounded-md border border-ink/30 bg-white px-3 focus-within:border-leaf"
+          >
             <Search size={17} className="text-ink/50" />
-            <input ref={mobileSearchInputRef} value={searchValue} onFocus={openMobileSearch} onChange={(event) => { setSearchValue(event.target.value); if (!mobileSearchOpen) openMobileSearch(); }} placeholder={searchPlaceholder} aria-label="Search products" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink/40" />
-            {mobileSearchOpen && <button type="button" aria-label={searchValue ? "Clear search" : "Close search"} onClick={() => searchValue ? setSearchValue("") : closeMobileSearch()} className="grid h-8 w-8 place-items-center text-ink/55 hover:text-leaf"><X size={17} /></button>}
+            <input
+              ref={mobileSearchInputRef}
+              value={searchValue}
+              onFocus={openMobileSearch}
+              onChange={(event) => {
+                setSearchValue(event.target.value);
+                if (!mobileSearchOpen) openMobileSearch();
+              }}
+              placeholder={searchPlaceholder}
+              aria-label="Search products"
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink/40"
+            />
+            {mobileSearchOpen && (
+              <button
+                type="button"
+                aria-label={searchValue ? "Clear search" : "Close search"}
+                onClick={() =>
+                  searchValue ? setSearchValue("") : closeMobileSearch()
+                }
+                className="grid h-8 w-8 place-items-center text-ink/55 hover:text-leaf"
+              >
+                <X size={17} />
+              </button>
+            )}
           </form>
         </div>
         <DesktopMenu />
       </header>
-      <MobileSearchPanel open={mobileSearchOpen} query={searchValue} onQueryChange={(value) => { setSearchValue(value); window.setTimeout(focusActiveSearchInput, 0); }} onClose={finishMobileSearchNavigation} />
+      <MobileSearchPanel
+        open={mobileSearchOpen}
+        query={searchValue}
+        onQueryChange={(value) => {
+          setSearchValue(value);
+          window.setTimeout(focusActiveSearchInput, 0);
+        }}
+        onClose={finishMobileSearchNavigation}
+      />
       <MobileDrawer
         open={open}
         onClose={() => setOpen(false)}
@@ -279,8 +380,3 @@ export default function Navbar() {
     </>
   );
 }
-
-
-
-
-

@@ -20,11 +20,9 @@ const SEARCH_TERMS = [
   "Specialty Oil",
 ];
 
-const STATIC_PLACEHOLDER = "Search oils";
-
 export default function useTypewriterPlaceholder(inputValue) {
   const [phraseIndex, setPhraseIndex] = useState(0);
-  const [visibleLength, setVisibleLength] = useState(0);
+  const [visibleLength, setVisibleLength] = useState(1);
   const [deleting, setDeleting] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
@@ -51,10 +49,11 @@ export default function useTypewriterPlaceholder(inputValue) {
     } else if (visibleLength > 0) {
       nextStep = () => setVisibleLength((length) => length - 1);
     } else {
-      delay = 260;
+      delay = 400;
       nextStep = () => {
         setDeleting(false);
         setPhraseIndex((index) => (index + 1) % SEARCH_TERMS.length);
+        setVisibleLength(1);
       };
     }
 
@@ -62,6 +61,7 @@ export default function useTypewriterPlaceholder(inputValue) {
     return () => window.clearTimeout(timer);
   }, [deleting, inputValue, phraseIndex, reducedMotion, visibleLength]);
 
-  if (inputValue || reducedMotion) return STATIC_PLACEHOLDER;
-  return SEARCH_TERMS[phraseIndex].slice(0, visibleLength) || STATIC_PLACEHOLDER;
+  if (inputValue) return "";
+  if (reducedMotion) return SEARCH_TERMS[0];
+  return SEARCH_TERMS[phraseIndex].slice(0, visibleLength);
 }

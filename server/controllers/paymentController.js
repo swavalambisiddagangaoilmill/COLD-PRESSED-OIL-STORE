@@ -1,7 +1,7 @@
 // Payment controller handles Razorpay-compatible payment operations.
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendSuccess } from "../utils/apiResponse.js";
-import { createPaymentOrder, createUpiQrCheckout, markOrderPayment, processRazorpayWebhook, verifyPaymentAndCreateOrder, verifyUpiQrCheckout } from "../services/paymentService.js";
+import { createPaymentOrder, createUpiQrCheckout, processRazorpayWebhook, verifyPaymentAndCreateOrder, verifyUpiQrCheckout } from "../services/paymentService.js";
 
 export const createPaymentIntent = asyncHandler(async (req, res) => {
   const payment = await createPaymentOrder(req.user._id, req.body);
@@ -11,11 +11,6 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
 export const verifyPayment = asyncHandler(async (req, res) => {
   const order = await verifyPaymentAndCreateOrder(req.user._id, req.body);
   sendSuccess(res, 201, "Payment verified and order created successfully", { order });
-});
-
-export const updatePaymentStatus = asyncHandler(async (req, res) => {
-  const order = await markOrderPayment(req.params.orderId, req.body);
-  sendSuccess(res, 200, "Payment status updated successfully", { order });
 });
 
 export const createUpiQrPayment = asyncHandler(async (req, res) => {

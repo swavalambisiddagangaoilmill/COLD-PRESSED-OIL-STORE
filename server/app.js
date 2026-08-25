@@ -33,6 +33,7 @@ import { getActiveCarousel } from "./controllers/carouselController.js";
 import { getServiceStatus } from "./services/serviceStatusService.js";
 
 const app = express();
+const webhookLimiter = rateLimit({ windowMs: 60 * 1000, limit: 120, standardHeaders: true, legacyHeaders: false });
 
 app.set("trust proxy", 1);
 app.use(assignRequestId);
@@ -65,6 +66,7 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token", "X-Requested-With"],
 }));
 app.use(cookieParser());
+app.post("/api/payments/webhook", webhookLimiter, express.raw({ type: "application/json", limit: "256kb" }), razorpayWebhook);
 app.use(express.json({ limit: "256kb" }));
 app.use(express.urlencoded({ extended: true, limit: "64kb", parameterLimit: 50 }));
 app.use(sanitizeRequest);

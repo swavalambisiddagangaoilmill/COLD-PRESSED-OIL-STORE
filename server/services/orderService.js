@@ -7,6 +7,7 @@ import { createAdminNotification, createInventoryNotifications } from "./adminNo
 import { calculateCheckoutTotals, consumeCouponUsageForOrder, normalizeCouponCode, validateCouponForItems } from "./couponService.js";
 import { sendOrderTrackingMessage } from "./whatsappService.js";
 import { env } from "../config/env.js";
+import { assertOrderStatusTransition } from "./orderStatusPolicy.js";
 
 function normalizeOrderProducts(products = []) {
   const merged = new Map();
@@ -36,14 +37,18 @@ export function buildVariantOrderItem(product, item, paymentMethod = "cod") {
   return { product: product._id, variant: variant._id, title: product.title, variantName: variant.name, sku: variant.sku, image: variant.images?.[0]?.url, quantity: item.quantity, price, mrp: variant.mrp, total: price * item.quantity };
 }
 
-export async function createOrder(userId, payload) {
+export function customerOrderPaymentState() {
+  return { paymentMethod: "cod", paymentStatus: "pending" };
+}
+
+async function createOrderInternal(userId, payload, trustedPayment = {}) {
   const requestedItems = normalizeOrderProducts(payload.products);
   if (!requestedItems.length) throw new ApiError("At least one product is required.", 400);
   const productIds = requestedItems.map((item) => item.product);
   const products = await Product.find({ _id: { $in: productIds }, isActive: true });
   const productMap = new Map(products.map((product) => [product._id.toString(), product]));
 
-  const paymentMethod = payload.paymentMethod || "cod";
+  const paymentMethod = trustedPayment.paymentMethod || "cod";
 
   const orderItems = requestedItems.map((item) => {
     const product = productMap.get(item.product.toString());
@@ -64,7 +69,7 @@ export async function createOrder(userId, payload) {
 
   try {
     const totals = calculateCheckoutTotals(orderItems, couponResult.discountAmount);
-    const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: payload.paymentStatus || "pending", razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount });
+    const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: trustedPayment.paymentStatus || "pending", razorpayOrderId: trustedPayment.razorpayOrderId, razorpayPaymentId: trustedPayment.razorpayPaymentId, razorpaySignature: trustedPayment.razorpaySignature, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount });
     try {
       await consumeCouponUsageForOrder(order);
     } catch (error) {
@@ -87,6 +92,22 @@ export async function createOrder(userId, payload) {
   }
 }
 
+// Customer-created orders are always COD/pending. Browser-supplied payment state is ignored.
+export function createOrder(userId, payload) {
+  return createOrderInternal(userId, payload, customerOrderPaymentState());
+}
+
+// Only verified server-side payment flows may call this entry point.
+export function createVerifiedPaymentOrder(userId, payload, payment) {
+  return createOrderInternal(userId, payload, {
+    paymentMethod: "razorpay",
+    paymentStatus: "paid",
+    razorpayOrderId: payment.razorpayOrderId,
+    razorpayPaymentId: payment.razorpayPaymentId,
+    razorpaySignature: payment.razorpaySignature,
+  });
+}
+
 export function getMyOrders(userId) {
   return Order.find({ user: userId }).sort({ createdAt: -1 }).lean();
 }
@@ -107,10 +128,31 @@ export function getAllOrders() {
 export async function updateOrderStatus(orderId, payload) {
   const order = await Order.findById(orderId);
   if (!order) throw new ApiError("Order not found.", 404);
-  order.set(payload);
+  const nextStatus = payload.orderStatus;
+  assertOrderStatusTransition(order.orderStatus, nextStatus);
+  const previousStatus = order.orderStatus;
+  const previousShippingStatus = order.shippingStatus;
+  order.orderStatus = nextStatus;
+  if (nextStatus === "cancelled") order.shippingStatus = "cancelled";
+  if (nextStatus === "shipped" && !["picked_up", "in_transit", "out_for_delivery"].includes(order.shippingStatus)) order.shippingStatus = "shipped";
+  if (nextStatus === "delivered") order.shippingStatus = "delivered";
   await order.save();
-  if (payload.orderStatus === "cancelled") await createAdminNotification({ category: "orders", type: "order_cancelled", title: "Order Cancelled", description: `Order ${order._id} was cancelled.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } });
-  if (payload.orderStatus === "delivered") await createAdminNotification({ category: "orders", type: "order_delivered", title: "Order Delivered", description: `Order ${order._id} was delivered.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } });
+  if (nextStatus === "cancelled" && !order.inventoryRestoredAt) {
+    try {
+      await Product.bulkWrite(order.products.map((item) => ({ updateOne: { filter: { _id: item.product, "variants._id": item.variant }, update: { $inc: { "variants.$.stock": item.quantity } } } })));
+      order.inventoryRestoredAt = new Date();
+      await order.save();
+    } catch (error) {
+      order.orderStatus = previousStatus;
+      order.shippingStatus = previousShippingStatus;
+      await order.save().catch(() => undefined);
+      throw new ApiError("Unable to restore variant stock, so the cancellation was rolled back.", 500);
+    }
+  }
+  const notification = nextStatus === "cancelled"
+    ? { type: "order_cancelled", title: "Order Cancelled", description: `Order ${order._id} was cancelled.` }
+    : nextStatus === "delivered" ? { type: "order_delivered", title: "Order Delivered", description: `Order ${order._id} was delivered.` } : null;
+  if (notification) await Promise.allSettled([createAdminNotification({ category: "orders", ...notification, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } })]);
   return order;
 }
 

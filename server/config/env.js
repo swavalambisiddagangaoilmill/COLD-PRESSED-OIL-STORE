@@ -88,10 +88,18 @@ if (isProduction && (env.jwtSecret === "development_only_change_me" || env.jwtSe
 
 if (isProduction) {
   const required = [
-    ["MONGO_URI", env.mongoUri],
-    ["CLIENT_URL", env.clientUrl],
+    ["MONGO_URI", process.env.MONGO_URI],
+    ["CLIENT_URL", process.env.CLIENT_URL],
   ];
   const missing = required.filter(([, value]) => !value).map(([key]) => key);
   if (missing.length) throw new Error(`Missing production environment variables: ${missing.join(", ")}`);
+  const productionOrigins = env.clientUrls.map((origin) => {
+    try { return new URL(origin); } catch { throw new Error(`Invalid production client origin: ${origin}`); }
+  });
+  if (productionOrigins.some((url) => url.protocol !== "https:" || ["localhost", "127.0.0.1"].includes(url.hostname))) {
+    throw new Error("Production CLIENT_URL/CLIENT_URLS must contain only HTTPS public origins.");
+  }
+  if (env.whatsapp.mode === "mock") throw new Error("WHATSAPP_MODE=mock is not allowed in production.");
+  if (env.shiprocket.mock) throw new Error("SHIPROCKET_MOCK=true is not allowed in production.");
 }
 
