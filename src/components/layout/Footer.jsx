@@ -1,5 +1,6 @@
 // Renders the premium footer layout element.
 import {
+  ArrowUpRight,
   Mail,
   MapPin,
   Phone,
@@ -81,17 +82,19 @@ export default function Footer() {
             href="https://glora.studio"
             target="_blank"
             rel="noopener noreferrer"
-            className="mx-auto mt-5 inline-grid min-w-56 place-items-center rounded-3xl border border-white/10 bg-white px-7 py-4 text-ink shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg"
+            className="group mx-auto mt-5 inline-flex min-w-56 items-center justify-center gap-1.5 rounded-3xl border border-white/10 bg-white px-4 py-3 text-ink shadow-sm transition duration-300 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clay motion-reduce:transform-none motion-reduce:transition-none"
             aria-label="Visit Glora Studio"
           >
-            <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-ink/40">
-              Made by Team
-            </span>
             <img
               src={gloraLogo}
-              alt="Glora Studio Logo"
-              className="mt-3 h-14 w-auto object-contain"
+              alt=""
+              className="h-7 w-7 object-contain"
             />
+            <span className="relative grid h-4 min-w-[9.25rem] overflow-hidden whitespace-nowrap text-left text-[10px] font-medium text-ink/45">
+              <span className="col-start-1 row-start-1 transition duration-300 group-hover:-translate-y-full group-hover:opacity-0 motion-reduce:transition-none">crafted by <strong className="text-xs text-ink">Glora Studio</strong></span>
+              <span className="col-start-1 row-start-1 translate-y-full opacity-0 transition duration-300 group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none">built with care by <strong className="text-xs text-ink">Glora Studio</strong></span>
+            </span>
+            <ArrowUpRight size={13} strokeWidth={2} className="text-ink/45 transition duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-ink motion-reduce:transform-none motion-reduce:transition-none" />
           </a>
         </div>
 

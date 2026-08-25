@@ -63,7 +63,7 @@ export default function StatusPage({ code = "404", title, message, retry = false
               {isLoginRequired && <Button to="/login" state={{ from: location.pathname }}>Login to continue</Button>}
               {retry && !isLoginRequired && (
                 <Button onClick={() => window.location.reload()}>
-                  <RotateCcw size={17} /> Retry
+                  <RotateCcw size={17} /> Try Again
                 </Button>
               )}
               <Button to="/shop" variant={retry || isLoginRequired ? "secondary" : "primary"}>Shop Oils</Button>

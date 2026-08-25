@@ -17,7 +17,7 @@ export function getActiveOffers() {
 }
 
 export function validateCoupon(code, products) {
-  return apiRequest(API_ENDPOINTS.couponValidate, { method: "POST", body: JSON.stringify({ code, products }) })
+  return apiRequest(API_ENDPOINTS.couponValidate, { method: "POST", body: JSON.stringify({ code, products }), retry: { enabled: true, idempotent: true } })
     .then((data) => data.coupon)
     .catch((error) => {
       if (COUPON_MESSAGES[error.reason]) error.message = COUPON_MESSAGES[error.reason];
