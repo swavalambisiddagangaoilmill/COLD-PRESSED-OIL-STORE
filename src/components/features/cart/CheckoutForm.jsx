@@ -3,7 +3,7 @@ import { CreditCard, Home, Truck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getAuthToken } from "../../../api/apiClient.js";
-import { checkUpiQrPayment, createOrder, createPaymentIntent, createUpiQrPayment, verifyPayment } from "../../../services/checkoutService.js";
+import { createOrder, createPaymentIntent, verifyPayment } from "../../../services/checkoutService.js";
 import { fetchAccountProfile } from "../../../services/accountService.js";
 import { useCart } from "../../../hooks/useCart.jsx";
 import { useServiceStatus } from "../../../hooks/useServiceStatus.js";
@@ -12,11 +12,11 @@ import { writeGuestSession } from "../../../utils/guestSession.js";
 import Button from "../../ui/Button.jsx";
 import Input from "../../ui/Input.jsx";
 
-function loadRazorpayCheckout() {
-  if (window.Razorpay) return Promise.resolve(true);
+function loadCashfreeCheckout() {
+  if (window.Cashfree) return Promise.resolve(true);
   return new Promise((resolve) => {
     const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
     script.async = true;
     script.onload = () => resolve(true);
     script.onerror = () => resolve(false);
@@ -58,13 +58,11 @@ export default function CheckoutForm() {
   const [profile, setProfile] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("online");
   const [processingStep, setProcessingStep] = useState("");
-  const [qrCheckout, setQrCheckout] = useState(null);
-  const [qrCountdown, setQrCountdown] = useState(0);
   const [error, setError] = useState("");
 
   const processing = Boolean(processingStep);
   const codAvailable = items.every((item) => item.codEnabled !== false);
-  const paymentService = serviceStatus.services?.razorpay;
+  const paymentService = serviceStatus.services?.cashfree;
   const onlineServiceAvailable = paymentService?.available !== false;
   const onlineUnavailableMessage = paymentService?.message || "Online payments are temporarily unavailable.";
   const onlineAvailable = onlineServiceAvailable && items.every((item) => item.onlinePaymentEnabled !== false);
@@ -85,37 +83,6 @@ export default function CheckoutForm() {
   useEffect(() => {
     if (!onlineAvailable && paymentMethod !== "cod") setPaymentMethod(codAvailable ? "cod" : "online");
   }, [codAvailable, onlineAvailable, paymentMethod]);
-  useEffect(() => {
-    if (!qrCheckout?.expiresAt || qrCheckout.status === "paid") return undefined;
-    const update = () => {
-      const remaining = Math.max(0, Math.floor((new Date(qrCheckout.expiresAt).getTime() - Date.now()) / 1000));
-      setQrCountdown(remaining);
-      if (remaining === 0) setQrCheckout((current) => current ? { ...current, status: "expired" } : current);
-    };
-    update();
-    const timer = window.setInterval(update, 1000);
-    return () => window.clearInterval(timer);
-  }, [qrCheckout?.expiresAt, qrCheckout?.status]);
-
-  useEffect(() => {
-    if (!qrCheckout?.id || qrCheckout.status !== "created") return undefined;
-    let active = true;
-    const timer = window.setInterval(async () => {
-      try {
-        const result = await checkUpiQrPayment(qrCheckout.id);
-        if (!active) return;
-        if (result.status === "paid" && result.order) {
-          setQrCheckout((current) => current ? { ...current, status: "paid" } : current);
-          finishOrder(result.order, qrCheckout.shippingAddress);
-        } else if (result.status === "expired") {
-          setQrCheckout((current) => current ? { ...current, status: "expired" } : current);
-        }
-      } catch {
-        // Backend verification remains the source of truth while the QR is open.
-      }
-    }, 5000);
-    return () => { active = false; window.clearInterval(timer); };
-  }, [qrCheckout?.id, qrCheckout?.status]);
   const applyAddress = (address) => {
     const form = formRef.current;
     if (!form) return;
@@ -168,62 +135,22 @@ export default function CheckoutForm() {
   };
 
 
-  const submitQrOrder = async (orderPayload) => {
-    setProcessingStep("qr");
-    const response = await createUpiQrPayment({ order: orderPayload.order });
-    setQrCheckout({ ...response.qr, status: "created", shippingAddress: orderPayload.order.shippingAddress });
-  };
-  const submitRazorpayOrder = async (orderPayload) => {
+  const submitCashfreeOrder = async (orderPayload) => {
     setProcessingStep("preparing");
-    const loaded = await loadRazorpayCheckout();
-    if (!loaded) throw new Error("Unable to load Razorpay Checkout. Please try again.");
+    const loaded = await loadCashfreeCheckout();
+    if (!loaded) throw new Error("Unable to load Cashfree Checkout. Please try again.");
 
     const { payment } = await createPaymentIntent({ order: orderPayload.order });
-    if (!payment?.key || !window.Razorpay) throw new Error("Razorpay is not configured. Please choose Cash on delivery or try again later.");
-
-    await new Promise((resolve, reject) => {
-      let settled = false;
-      const checkout = new window.Razorpay({
-        key: payment.key,
-        amount: payment.amount,
-        currency: payment.currency || "INR",
-        name: "Swavalambi Siddaganga Oil Mill",
-        description: "Cold pressed oil order",
-        order_id: payment.id,
-        prefill: orderPayload.customer,
-        theme: { color: "#FF9933" },
-        handler: async (response) => {
-          if (settled) return;
-          settled = true;
-          try {
-            setProcessingStep("verifying");
-            const verified = await verifyPayment({
-              order: orderPayload.order,
-              razorpayOrderId: response.razorpay_order_id,
-              razorpayPaymentId: response.razorpay_payment_id,
-              razorpaySignature: response.razorpay_signature,
-            });
-            finishOrder(verified.order, orderPayload.order.shippingAddress);
-            resolve();
-          } catch (err) {
-            reject(err);
-          }
-        },
-        modal: {
-          ondismiss: () => {
-            if (settled) return;
-            settled = true;
-            reject(new Error("Payment was cancelled. Your cart has not been changed."));
-          },
-        },
-      });
-      checkout.on("payment.failed", (response) => {
-        if (settled) return;
-        settled = true;
-        reject(new Error(response.error?.description || "Payment failed. Your cart has not been changed."));
-      });
-      checkout.open();
-    });
+    if (!payment?.paymentSessionId || !payment?.checkoutId || !window.Cashfree) throw new Error("Cashfree is not configured. Please choose Cash on delivery or try again later.");
+    sessionStorage.setItem("cashfree_checkout_id", payment.checkoutId);
+    const cashfree = window.Cashfree({ mode: payment.environment });
+    const result = await cashfree.checkout({ paymentSessionId: payment.paymentSessionId, redirectTarget: "_modal" });
+    if (result?.error) throw new Error(result.error.message || "Payment was not completed. Your cart has not been changed.");
+    setProcessingStep("verifying");
+    const verified = await verifyPayment({ checkoutId: payment.checkoutId });
+    if (!verified.order || verified.status !== "paid") throw new Error("Payment is still being confirmed. Your cart is unchanged; please check your orders shortly.");
+    sessionStorage.removeItem("cashfree_checkout_id");
+    finishOrder(verified.order, orderPayload.order.shippingAddress);
   };
 
   const handleSubmit = async (event) => {
@@ -239,8 +166,7 @@ export default function CheckoutForm() {
     setError("");
     try {
       if (paymentMethod === "cod") await submitCodOrder(orderPayload);
-      else if (paymentMethod === "upi_qr") await submitQrOrder(orderPayload);
-      else await submitRazorpayOrder(orderPayload);
+      else await submitCashfreeOrder(orderPayload);
     } catch (err) {
       setError(err.message || "Unable to complete payment. Please try again.");
     } finally {
@@ -248,10 +174,8 @@ export default function CheckoutForm() {
     }
   };
 
-  const buttonText = processingStep === "preparing" ? "Preparing Payment..." : processingStep === "verifying" ? "Verifying Payment..." : processingStep === "qr" ? "Generating QR..." : paymentMethod === "cod" ? "Place Order" : paymentMethod === "upi_qr" ? "Generate UPI QR" : "Pay Now & Place Order";
+  const buttonText = processingStep === "preparing" ? "Preparing Payment..." : processingStep === "verifying" ? "Verifying Payment..." : paymentMethod === "cod" ? "Place Order" : "Pay Now & Place Order";
   const paymentCardClass = (value, disabled = false) => `flex ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"} items-center justify-between rounded-2xl border p-4 font-semibold transition ${paymentMethod === value ? "border-leaf bg-leaf/5" : "border-ink/10 bg-white hover:border-leaf/30"}`;
-  const qrMinutes = String(Math.floor(qrCountdown / 60)).padStart(2, "0");
-  const qrSeconds = String(qrCountdown % 60).padStart(2, "0");
 
   return (
     <form ref={formRef} className="rounded-3xl border border-ink/10 bg-white p-6 shadow-sm" onSubmit={handleSubmit}>
@@ -301,7 +225,7 @@ export default function CheckoutForm() {
           </label>
           <label className={paymentCardClass("upi_qr", !onlineAvailable)}>
             <span>UPI QR</span>
-            <input type="radio" name="payment" value="upi_qr" checked={paymentMethod === "upi_qr"} disabled={!onlineAvailable} onChange={() => { if (!onlineAvailable) return; setPaymentMethod("upi_qr"); setQrCheckout(null); }} className="ml-3" />
+            <input type="radio" name="payment" value="upi_qr" checked={paymentMethod === "upi_qr"} disabled={!onlineAvailable} onChange={() => onlineAvailable && setPaymentMethod("upi_qr")} className="ml-3" />
           </label>
           <label className={paymentCardClass("cod", !codAvailable)}>
             <span>Cash on delivery</span>

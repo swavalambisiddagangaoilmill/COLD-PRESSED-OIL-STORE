@@ -12,6 +12,7 @@ async function sendWithResend(message) {
     method: "POST",
     headers: { Authorization: `Bearer ${env.email.resendApiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({ from: env.email.from, to: message.to, reply_to: message.replyTo || env.email.replyTo || undefined, subject: message.subject, text: message.text, html: message.html || htmlLayout(message.subject, `<p>${message.text}</p>`) }),
+    signal: AbortSignal.timeout(10_000),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new ApiError(data.message || "Email delivery failed.", 502);

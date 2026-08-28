@@ -50,9 +50,9 @@ test("order item snapshot ignores a manipulated client price and rejects excess 
 });
 
 test("customer order payment state cannot be elevated by browser fields", () => {
-  const browserPayload = { paymentMethod: "razorpay", paymentStatus: "paid", razorpayPaymentId: "forged" };
+  const browserPayload = { paymentMethod: "cashfree", paymentStatus: "paid", cfPaymentId: "forged" };
   assert.deepEqual({ ...browserPayload, ...customerOrderPaymentState() }, { ...browserPayload, paymentMethod: "cod", paymentStatus: "pending" });
-  assert.equal(customerOrderPaymentState().razorpayPaymentId, undefined);
+  assert.equal(customerOrderPaymentState().cfPaymentId, undefined);
 });
 
 test("order schema retains a complete historical variant snapshot", async () => {

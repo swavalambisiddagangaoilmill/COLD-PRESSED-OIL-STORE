@@ -9,8 +9,12 @@ const baseEnv = {
   JWT_SECRET: "a".repeat(64),
   CLIENT_URL: "https://store.example.com",
   CLIENT_URLS: "https://store.example.com",
+  BACKEND_PUBLIC_URL: "https://api.example.com",
   WHATSAPP_MODE: "live",
   SHIPROCKET_MOCK: "false",
+  CASHFREE_ENVIRONMENT: "production",
+  CASHFREE_CLIENT_ID: "test-client-id",
+  CASHFREE_CLIENT_SECRET: "test-client-secret",
 };
 
 function loadProductionEnv(overrides = {}) {
@@ -24,6 +28,12 @@ function loadProductionEnv(overrides = {}) {
 test("production configuration accepts public HTTPS origins with live integrations", () => {
   const result = loadProductionEnv();
   assert.equal(result.status, 0, result.stderr);
+});
+
+test("production configuration rejects Cashfree sandbox mode", () => {
+  const result = loadProductionEnv({ CASHFREE_ENVIRONMENT: "sandbox" });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /CASHFREE_ENVIRONMENT=production/);
 });
 
 test("production configuration rejects localhost origins", () => {

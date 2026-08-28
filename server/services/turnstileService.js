@@ -9,7 +9,7 @@ export async function verifyTurnstile(token, req) {
   const body = new URLSearchParams({ secret: env.turnstile.secretKey, response: token, remoteip: req.ip });
   let response;
   try {
-    response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body });
+    response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body, signal: AbortSignal.timeout(10_000) });
   } catch (error) {
     logExternalFailure("turnstile", error, { action: "verify" });
     throw new ApiError("Human verification is temporarily unavailable.", 503);

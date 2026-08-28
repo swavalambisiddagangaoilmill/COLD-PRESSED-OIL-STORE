@@ -5,7 +5,6 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   aboutMenuLinks,
-  categoryMenuLinks,
   essentialOilLinks,
   oilMenuLinks,
 } from "../../data/siteData.js";
@@ -90,7 +89,7 @@ export default function MobileDrawer({
                 title="Shop"
                 href="/shop"
                 state={{ resetShop: true }}
-                links={categoryMenuLinks.slice(0, 4)}
+                links={oilMenuLinks.slice(0, 5)}
                 onClose={onClose}
               />
               <AccordionMenu

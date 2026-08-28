@@ -260,7 +260,7 @@ export async function listCustomers() {
 export async function listPayments(query) {
   const filter = {};
   if (query.status) filter.paymentStatus = query.status;
-  return Order.find(filter).populate("user", "name email").select("user paymentMethod paymentStatus razorpayPaymentId totalAmount createdAt").sort({ createdAt: -1 }).limit(100);
+  return Order.find(filter).populate("user", "name email").select("user paymentMethod paymentStatus cfPaymentId razorpayPaymentId totalAmount createdAt").sort({ createdAt: -1 }).limit(100);
 }
 
 export async function reports(type = "sales") {

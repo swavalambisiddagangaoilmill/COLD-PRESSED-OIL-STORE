@@ -15,6 +15,7 @@ async function sendTemplate(phoneNumber, templateName, components) {
     method: "POST",
     headers: { Authorization: `Bearer ${env.whatsapp.accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to: phoneNumber.replace(/^\+/, ""), type: "template", template: { name: templateName, language: { code: env.whatsapp.languageCode }, components } }),
+    signal: AbortSignal.timeout(10_000),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error?.message || "WhatsApp API request failed.");

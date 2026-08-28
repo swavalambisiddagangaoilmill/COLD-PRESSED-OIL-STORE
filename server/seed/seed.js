@@ -156,13 +156,13 @@ async function seed() {
       user: user2Result.doc._id,
       products: [{ product: products[4]._id, variant: products[4].variants[0]._id, variantName: products[4].variants[0].name, sku: products[4].variants[0].sku, title: products[4].title, image: products[4].variants[0].images[0].url, quantity: 2, price: products[4].variants[0].price, mrp: products[4].variants[0].mrp, total: products[4].variants[0].price * 2 }],
       shippingAddress: { ...address, fullName: "Demo User Two" },
-      paymentMethod: "razorpay",
+      paymentMethod: "cashfree",
       paymentStatus: "paid",
       orderStatus: "confirmed",
       totalAmount: products[4].variants[0].price * 2,
       couponCode: "DEMOORDER2",
-      razorpayOrderId: "order_demo_seed_002",
-      razorpayPaymentId: "pay_demo_seed_002",
+      cashfreeOrderId: "order_demo_seed_002",
+      cfPaymentId: "pay_demo_seed_002",
     },
   ];
 

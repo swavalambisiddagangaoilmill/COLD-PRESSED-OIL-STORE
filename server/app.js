@@ -28,7 +28,7 @@ import productRoutes from "./routes/productRoutes.js";
 import shiprocketRoutes from "./routes/shiprocketRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import wishlistRoutes from "./routes/wishlistRoutes.js";
-import { razorpayWebhook } from "./controllers/paymentController.js";
+import { cashfreeWebhook } from "./controllers/paymentController.js";
 import { getActiveCarousel } from "./controllers/carouselController.js";
 import { getServiceStatus } from "./services/serviceStatusService.js";
 
@@ -66,7 +66,7 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token", "X-Requested-With"],
 }));
 app.use(cookieParser());
-app.post("/api/payments/webhook", webhookLimiter, express.raw({ type: "application/json", limit: "256kb" }), razorpayWebhook);
+app.post("/api/payments/webhook", webhookLimiter, express.raw({ type: "application/json", limit: "256kb" }), cashfreeWebhook);
 app.use(express.json({ limit: "256kb" }));
 app.use(express.urlencoded({ extended: true, limit: "64kb", parameterLimit: 50 }));
 app.use(sanitizeRequest);

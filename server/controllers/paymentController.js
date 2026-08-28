@@ -1,29 +1,19 @@
-// Payment controller handles Razorpay-compatible payment operations.
+// Payment controller handles Cashfree payment operations.
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendSuccess } from "../utils/apiResponse.js";
-import { createPaymentOrder, createUpiQrCheckout, processRazorpayWebhook, verifyPaymentAndCreateOrder, verifyUpiQrCheckout } from "../services/paymentService.js";
+import { createPaymentOrder, processCashfreeWebhook, verifyPaymentAndCreateOrder } from "../services/paymentService.js";
 
 export const createPaymentIntent = asyncHandler(async (req, res) => {
   const payment = await createPaymentOrder(req.user._id, req.body);
-  sendSuccess(res, 200, "Payment order created successfully", { payment });
+  sendSuccess(res, 200, "Payment checkout created successfully", { payment });
 });
 
 export const verifyPayment = asyncHandler(async (req, res) => {
-  const order = await verifyPaymentAndCreateOrder(req.user._id, req.body);
-  sendSuccess(res, 201, "Payment verified and order created successfully", { order });
+  const result = await verifyPaymentAndCreateOrder(req.user._id, req.body.checkoutId);
+  sendSuccess(res, result.order ? 201 : 200, result.order ? "Payment verified and order created successfully" : "Payment is not yet complete", result);
 });
 
-export const createUpiQrPayment = asyncHandler(async (req, res) => {
-  const qr = await createUpiQrCheckout(req.user._id, req.body);
-  sendSuccess(res, 201, "UPI QR created successfully", { qr });
-});
-
-export const checkUpiQrPayment = asyncHandler(async (req, res) => {
-  const result = await verifyUpiQrCheckout(req.user._id, req.params.checkoutId);
-  sendSuccess(res, 200, "UPI QR status fetched successfully", result);
-});
-
-export const razorpayWebhook = asyncHandler(async (req, res) => {
-  const result = await processRazorpayWebhook(req.body, req.get("X-Razorpay-Signature"));
+export const cashfreeWebhook = asyncHandler(async (req, res) => {
+  const result = await processCashfreeWebhook(req.body, req.headers);
   sendSuccess(res, 200, "Webhook processed", result);
 });

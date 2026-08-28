@@ -50,6 +50,7 @@ async function authenticate() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: env.shiprocket.email, password: env.shiprocket.password }),
+    signal: AbortSignal.timeout(10_000),
     });
   } catch (error) {
     logExternalFailure("shiprocket", error, { action: "authenticate" });
@@ -69,6 +70,7 @@ async function shiprocketRequest(path, options = {}) {
     method: options.method || "GET",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: options.body ? JSON.stringify(options.body) : undefined,
+    signal: AbortSignal.timeout(10_000),
     });
   } catch (error) {
     logExternalFailure("shiprocket", error, { action: path });

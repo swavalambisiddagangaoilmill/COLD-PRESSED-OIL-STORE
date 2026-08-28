@@ -120,7 +120,7 @@ test("exhausted coupon cannot be consumed by a concurrent order", async () => {
 });
 
 test("successful order increments 0/1 usage once and duplicate callbacks are idempotent", async () => {
-  const order = { _id: "64b000000000000000000005", couponCode: "SAVE", paymentMethod: "razorpay", paymentStatus: "paid" };
+  const order = { _id: "64b000000000000000000005", couponCode: "SAVE", paymentMethod: "cashfree", paymentStatus: "paid" };
   let usageWrites = 0;
   Coupon.updateOne = async (filter, update) => {
     usageWrites += 1;
@@ -140,8 +140,8 @@ test("successful order increments 0/1 usage once and duplicate callbacks are ide
 test("pending or failed online orders never consume coupon usage", async () => {
   let usageWrites = 0;
   Coupon.updateOne = async () => { usageWrites += 1; return { modifiedCount: 1 }; };
-  assert.equal(await consumeCouponUsageForOrder({ _id: "64b000000000000000000006", couponCode: "SAVE", paymentMethod: "razorpay", paymentStatus: "pending" }), false);
-  assert.equal(await consumeCouponUsageForOrder({ _id: "64b000000000000000000007", couponCode: "SAVE", paymentMethod: "razorpay", paymentStatus: "failed" }), false);
+  assert.equal(await consumeCouponUsageForOrder({ _id: "64b000000000000000000006", couponCode: "SAVE", paymentMethod: "cashfree", paymentStatus: "pending" }), false);
+  assert.equal(await consumeCouponUsageForOrder({ _id: "64b000000000000000000007", couponCode: "SAVE", paymentMethod: "cashfree", paymentStatus: "failed" }), false);
   assert.equal(usageWrites, 0);
 });
 

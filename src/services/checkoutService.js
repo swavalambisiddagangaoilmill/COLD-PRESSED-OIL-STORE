@@ -22,14 +22,3 @@ export async function verifyPayment(payload) {
     body: JSON.stringify(payload),
   });
 }
-
-export async function createUpiQrPayment(payload) {
-  return apiRequest(API_ENDPOINTS.paymentUpiQr, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function checkUpiQrPayment(id) {
-  return apiRequest(API_ENDPOINTS.paymentUpiQrStatus(id));
-}

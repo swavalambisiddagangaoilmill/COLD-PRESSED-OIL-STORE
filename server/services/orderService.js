@@ -69,7 +69,7 @@ async function createOrderInternal(userId, payload, trustedPayment = {}) {
 
   try {
     const totals = calculateCheckoutTotals(orderItems, couponResult.discountAmount);
-    const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: trustedPayment.paymentStatus || "pending", razorpayOrderId: trustedPayment.razorpayOrderId, razorpayPaymentId: trustedPayment.razorpayPaymentId, razorpaySignature: trustedPayment.razorpaySignature, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount });
+    const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: trustedPayment.paymentStatus || "pending", cashfreeOrderId: trustedPayment.cashfreeOrderId, cfPaymentId: trustedPayment.cfPaymentId, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount });
     try {
       await consumeCouponUsageForOrder(order);
     } catch (error) {
@@ -100,11 +100,10 @@ export function createOrder(userId, payload) {
 // Only verified server-side payment flows may call this entry point.
 export function createVerifiedPaymentOrder(userId, payload, payment) {
   return createOrderInternal(userId, payload, {
-    paymentMethod: "razorpay",
+    paymentMethod: "cashfree",
     paymentStatus: "paid",
-    razorpayOrderId: payment.razorpayOrderId,
-    razorpayPaymentId: payment.razorpayPaymentId,
-    razorpaySignature: payment.razorpaySignature,
+    cashfreeOrderId: payment.cashfreeOrderId,
+    cfPaymentId: payment.cfPaymentId,
   });
 }
 

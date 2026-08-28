@@ -17,6 +17,12 @@ services:
         sync: false
       - key: TURNSTILE_SECRET_KEY
         sync: false
+      - key: CASHFREE_ENVIRONMENT
+        value: production
+      - key: CASHFREE_CLIENT_ID
+        sync: false
+      - key: CASHFREE_CLIENT_SECRET
+        sync: false
       - key: SHIPROCKET_MOCK
         value: "true"
       - key: JWT_SECRET

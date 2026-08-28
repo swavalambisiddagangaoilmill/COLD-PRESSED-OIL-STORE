@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 
 const isProduction = process.env.NODE_ENV === "production";
+const cashfreeEnvironment = String(process.env.CASHFREE_ENVIRONMENT || (isProduction ? "production" : "sandbox")).trim().toLowerCase();
+if (!["sandbox", "production"].includes(cashfreeEnvironment)) throw new Error("CASHFREE_ENVIRONMENT must be sandbox or production.");
+if (isProduction && cashfreeEnvironment !== "production") throw new Error("Production requires CASHFREE_ENVIRONMENT=production.");
+if (!isProduction && cashfreeEnvironment !== "sandbox") throw new Error("Production Cashfree credentials are not allowed outside NODE_ENV=production.");
 const shiprocketMock = String(process.env.SHIPROCKET_MOCK || "false").trim().toLowerCase() === "true";
 const booleanValue = (value, fallback = false) => value == null ? fallback : String(value).trim().toLowerCase() === "true";
 const positiveNumber = (value, fallback) => {
@@ -58,10 +62,12 @@ export const env = {
     contactTo: process.env.CONTACT_TO_EMAIL || "",
     resendApiKey: process.env.RESEND_API_KEY || "",
   },
-  razorpay: {
-    keyId: process.env.RAZORPAY_KEY_ID || "",
-    keySecret: process.env.RAZORPAY_KEY_SECRET || "",
-    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
+  cashfree: {
+    environment: cashfreeEnvironment,
+    clientId: process.env.CASHFREE_CLIENT_ID || "",
+    clientSecret: process.env.CASHFREE_CLIENT_SECRET || "",
+    apiVersion: process.env.CASHFREE_API_VERSION || "2025-01-01",
+    baseUrl: cashfreeEnvironment === "production" ? "https://api.cashfree.com/pg" : "https://sandbox.cashfree.com/pg",
   },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_NAME || "",
@@ -90,6 +96,9 @@ if (isProduction) {
   const required = [
     ["MONGO_URI", process.env.MONGO_URI],
     ["CLIENT_URL", process.env.CLIENT_URL],
+    ["BACKEND_PUBLIC_URL", process.env.BACKEND_PUBLIC_URL],
+    ["CASHFREE_CLIENT_ID", process.env.CASHFREE_CLIENT_ID],
+    ["CASHFREE_CLIENT_SECRET", process.env.CASHFREE_CLIENT_SECRET],
   ];
   const missing = required.filter(([, value]) => !value).map(([key]) => key);
   if (missing.length) throw new Error(`Missing production environment variables: ${missing.join(", ")}`);
@@ -99,6 +108,9 @@ if (isProduction) {
   if (productionOrigins.some((url) => url.protocol !== "https:" || ["localhost", "127.0.0.1"].includes(url.hostname))) {
     throw new Error("Production CLIENT_URL/CLIENT_URLS must contain only HTTPS public origins.");
   }
+  let backendOrigin;
+  try { backendOrigin = new URL(env.backendPublicUrl); } catch { throw new Error("Invalid production BACKEND_PUBLIC_URL."); }
+  if (backendOrigin.protocol !== "https:" || ["localhost", "127.0.0.1"].includes(backendOrigin.hostname)) throw new Error("Production BACKEND_PUBLIC_URL must be a public HTTPS origin.");
   if (env.whatsapp.mode === "mock") throw new Error("WHATSAPP_MODE=mock is not allowed in production.");
   if (env.shiprocket.mock) throw new Error("SHIPROCKET_MOCK=true is not allowed in production.");
 }
