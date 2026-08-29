@@ -44,3 +44,9 @@ export function sendMarketingMessage(user, templateName, parameters = []) {
   if (env.whatsapp.mode === "mock") return Promise.resolve({ mock: true });
   return sendTemplate(user.phoneNumber, templateName, [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text: String(text) })) }]);
 }
+
+// Called only after the marketing service has validated its server-owned destination and template.
+export function sendApprovedMarketingTemplate(phoneNumber, templateName, parameters = []) {
+  if (env.whatsapp.mode === "mock") return Promise.resolve({ mock: true, messages: [{ id: `mock-${Date.now()}` }] });
+  return sendTemplate(phoneNumber, templateName, [{ type: "body", parameters: parameters.map((text) => ({ type: "text", text: String(text) })) }]);
+}

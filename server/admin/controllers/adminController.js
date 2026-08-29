@@ -7,6 +7,7 @@ import { sendSuccess } from "../../utils/apiResponse.js";
 import { clearReadNotifications, createAdminNotification, deleteNotification, getNotificationPreferences, listAdminNotifications, markAllNotificationsRead, markNotification, saveNotificationPreferences } from "../../services/adminNotificationService.js";
 import { listAdminSessions, revokeAdminSessions } from "../../services/adminSessionService.js";
 import { addRestrictionNote, extendRestriction, getRestriction, listRestrictions, removeRestriction } from "../services/restrictionAdminService.js";
+import { createCampaign, getCampaign, listCampaigns, listEligibleCustomers, listMarketingTemplates, marketingOverview, previewAudience, previewTemplate, sendTestMarketingMessage } from "../../services/whatsappMarketingService.js";
 
 export const dashboard = asyncHandler(async (_req, res) => sendSuccess(res, 200, "Dashboard fetched", await admin.dashboardData()));
 export const orders = asyncHandler(async (req, res) => sendSuccess(res, 200, "Orders fetched", await admin.listOrders(req.query)));
@@ -41,6 +42,16 @@ export const updateAdmin = asyncHandler(async (req, res) => { const user = await
 export const auditLogs = asyncHandler(async (req, res) => sendSuccess(res, 200, "Audit logs fetched", { items: await admin.listAuditLogs(req.query) }));
 export const settings = asyncHandler(async (_req, res) => sendSuccess(res, 200, "Settings fetched", { settings: await admin.getSettings() }));
 export const saveSettings = asyncHandler(async (req, res) => { const settings = await admin.updateSettings(req.body); await writeAuditLog(req, { action: "settings.update", resourceType: "StoreSettings", resourceId: "store", summary: "Store settings updated" }); sendSuccess(res, 200, "Settings saved", { settings }); });
+
+export const whatsappOverview = asyncHandler(async (_req, res) => sendSuccess(res, 200, "WhatsApp overview fetched", await marketingOverview()));
+export const whatsappTemplates = asyncHandler(async (_req, res) => sendSuccess(res, 200, "Approved WhatsApp templates fetched", { items: listMarketingTemplates() }));
+export const whatsappCustomers = asyncHandler(async (req, res) => sendSuccess(res, 200, "Eligible customers fetched", { items: await listEligibleCustomers(req.query.q) }));
+export const whatsappAudiencePreview = asyncHandler(async (req, res) => sendSuccess(res, 200, "Audience calculated", await previewAudience(req.body)));
+export const whatsappTemplatePreview = asyncHandler(async (req, res) => sendSuccess(res, 200, "Message preview generated", previewTemplate(req.body.templateId, req.body.variables)));
+export const whatsappTest = asyncHandler(async (req, res) => { const result = await sendTestMarketingMessage(req.body.templateId, req.body.variables); await writeAuditLog(req, { action: "whatsapp.test", resourceType: "WhatsAppCampaign", summary: `Approved template ${req.body.templateId} test sent` }); sendSuccess(res, 200, "Test message sent", result); });
+export const whatsappCreateCampaign = asyncHandler(async (req, res) => { const result = await createCampaign(req.user._id, req.body, req.get("X-Idempotency-Key")); if (!result.duplicate) await writeAuditLog(req, { action: "whatsapp.campaign.create", resourceType: "WhatsAppCampaign", resourceId: result.campaign.id, summary: `Campaign queued for ${result.campaign.recipientCount} opted-in recipients`, after: { templateId: result.campaign.templateId, audience: result.campaign.audience, recipientCount: result.campaign.recipientCount, status: result.campaign.status } }); sendSuccess(res, result.duplicate ? 200 : 202, result.duplicate ? "Campaign request already accepted" : "Campaign queued", result); });
+export const whatsappCampaigns = asyncHandler(async (_req, res) => sendSuccess(res, 200, "Campaign history fetched", { items: await listCampaigns() }));
+export const whatsappCampaign = asyncHandler(async (req, res) => sendSuccess(res, 200, "Campaign fetched", { campaign: await getCampaign(req.params.id) }));
 
 export const updateOffer = asyncHandler(async (req, res) => {
   const offer = await admin.saveOffer(req.body, req.user._id, req.params.id);

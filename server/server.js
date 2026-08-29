@@ -5,6 +5,7 @@ import { env } from "./config/env.js";
 import { ensureDefaultAdmin } from "./services/defaultAdminService.js";
 import { startKeepAlive, stopKeepAlive } from "./services/keepAliveService.js";
 import { startServiceStatusMonitor } from "./services/serviceStatusService.js";
+import { resumeMarketingCampaigns } from "./services/whatsappMarketingService.js";
 
 process.on("unhandledRejection", (reason) => {
   console.error("Unhandled promise rejection", { message: reason?.message || String(reason), stack: reason?.stack });
@@ -39,6 +40,7 @@ process.once("SIGINT", () => shutdown("SIGINT"));
 try {
   await connectDB();
   await ensureDefaultAdmin();
+  await resumeMarketingCampaigns();
   startServiceStatusMonitor();
   startKeepAlive();
 } catch (error) {

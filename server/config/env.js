@@ -50,6 +50,8 @@ export const env = {
     apiVersion: process.env.WHATSAPP_API_VERSION || "v23.0",
     otpTemplateName: process.env.WHATSAPP_OTP_TEMPLATE_NAME || "authentication",
     trackingTemplateName: process.env.WHATSAPP_TRACKING_TEMPLATE_NAME || "order_tracking",
+    marketingTemplateName: process.env.WHATSAPP_MARKETING_TEMPLATE_NAME || "marketing_offer",
+    marketingTestPhone: process.env.WHATSAPP_MARKETING_TEST_PHONE || "",
     languageCode: process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en_US",
   },
   turnstile: {
@@ -70,9 +72,9 @@ export const env = {
     baseUrl: cashfreeEnvironment === "production" ? "https://api.cashfree.com/pg" : "https://sandbox.cashfree.com/pg",
   },
   cloudinary: {
-    cloudName: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_NAME || "",
-    apiKey: process.env.CLOUDINARY_API_KEY || process.env.CLOUDINARY_KEY || "",
-    apiSecret: process.env.CLOUDINARY_API_SECRET || process.env.CLOUDINARY_SECRET || "",
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
+    apiKey: process.env.CLOUDINARY_API_KEY || "",
+    apiSecret: process.env.CLOUDINARY_API_SECRET || "",
   },
   shiprocket: {
     mock: shiprocketMock,

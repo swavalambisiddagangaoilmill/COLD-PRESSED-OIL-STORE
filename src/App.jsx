@@ -14,7 +14,10 @@ import AnnouncementBar from "./components/layout/AnnouncementBar.jsx";
 import Navbar from "./components/layout/Navbar.jsx";
 import Footer from "./components/layout/Footer.jsx";
 import AppRoutes from "./routes/AppRoutes.jsx";
+import UnderDevelopment from "./pages/UnderDevelopment.jsx";
 import { showConsoleSecurityWarning } from "./utils/consoleWarning.js";
+
+const SITE_UNDER_DEVELOPMENT = true;
 
 export default function App() {
   const { pathname } = useLocation();
@@ -24,6 +27,8 @@ export default function App() {
   useEffect(() => {
     showConsoleSecurityWarning();
   }, []);
+
+  if (SITE_UNDER_DEVELOPMENT && !adminPage) return <UnderDevelopment />;
 
   return (
     <div className="min-h-screen bg-cream text-ink">

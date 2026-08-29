@@ -1,10 +1,17 @@
 // Route map for the isolated admin UI prototype.
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext.jsx";
 import AdminLayout from "../layouts/AdminLayout.jsx";
 import AdminNotificationsPage from "../pages/AdminNotificationsPage.jsx";
 import RestrictionManagementPage from "../pages/RestrictionManagementPage.jsx";
 import CarouselPage from "../pages/CarouselPage.jsx";
 import { AuditLogsPage, CouponsPage, CustomersPage, DashboardPage, GalleryPage, InventoryPage, MessagesPage, OffersPage, OrdersPage, PaymentsPage, ProductFormPage, ProductsPage, ReportsPage, SettingsPage, ShippingPage, UsersPage } from "../pages/AdminPages.jsx";
+import { WhatsAppHistoryPage, WhatsAppMarketingPage, WhatsAppOverviewPage } from "../pages/WhatsAppPages.jsx";
+
+function OwnerOnlyRoute() {
+  const { user } = useAuth();
+  return user?.role === "admin" && (user.adminRole || "OWNER") === "OWNER" ? <Outlet /> : <Navigate to="/admin" replace />;
+}
 
 export default function AdminRoutes() {
   return <Routes>
@@ -22,6 +29,11 @@ export default function AdminRoutes() {
       <Route path="customers" element={<CustomersPage />} />
       <Route path="payments" element={<PaymentsPage />} />
       <Route path="messages" element={<MessagesPage />} />
+      <Route element={<OwnerOnlyRoute />}>
+        <Route path="whatsapp" element={<WhatsAppOverviewPage />} />
+        <Route path="whatsapp/marketing" element={<WhatsAppMarketingPage />} />
+        <Route path="whatsapp/history" element={<WhatsAppHistoryPage />} />
+      </Route>
       <Route path="reports" element={<ReportsPage />} />
       <Route path="notifications" element={<AdminNotificationsPage />} />
       <Route path="users" element={<UsersPage />} />

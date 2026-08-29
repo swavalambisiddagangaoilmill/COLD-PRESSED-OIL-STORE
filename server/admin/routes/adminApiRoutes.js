@@ -10,10 +10,15 @@ import { productIdValidator, productUpdateValidator, productValidator } from "..
 
 const router = Router();
 const restrictionLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many restriction management requests.", errors: [] } });
+const whatsappReadLimiter = rateLimit({ windowMs: 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many WhatsApp requests.", errors: [] } });
+const whatsappTestLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many test-message requests.", errors: [] } });
+const whatsappCampaignLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Campaign rate limit reached.", errors: [] } });
 const restrictionId = [param("id").isMongoId().withMessage("Valid restriction id is required.")];
 const noteBody = [body("note").trim().isLength({ min: 2, max: 1000 }).withMessage("Internal note is required.")];
 const reasonBody = [body("reason").trim().isLength({ min: 2, max: 1000 }).withMessage("Admin reason is required.")];
 const extendBody = [...reasonBody, body("expiresAt").isISO8601().withMessage("Valid expiry time is required.")];
+const whatsappAudienceBody = [body("audience").isIn(["opted_in_customers", "recent_customers", "previous_buyers", "individual_customers"]).withMessage("Valid audience is required."), body("customerIds").optional().isArray({ max: 100 }).withMessage("Select no more than 100 customers."), body("customerIds.*").optional().isMongoId().withMessage("Valid customer id is required.")];
+const whatsappTemplateBody = [body("templateId").isIn(["marketing_offer"]).withMessage("Approved template is required."), body("variables").isObject().withMessage("Template variables are required."), body("variables.offer").trim().isLength({ min: 1, max: 80 }).withMessage("Offer must be between 1 and 80 characters.")];
 router.use(protect, requireAdmin);
 
 router.get("/search", requireAdminPermission("dashboard.read"), controller.globalSearch);
@@ -60,6 +65,15 @@ router.get("/customers", requireAdminPermission("customers.read"), controller.cu
 router.get("/payments", requireAdminPermission("payments.read"), controller.payments);
 router.get("/messages", requireAdminPermission("messages.read"), controller.messages);
 router.put("/messages/:id/status", requireAdminPermission("messages.manage"), controller.messageStatus);
+router.get("/whatsapp/overview", whatsappReadLimiter, requireAdminPermission("whatsapp.read"), controller.whatsappOverview);
+router.get("/whatsapp/templates", whatsappReadLimiter, requireAdminPermission("whatsapp.read"), controller.whatsappTemplates);
+router.get("/whatsapp/customers", whatsappReadLimiter, requireAdminPermission("whatsapp.read"), controller.whatsappCustomers);
+router.post("/whatsapp/audience-preview", whatsappReadLimiter, requireAdminPermission("whatsapp.read"), whatsappAudienceBody, validate, controller.whatsappAudiencePreview);
+router.post("/whatsapp/preview", whatsappReadLimiter, requireAdminPermission("whatsapp.read"), whatsappTemplateBody, validate, controller.whatsappTemplatePreview);
+router.post("/whatsapp/test", whatsappTestLimiter, requireAdminPermission("whatsapp.manage"), whatsappTemplateBody, validate, controller.whatsappTest);
+router.post("/whatsapp/campaigns", whatsappCampaignLimiter, requireAdminPermission("whatsapp.manage"), [...whatsappAudienceBody, ...whatsappTemplateBody, body("name").optional().trim().isLength({ max: 120 }).withMessage("Campaign name must be 120 characters or fewer.")], validate, controller.whatsappCreateCampaign);
+router.get("/whatsapp/campaigns", whatsappReadLimiter, requireAdminPermission("whatsapp.read"), controller.whatsappCampaigns);
+router.get("/whatsapp/campaigns/:id", whatsappReadLimiter, requireAdminPermission("whatsapp.read"), [param("id").isMongoId().withMessage("Valid campaign id is required.")], validate, controller.whatsappCampaign);
 router.get("/reports", requireAdminPermission("reports.read"), controller.reports);
 router.get("/users", requireAdminPermission("admins.read"), controller.adminUsers);
 router.put("/users/:id", requireAdminPermission("admins.manage"), controller.updateAdmin);
