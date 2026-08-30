@@ -17,11 +17,14 @@ import AppRoutes from "./routes/AppRoutes.jsx";
 import UnderDevelopment from "./pages/UnderDevelopment.jsx";
 import { showConsoleSecurityWarning } from "./utils/consoleWarning.js";
 
-const SITE_UNDER_DEVELOPMENT = true;
+const SITE_UNDER_DEVELOPMENT = false;
 
 export default function App() {
   const { pathname } = useLocation();
-  const authPage = pathname === "/login" || pathname === "/signup" || pathname === "/verify-otp";
+  const authPage =
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname === "/verify-otp";
   const adminPage = pathname.startsWith("/admin");
 
   useEffect(() => {
