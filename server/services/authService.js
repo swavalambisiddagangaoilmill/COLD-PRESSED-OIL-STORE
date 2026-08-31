@@ -5,7 +5,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { maskPhone, normalizeIndianPhone } from "../utils/phone.js";
 import { signRefreshToken, signToken, verifyToken } from "../utils/jwt.js";
 import { findSessionByRefresh, getDeviceFingerprint, hashValue, pushLoginHistory, revokeSession, upsertSession } from "./authSecurityService.js";
-import { sendOTP } from "./whatsappService.js";
+import { safeWhatsAppErrorDetails, sendOTP } from "./whatsappService.js";
 import { attachRefreshToken, createAdminSession, findAdminSessionByRefresh, revokeAdminSessions } from "./adminSessionService.js";
 
 const OTP_TTL_MS = 5 * 60 * 1000, RESEND_COOLDOWN_MS = 60 * 1000, PHONE_WINDOW_MS = 15 * 60 * 1000, PHONE_LIMIT = 5;
@@ -39,7 +39,11 @@ export async function requestAuthOtp({ phone, purpose, name }, req) {
   await OtpVerification.updateMany({ phoneNumber, purpose, consumedAt: null }, { $set: { consumedAt: new Date() } });
   const otp = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
   const record = await OtpVerification.create({ phoneNumber, purpose, fullName: purpose === "signup" ? String(name).trim() : undefined, otpHash: hashValue(otp), expiresAt: new Date(Date.now() + OTP_TTL_MS), requestedByIpHash: requestHash(req.ip), requestedByDeviceHash: requestHash(getDeviceFingerprint(req)) });
-  try { await sendOTP(phoneNumber, otp); } catch { await OtpVerification.findByIdAndDelete(record._id); throw new ApiError("Unable to send the WhatsApp code. Please try again.", 502, [{ code: "WHATSAPP_SEND_FAILED" }]); }
+  try { await sendOTP(phoneNumber, otp); } catch (error) {
+    await OtpVerification.findByIdAndDelete(record._id);
+    console.error("[WhatsApp OTP Error]", safeWhatsAppErrorDetails(error));
+    throw new ApiError("Unable to send the WhatsApp code. Please try again.", 502, [{ code: "WHATSAPP_SEND_FAILED" }]);
+  }
   return { phoneNumber: maskPhone(phoneNumber), purpose, expiresIn: 300, resendAfter: 60 };
 }
 

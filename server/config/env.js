@@ -48,6 +48,8 @@ export const env = {
     mode: whatsappMode,
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+    webhookVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "",
+    appSecret: process.env.WHATSAPP_APP_SECRET || "",
     businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "",
     apiVersion: process.env.WHATSAPP_API_VERSION || "v23.0",
     otpTemplateName: process.env.WHATSAPP_OTP_TEMPLATE_NAME || "authentication",

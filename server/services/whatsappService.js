@@ -1,5 +1,31 @@
 import { env } from "../config/env.js";
 
+export class WhatsAppApiError extends Error {
+  constructor(status, metaError = {}) {
+    super("WhatsApp Cloud API rejected the message.");
+    this.name = "WhatsAppApiError";
+    this.status = status;
+    this.metaCode = metaError.code;
+    this.metaType = metaError.type;
+    this.metaSubcode = metaError.error_subcode;
+    this.metaMessage = metaError.message;
+    this.fbtraceId = metaError.fbtrace_id;
+  }
+}
+
+export function safeWhatsAppErrorDetails(error) {
+  if (!(error instanceof WhatsAppApiError)) return { provider: "meta", error: "request_failed" };
+  return {
+    provider: "meta",
+    status: error.status,
+    code: error.metaCode,
+    type: error.metaType,
+    subcode: error.metaSubcode,
+    message: error.metaMessage,
+    fbtraceId: error.fbtraceId,
+  };
+}
+
 function requireLiveConfig() {
   const missing = [
     ["WHATSAPP_ACCESS_TOKEN", env.whatsapp.accessToken],
@@ -18,7 +44,10 @@ async function sendTemplate(phoneNumber, templateName, components) {
     signal: AbortSignal.timeout(10_000),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error?.message || "WhatsApp API request failed.");
+  if (!response.ok) throw new WhatsAppApiError(response.status, data?.error);
+  if (!Array.isArray(data?.messages) || !data.messages[0]?.id) {
+    throw new WhatsAppApiError(response.status, { message: "Meta response did not contain a message ID." });
+  }
   return data;
 }
 

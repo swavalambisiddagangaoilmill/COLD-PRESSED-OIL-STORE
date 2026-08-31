@@ -28,6 +28,7 @@ import productRoutes from "./routes/productRoutes.js";
 import shiprocketRoutes from "./routes/shiprocketRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import wishlistRoutes from "./routes/wishlistRoutes.js";
+import whatsappWebhookRoutes from "./routes/whatsappWebhookRoutes.js";
 import { cashfreeWebhook } from "./controllers/paymentController.js";
 import { getActiveCarousel } from "./controllers/carouselController.js";
 import { getServiceStatus } from "./services/serviceStatusService.js";
@@ -67,6 +68,7 @@ app.use(cors({
 }));
 app.use(cookieParser());
 app.post("/api/payments/webhook", webhookLimiter, express.raw({ type: "application/json", limit: "256kb" }), cashfreeWebhook);
+app.use("/api/whatsapp/webhook", webhookLimiter, whatsappWebhookRoutes);
 app.use(express.json({ limit: "256kb" }));
 app.use(express.urlencoded({ extended: true, limit: "64kb", parameterLimit: 50 }));
 app.use(sanitizeRequest);

@@ -43,3 +43,33 @@ test("test mode sends the Meta authentication-template OTP payload", async () =>
     process.env = originalEnv;
   }
 });
+
+test("Meta failures retain safe provider diagnostics without exposing authorization", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({ error: { message: "Template name does not exist in the translation", type: "OAuthException", code: 132001, error_subcode: 2494073, fbtrace_id: "trace-id" } }),
+  });
+
+  try {
+    const { safeWhatsAppErrorDetails, sendOTP } = await import(`../services/whatsappService.js?otp-error-test=${Date.now()}`);
+    await assert.rejects(sendOTP("+919876543210", "123456"), (error) => {
+      const details = safeWhatsAppErrorDetails(error);
+      assert.deepEqual(details, {
+        provider: "meta",
+        status: 400,
+        code: 132001,
+        type: "OAuthException",
+        subcode: 2494073,
+        message: "Template name does not exist in the translation",
+        fbtraceId: "trace-id",
+      });
+      assert.equal(JSON.stringify(details).includes("test-token"), false);
+      assert.equal(JSON.stringify(details).includes("Authorization"), false);
+      return true;
+    });
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
