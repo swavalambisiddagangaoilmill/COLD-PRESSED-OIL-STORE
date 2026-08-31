@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 
 const isProduction = process.env.NODE_ENV === "production";
+const whatsappMode = String(process.env.WHATSAPP_MODE || (isProduction ? "live" : "mock")).trim().toLowerCase();
+if (!["mock", "test", "live"].includes(whatsappMode)) throw new Error("WHATSAPP_MODE must be mock, test, or live.");
 const cashfreeEnvironment = String(process.env.CASHFREE_ENVIRONMENT || (isProduction ? "production" : "sandbox")).trim().toLowerCase();
 if (!["sandbox", "production"].includes(cashfreeEnvironment)) throw new Error("CASHFREE_ENVIRONMENT must be sandbox or production.");
 if (isProduction && cashfreeEnvironment !== "production") throw new Error("Production requires CASHFREE_ENVIRONMENT=production.");
@@ -43,7 +45,7 @@ export const env = {
   clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
   clientUrls: (process.env.CLIENT_URLS || process.env.CLIENT_URL || "http://localhost:5173").split(",").map((url) => url.trim()).filter(Boolean),
   whatsapp: {
-    mode: process.env.WHATSAPP_MODE || (isProduction ? "live" : "mock"),
+    mode: whatsappMode,
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
     phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
     businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "",
