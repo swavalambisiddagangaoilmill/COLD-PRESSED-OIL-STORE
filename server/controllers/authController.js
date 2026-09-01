@@ -25,6 +25,8 @@ import {
   updateAddress,
   updateUserProfile,
   verifyEmail,
+  requestCustomerAuthOtp,
+  verifyCustomerAuthOtp,
 } from "../services/authService.js";
 
 function setSession(res, token, refreshToken) {
@@ -61,6 +63,17 @@ export const google = asyncHandler(async (req, res) => {
   const { user, token, refreshToken } = await googleLogin(req.body.credential || req.body.idToken, req, req.body.remember !== false);
   setSession(res, token, refreshToken);
   sendSuccess(res, 200, "Google login successful", { user, token, refreshToken });
+});
+
+export const requestCustomerOtp = asyncHandler(async (req, res) => {
+  await requestCustomerAuthOtp(req.body, req);
+  sendSuccess(res, 200, "If the email can receive a code, it has been sent.");
+});
+
+export const verifyCustomerOtp = asyncHandler(async (req, res) => {
+  const { user, token, refreshToken } = await verifyCustomerAuthOtp(req.body, req);
+  setSession(res, token, refreshToken);
+  sendSuccess(res, 200, "Email verified successfully", { user, token, refreshToken });
 });
 
 

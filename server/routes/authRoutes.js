@@ -13,15 +13,14 @@ import {
   continueAdminLogin,
   logout,
   refresh,
-  register,
   requestOtpHandler,
-  resendVerificationHandler,
   resetPasswordHandler,
   revokeAllSessionsHandler,
   revokeSessionHandler,
   updateAddressHandler,
   updateProfile,
-  verifyEmailHandler,
+  requestCustomerOtp,
+  verifyCustomerOtp,
 } from "../controllers/authController.js";
 import { protect } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
@@ -34,12 +33,12 @@ import {
   googleValidator,
   loginValidator,
   otpRequestValidator,
-  registerValidator,
   refreshValidator,
   resetPasswordValidator,
   sessionIdValidator,
   updateProfileValidator,
-  verifyEmailValidator,
+  customerOtpRequestValidator,
+  customerOtpVerifyValidator,
 } from "../validators/authValidators.js";
 
 const router = Router();
@@ -47,18 +46,19 @@ const router = Router();
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many authentication attempts.", errors: [] } });
 const sensitiveLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many security attempts.", errors: [] } });
+const customerOtpRequestLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false, message: { success: true, message: "If the email can receive a code, it has been sent.", data: {} } });
+const customerOtpVerifyLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many verification attempts.", errors: [] } });
 
 
-router.post("/register", authLimiter, registerValidator, validate, register);
 router.post("/login", authLimiter, loginValidator, validate, login);
 router.post("/google", authLimiter, googleValidator, validate, google);
+router.post("/otp/request", customerOtpRequestLimiter, customerOtpRequestValidator, validate, requestCustomerOtp);
+router.post("/otp/verify", customerOtpVerifyLimiter, customerOtpVerifyValidator, validate, verifyCustomerOtp);
 router.post("/admin-login/continue", authLimiter, continueAdminLoginValidator, validate, continueAdminLogin);
 router.post("/refresh", authLimiter, refreshValidator, validate, refresh);
 router.post("/logout", protect, logout);
 router.post("/forgot-password", sensitiveLimiter, forgotPasswordValidator, validate, forgotPassword);
 router.post("/reset-password/:token", sensitiveLimiter, resetPasswordValidator, validate, resetPasswordHandler);
-router.get("/verify-email/:token", verifyEmailValidator, validate, verifyEmailHandler);
-router.post("/resend-verification", protect, resendVerificationHandler);
 router.post("/otp/security-code", protect, sensitiveLimiter, otpRequestValidator, validate, requestOtpHandler);
 router.get("/profile", protect, getProfile);
 router.put("/profile", protect, updateProfileValidator, validate, updateProfile);

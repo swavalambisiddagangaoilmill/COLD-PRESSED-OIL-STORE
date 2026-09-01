@@ -15,12 +15,9 @@ const Cart = lazy(() => import("../pages/Cart.jsx"));
 const Checkout = lazy(() => import("../pages/Checkout.jsx"));
 const Contact = lazy(() => import("../pages/Contact.jsx"));
 const FAQ = lazy(() => import("../pages/FAQ.jsx"));
-const ForgotPassword = lazy(() => import("../pages/ForgotPassword.jsx"));
 const LegalPage = lazy(() => import("../pages/LegalPage.jsx"));
 const Login = lazy(() => import("../pages/Login.jsx"));
 const Signup = lazy(() => import("../pages/Signup.jsx"));
-const ResetPassword = lazy(() => import("../pages/ResetPassword.jsx"));
-const VerifyEmail = lazy(() => import("../pages/VerifyEmail.jsx"));
 const OrderDetails = lazy(() => import("../pages/OrderDetails.jsx"));
 const OrderSuccess = lazy(() => import("../pages/OrderSuccess.jsx"));
 const NotFound = lazy(() => import("../pages/NotFound.jsx"));
@@ -47,9 +44,6 @@ export default function AppRoutes() {
         <Route path="/about/process" element={<Navigate to="/about/story" replace />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-        <Route path="/auth/reset-password/:token" element={<ResetPassword />} />
-        <Route path="/auth/verify-email/:token" element={<VerifyEmail />} />
         <Route path="/admin-session-limit" element={<AdminSessionLimit />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/order/success" element={<OrderSuccess />} />

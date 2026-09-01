@@ -13,14 +13,16 @@ export async function googleLoginAccount(payload) {
   setAuthTokens(data.token, data.refreshToken);
   return data;
 }
-export async function continueAdminLogin(payload) {
-  const data = await apiRequest(API_ENDPOINTS.auth.continueAdminLogin, { method: "POST", body: JSON.stringify(payload) });
+export function requestCustomerOtp(payload) {
+  return apiRequest(API_ENDPOINTS.auth.otpRequest, { method: "POST", body: JSON.stringify(payload) });
+}
+export async function verifyCustomerOtp(payload) {
+  const data = await apiRequest(API_ENDPOINTS.auth.otpVerify, { method: "POST", body: JSON.stringify(payload) });
   setAuthTokens(data.token, data.refreshToken);
   return data;
 }
-
-export async function registerAccount(payload) {
-  const data = await apiRequest(API_ENDPOINTS.auth.register, { method: "POST", body: JSON.stringify(payload) });
+export async function continueAdminLogin(payload) {
+  const data = await apiRequest(API_ENDPOINTS.auth.continueAdminLogin, { method: "POST", body: JSON.stringify(payload) });
   setAuthTokens(data.token, data.refreshToken);
   return data;
 }
@@ -35,17 +37,4 @@ export async function logoutAccount() {
 
 export function getProfile() {
   return apiRequest(API_ENDPOINTS.auth.profile);
-}
-export function forgotPasswordRequest(payload) {
-  return apiRequest(API_ENDPOINTS.auth.forgotPassword, { method: "POST", body: JSON.stringify(payload) });
-}
-
-export async function resetPasswordRequest(token, payload) {
-  const data = await apiRequest(API_ENDPOINTS.auth.resetPassword(token), { method: "POST", body: JSON.stringify(payload) });
-  setAuthTokens(data.token, data.refreshToken);
-  return data;
-}
-
-export function verifyEmailRequest(token) {
-  return apiRequest(API_ENDPOINTS.auth.verifyEmail(token));
 }

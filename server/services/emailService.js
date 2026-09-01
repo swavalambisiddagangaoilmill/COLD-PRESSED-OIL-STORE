@@ -50,6 +50,10 @@ export function sendOtpEmail(user, code, purpose) {
   return sendMail({ to: user.email, subject: "Swavalambi Siddaganga Oil Mill security code", text: `Your ${purpose} code is ${code}. It expires shortly.`, html: htmlLayout("Security code", `<p>Your ${purpose} code is:</p><p style="font-size:28px;font-weight:800;letter-spacing:4px">${code}</p><p>This code expires shortly.</p>`) });
 }
 
+export function sendCustomerAuthOtpEmail(email, code) {
+  return sendMail({ to: email, subject: "Your Swavalambi Siddaganga Oil Mill login code", text: `Your one-time login code is ${code}. It expires in 5 minutes.`, html: htmlLayout("Your one-time login code", `<p>Use this code to access your customer account:</p><p style="font-size:28px;font-weight:800;letter-spacing:4px">${code}</p><p>This code expires in 5 minutes and can be used only once.</p>`) });
+}
+
 export function sendNewDeviceEmail(user, details) {
   return sendMail({ to: user.email, subject: "New Swavalambi Siddaganga Oil Mill login detected", text: `New login detected from ${details.browser || "Unknown browser"} on ${details.os || "Unknown OS"}.` });
 }

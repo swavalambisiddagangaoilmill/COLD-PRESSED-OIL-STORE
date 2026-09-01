@@ -26,6 +26,8 @@ export const loginValidator = [
 ];
 
 export const googleValidator = [body("credential").optional().trim(), body("idToken").optional().trim(), body().custom((value) => { if (!value.credential && !value.idToken) throw new Error("Google credential is required."); return true; })];
+export const customerOtpRequestValidator = [body("email").isEmail().normalizeEmail().withMessage("Valid email is required."), body("name").optional().trim().isLength({ min: 2, max: 100 }).withMessage("Full name must be between 2 and 100 characters."), body("flow").isIn(["login", "signup"]).withMessage("Valid authentication flow is required.")];
+export const customerOtpVerifyValidator = [body("email").isEmail().normalizeEmail().withMessage("Valid email is required."), body("otp").matches(/^\d{6}$/).withMessage("Enter the 6-digit verification code.")];
 export const updateProfileValidator = [
   body("name").optional().trim().notEmpty().withMessage("Name cannot be empty."),
   body("phone").optional().trim().isLength({ min: 7 }).withMessage("Phone number is too short."),

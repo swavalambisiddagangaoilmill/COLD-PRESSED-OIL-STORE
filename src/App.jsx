@@ -19,7 +19,7 @@ import { showConsoleSecurityWarning } from "./utils/consoleWarning.js";
 
 export default function App() {
   const { pathname } = useLocation();
-  const authPage = pathname === "/login" || pathname === "/signup" || pathname.startsWith("/auth/forgot-password") || pathname.startsWith("/auth/reset-password") || pathname.startsWith("/auth/verify-email");
+  const authPage = pathname === "/login" || pathname === "/signup";
   const adminPage = pathname.startsWith("/admin");
 
   useEffect(() => {
@@ -48,5 +48,4 @@ export default function App() {
     </div>
   );
 }
-
 

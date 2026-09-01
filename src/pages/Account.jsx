@@ -4,14 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Breadcrumb from "../components/common/Breadcrumb.jsx";
 import SafeImage from "../components/common/SafeImage.jsx";
-import AccountSecurityPanel from "../components/features/account/AccountSecurityPanel.jsx";
 import AddToCartButton from "../components/features/product/AddToCartButton.jsx";
 import WishlistToggle from "../components/features/product/WishlistToggle.jsx";
 import Button from "../components/ui/Button.jsx";
 import Container from "../components/ui/Container.jsx";
 import Input from "../components/ui/Input.jsx";
 import { useWishlist } from "../context/WishlistContext.jsx";
-import { addAccountAddress, changeAccountPassword, deleteAccountAddress, fetchAccountProfile, updateAccountAddress, updateAccountProfile } from "../services/accountService.js";
+import { addAccountAddress, deleteAccountAddress, fetchAccountProfile, updateAccountAddress, updateAccountProfile } from "../services/accountService.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { fetchMyOrders } from "../services/orderService.js";
 import { formatCurrency } from "../utils/formatCurrency.js";
@@ -223,31 +222,6 @@ export default function Account() {
     }
   };
 
-  const handlePasswordChange = async (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const password = form.get("password");
-    if (password !== form.get("confirmPassword")) {
-      setError("New password and confirm password must match.");
-      return;
-    }
-    if (String(password).length < 6) {
-      setError("New password must be at least 6 characters.");
-      return;
-    }
-    setSaving(true);
-    setError("");
-    try {
-      await changeAccountPassword({ currentPassword: form.get("currentPassword"), password });
-      await logout();
-      navigate("/login", { replace: true, state: { from: "/account" } });
-    } catch (err) {
-      setError(err.message || "Unable to change password.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleLogout = useCallback(async ({ skipConfirm = false } = {}) => {
     if (!skipConfirm && !window.confirm("Are you sure you want to log out?")) return;
     await logout();
@@ -427,7 +401,7 @@ export default function Account() {
                 </section>
               )}
 
-              {!loading && activeTab === "security" && <AccountSecurityPanel onLogout={() => handleLogout({ skipConfirm: true })} />}
+              {!loading && activeTab === "security" && <section><h2 className="font-serif text-3xl font-semibold">Account & Security</h2><p className="mt-4 text-ink/60">Your customer account uses passwordless email verification. Use Logout to end this session securely.</p></section>}
 
               {!loading && activeTab === "logout" && (
                 <section className="grid place-items-center py-12 text-center">
