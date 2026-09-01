@@ -7,7 +7,7 @@ export default function AdminProtectedRoute({ children }) {
   const location = useLocation();
   const { authenticated, loading, user } = useAuth();
   if (loading) return null;
-  if (!authenticated) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (!authenticated) return <Navigate to="/admin/login" replace state={{ from: location.pathname }} />;
   if (user?.role !== "admin") return <AdminAccessDenied />;
   return children;
 }
