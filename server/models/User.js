@@ -85,6 +85,7 @@ const userSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true, alias: "fullName" },
     email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     emailVerified: { type: Boolean, default: false },
+    googleSub: { type: String, unique: true, sparse: true, select: false },
     password: { type: String, required() { return this.role === "admin"; }, minlength: 6, select: false },
     phone: { type: String, unique: true, sparse: true, trim: true, alias: "phoneNumber" },
     phoneVerified: { type: Boolean, default: false },

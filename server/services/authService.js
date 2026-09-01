@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { OAuth2Client } from "google-auth-library";
 import { env } from "../config/env.js";
 import User from "../models/User.js";
 import OtpVerification from "../models/OtpVerification.js";
@@ -14,6 +15,7 @@ export const normalizeCustomerEmail = (value) => String(value || "").trim().toLo
 const otpHash = (email, otp) => crypto.createHmac("sha256", env.jwtSecret).update(`${email}:${otp}`).digest("hex");
 const safeEqual = (left, right) => { const a = Buffer.from(String(left || ""), "hex"), b = Buffer.from(String(right || ""), "hex"); return a.length === b.length && crypto.timingSafeEqual(a, b); };
 const publicCustomer = (user) => ({ _id: user._id, name: user.name, email: user.email, role: user.role });
+const googleClient = new OAuth2Client();
 
 export async function issueSession(user, id = crypto.randomUUID(), req = null) {
   let sessionId = id;
@@ -72,6 +74,31 @@ export async function verifyAuthOtp({ email, purpose, otp }, req) {
   if (!user || user.role !== "user" || user.isDisabled) throw new ApiError("Unable to verify this customer account.", 403);
   user.emailVerified = true;
   pushLoginHistory(user, req, purpose === "signup" ? "signup_email_otp" : "login_email_otp");
+  const session = await issueSession(user, undefined, req);
+  return { ...session, user: publicCustomer(user) };
+}
+
+export async function authenticateWithGoogle(credential, req) {
+  if (!env.google.clientId) throw new ApiError("Google sign-in is not configured.", 503, [{ code: "GOOGLE_AUTH_NOT_CONFIGURED" }]);
+  let payload;
+  try {
+    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: env.google.clientId });
+    payload = ticket.getPayload();
+  } catch {
+    throw new ApiError("Google sign-in could not be verified.", 401, [{ code: "GOOGLE_TOKEN_INVALID" }]);
+  }
+  const email = normalizeCustomerEmail(payload?.email);
+  const googleSub = String(payload?.sub || "");
+  if (!email || !googleSub || payload?.email_verified !== true) throw new ApiError("Google account email is not verified.", 401, [{ code: "GOOGLE_EMAIL_UNVERIFIED" }]);
+  let user = await User.findOne({ email }).select("+googleSub");
+  if (user?.role === "admin" || user?.isDisabled) throw new ApiError("Unable to authenticate this customer account.", 403);
+  if (user?.googleSub && user.googleSub !== googleSub) throw new ApiError("This email is linked to another Google account.", 409, [{ code: "GOOGLE_ACCOUNT_MISMATCH" }]);
+  if (!user) user = await User.create({ name: String(payload.name || email.split("@")[0]).trim(), email, emailVerified: true, googleSub, role: "user" });
+  else {
+    user.googleSub = googleSub;
+    user.emailVerified = true;
+  }
+  pushLoginHistory(user, req, "google_signin");
   const session = await issueSession(user, undefined, req);
   return { ...session, user: publicCustomer(user) };
 }

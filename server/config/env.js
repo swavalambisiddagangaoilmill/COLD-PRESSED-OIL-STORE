@@ -44,6 +44,9 @@ export const env = {
   refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "30d",
   clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
   clientUrls: (process.env.CLIENT_URLS || process.env.CLIENT_URL || "http://localhost:5173").split(",").map((url) => url.trim()).filter(Boolean),
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || "",
+  },
   whatsapp: {
     mode: whatsappMode,
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",

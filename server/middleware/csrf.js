@@ -2,7 +2,7 @@
 import { ApiError } from "../utils/ApiError.js";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-const EXEMPT_PATHS = new Set(["/api/auth/otp/request", "/api/auth/otp/verify", "/api/auth/refresh", "/api/payments/webhook", "/api/shiprocket/webhook"]);
+const EXEMPT_PATHS = new Set(["/api/auth/otp/request", "/api/auth/otp/verify", "/api/auth/google", "/api/auth/refresh", "/api/payments/webhook", "/api/shiprocket/webhook"]);
 
 export function csrfGuard(req, _res, next) {
   if (SAFE_METHODS.has(req.method) || EXEMPT_PATHS.has(req.path)) return next();

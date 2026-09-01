@@ -5,6 +5,7 @@ export const API_ENDPOINTS = {
   auth: {
     requestOtp: "/auth/otp/request",
     verifyOtp: "/auth/otp/verify",
+    google: "/auth/google",
     logout: "/auth/logout",
     refresh: "/auth/refresh",
     profile: "/auth/profile",

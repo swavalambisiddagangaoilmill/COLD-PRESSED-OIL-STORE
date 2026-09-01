@@ -1,6 +1,6 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
-import { addAddressHandler, deleteAddressHandler, getProfile, getSecurityHandler, logout, refresh, requestOtp, revokeAllSessionsHandler, revokeSessionHandler, updateAddressHandler, updateProfile, verifyOtp } from "../controllers/authController.js";
+import { addAddressHandler, deleteAddressHandler, getProfile, getSecurityHandler, googleLogin, logout, refresh, requestOtp, revokeAllSessionsHandler, revokeSessionHandler, updateAddressHandler, updateProfile, verifyOtp } from "../controllers/authController.js";
 import { protect } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { addressIdValidator, addressValidator, requestOtpValidator, sessionIdValidator, updateProfileValidator, verifyOtpValidator } from "../validators/authValidators.js";
@@ -11,6 +11,7 @@ const verificationLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, sta
 
 router.post("/otp/request", generationLimiter, requestOtpValidator, validate, requestOtp);
 router.post("/otp/verify", verificationLimiter, verifyOtpValidator, validate, verifyOtp);
+router.post("/google", verificationLimiter, [body("credential").isString().isLength({ min: 100, max: 5000 }).withMessage("Valid Google credential is required.")], validate, googleLogin);
 router.post("/refresh", refresh);
 router.post("/logout", protect, logout);
 router.get("/profile", protect, getProfile);
