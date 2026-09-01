@@ -4,7 +4,7 @@ import { apiRequest } from "../api/apiClient.js";
 const fallback = {
   checkedAt: null,
   services: {
-    razorpay: { status: "offline", available: false, message: "Online payments are temporarily unavailable." },
+    cashfree: { status: "offline", available: false, message: "Online payments are temporarily unavailable." },
     resend: { status: "offline", available: false, message: "Email notifications are temporarily unavailable." },
     googleOAuth: { status: "offline", available: false, message: "Google sign-in is temporarily unavailable." },
     cloudinary: { status: "offline", available: false, message: "Image uploads are temporarily unavailable." },

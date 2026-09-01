@@ -5,7 +5,7 @@ export const legalPages = {
     sections: [
       ["Information we collect", "We collect account details, contact information, addresses, order history, payment references, support messages, and consent preferences only as required to operate Swavalambi Siddaganga Oil Mill."],
       ["How we use information", "Your information is used to create accounts, process orders, arrange delivery, provide customer support, prevent fraud, maintain security, and improve the shopping experience."],
-      ["Payments and partners", "Card, UPI, and payment details are handled by trusted payment partners such as Razorpay. We do not store full card numbers, CVV, UPI PINs, or banking passwords."],
+      ["Payments and partners", "Card, UPI, and payment details are handled by trusted payment partners such as Cashfree. We do not store full card numbers, CVV, UPI PINs, or banking passwords."],
       ["Data protection", "We use reasonable technical and organizational safeguards to protect customer data. Access is limited to authorized operational and support use."],
       ["Customer choices", "You may request account assistance, correction of profile details, or support with privacy questions by contacting the business through the Contact page."],
     ],

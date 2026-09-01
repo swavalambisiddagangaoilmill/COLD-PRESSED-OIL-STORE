@@ -51,10 +51,11 @@ export const env = {
     contactTo: process.env.CONTACT_TO_EMAIL || "",
     resendApiKey: process.env.RESEND_API_KEY || "",
   },
-  razorpay: {
-    keyId: process.env.RAZORPAY_KEY_ID || "",
-    keySecret: process.env.RAZORPAY_KEY_SECRET || "",
-    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || "",
+  cashfree: {
+    environment: String(process.env.CASHFREE_ENVIRONMENT || "sandbox").toLowerCase(),
+    clientId: process.env.CASHFREE_CLIENT_ID || "",
+    clientSecret: process.env.CASHFREE_CLIENT_SECRET || "",
+    apiVersion: process.env.CASHFREE_API_VERSION || "2025-01-01",
   },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_NAME || "",

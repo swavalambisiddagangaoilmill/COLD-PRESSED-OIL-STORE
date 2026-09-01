@@ -40,8 +40,6 @@ export const API_ENDPOINTS = {
   adminAdvanceMockShipment: (id) => `/admin/orders/${id}/mock-shipment/next`,
   paymentIntent: "/payments/intent",
   paymentVerify: "/payments/verify",
-  paymentUpiQr: "/payments/upi-qr",
-  paymentUpiQrStatus: (id) => `/payments/upi-qr/${id}`,
   contact: "/contact",
   offers: "/content/offers",
   couponValidate: "/content/coupons/validate",

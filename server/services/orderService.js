@@ -2,8 +2,18 @@
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
+import { withOrderTotals } from "../utils/orderTotals.js";
 import { createAdminNotification, createInventoryNotifications } from "./adminNotificationService.js";
 import { calculateCheckoutTotals, consumeCouponUsageForOrder, normalizeCouponCode, validateCouponForItems } from "./couponService.js";
+
+const orderTransitions = {
+  placed: ["confirmed", "cancelled"],
+  confirmed: ["packed", "cancelled"],
+  packed: ["shipped", "cancelled"],
+  shipped: ["delivered"],
+  delivered: [],
+  cancelled: [],
+};
 
 function normalizeOrderProducts(products = []) {
   const merged = new Map();
@@ -51,7 +61,7 @@ export async function createOrder(userId, payload) {
 
   try {
     const totals = calculateCheckoutTotals(orderItems, couponResult.discountAmount);
-    const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: payload.paymentStatus || "pending", razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount });
+    const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: payload.paymentStatus || "pending", razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature, cashfreeOrderId: payload.cashfreeOrderId, cashfreeCfOrderId: payload.cashfreeCfOrderId, cashfreePaymentId: payload.cashfreePaymentId, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount });
     try {
       await consumeCouponUsageForOrder(order);
     } catch (error) {
@@ -69,8 +79,8 @@ export async function createOrder(userId, payload) {
   }
 }
 
-export function getMyOrders(userId) {
-  return Order.find({ user: userId }).sort({ createdAt: -1 }).lean();
+export async function getMyOrders(userId) {
+  return (await Order.find({ user: userId }).sort({ createdAt: -1 }).lean()).map(withOrderTotals);
 }
 
 export async function getOrderForUser(orderId, user) {
@@ -79,20 +89,25 @@ export async function getOrderForUser(orderId, user) {
   if (user.role !== "admin" && order.user._id.toString() !== user._id.toString()) {
     throw new ApiError("You cannot access this order.", 403);
   }
-  return order;
+  return withOrderTotals(order);
 }
 
-export function getAllOrders() {
-  return Order.find().populate("user", "name email").sort({ createdAt: -1 }).lean();
+export async function getAllOrders() {
+  return (await Order.find().populate("user", "name email").sort({ createdAt: -1 }).lean()).map(withOrderTotals);
 }
 
 export async function updateOrderStatus(orderId, payload) {
   const order = await Order.findById(orderId);
   if (!order) throw new ApiError("Order not found.", 404);
-  order.set(payload);
+  const nextStatus = payload.orderStatus;
+  if (!orderTransitions[order.orderStatus]?.includes(nextStatus)) throw new ApiError("Invalid order status transition.", 400);
+  order.orderStatus = nextStatus;
+  if (nextStatus === "cancelled") order.shippingStatus = "cancelled";
+  if (nextStatus === "shipped" && !["picked_up", "in_transit", "out_for_delivery"].includes(order.shippingStatus)) order.shippingStatus = "shipped";
+  if (nextStatus === "delivered") order.shippingStatus = "delivered";
   await order.save();
-  if (payload.orderStatus === "cancelled") await createAdminNotification({ category: "orders", type: "order_cancelled", title: "Order Cancelled", description: `Order ${order._id} was cancelled.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } });
-  if (payload.orderStatus === "delivered") await createAdminNotification({ category: "orders", type: "order_delivered", title: "Order Delivered", description: `Order ${order._id} was delivered.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } });
+  const notification = nextStatus === "cancelled" ? { type: "order_cancelled", title: "Order Cancelled", description: `Order ${order._id} was cancelled.` } : nextStatus === "delivered" ? { type: "order_delivered", title: "Order Delivered", description: `Order ${order._id} was delivered.` } : null;
+  if (notification) await Promise.allSettled([createAdminNotification({ category: "orders", ...notification, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } })]);
   return order;
 }
 

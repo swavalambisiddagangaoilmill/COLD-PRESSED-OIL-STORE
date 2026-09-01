@@ -13,10 +13,10 @@ export const createOrderValidator = [
   body("shippingAddress.city").trim().notEmpty().withMessage("City is required."),
   body("shippingAddress.state").trim().notEmpty().withMessage("State is required."),
   body("shippingAddress.postalCode").trim().notEmpty().withMessage("Postal code is required."),
-  body("paymentMethod").optional().isIn(["cod", "razorpay", "card", "upi"]).withMessage("Invalid payment method."),
+  body("paymentMethod").optional().isIn(["cod"]).withMessage("Online orders must be created through the payment endpoint."),
 ];
 
 export const updateOrderStatusValidator = [
   body("orderStatus").isIn(["placed", "confirmed", "packed", "shipped", "delivered", "cancelled"]).withMessage("Invalid order status."),
-  body("paymentStatus").optional().isIn(["pending", "paid", "failed", "refunded"]).withMessage("Invalid payment status."),
+  body().custom((value) => { if (Object.keys(value).some((key) => key !== "orderStatus")) throw new Error("Only order status may be changed here."); return true; }),
 ];

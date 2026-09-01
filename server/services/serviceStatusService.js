@@ -6,7 +6,7 @@ const CHECK_TIMEOUT_MS = 5000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 const LABELS = {
-  razorpay: "Razorpay",
+  cashfree: "Cashfree",
   resend: "Resend",
   googleOAuth: "Google OAuth",
   cloudinary: "Cloudinary",
@@ -35,9 +35,9 @@ function hasAll(values) {
 
 function configurationSnapshot() {
   return {
-    razorpay: hasAll([env.razorpay.keyId, env.razorpay.keySecret])
-      ? status("razorpay", "degraded", "Configured; connectivity has not been checked yet.")
-      : status("razorpay", "not_configured", "Not configured."),
+    cashfree: hasAll([env.cashfree.clientId, env.cashfree.clientSecret, env.cashfree.apiVersion])
+      ? status("cashfree", "degraded", "Configured; connectivity has not been checked yet.")
+      : status("cashfree", "not_configured", "Not configured."),
     resend: env.email.provider === "resend" && hasAll([env.email.from, env.email.resendApiKey])
       ? status("resend", "degraded", "Configured; connectivity has not been checked yet.")
       : status("resend", "not_configured", "Not configured."),
@@ -77,17 +77,16 @@ async function withTimeout(promise) {
   }
 }
 
-async function checkRazorpay() {
-  if (!hasAll([env.razorpay.keyId, env.razorpay.keySecret])) return status("razorpay", "not_configured", "Not configured.");
-  const auth = Buffer.from(`${env.razorpay.keyId}:${env.razorpay.keySecret}`).toString("base64");
+async function checkCashfree() {
+  if (!hasAll([env.cashfree.clientId, env.cashfree.clientSecret, env.cashfree.apiVersion])) return status("cashfree", "not_configured", "Not configured.");
+  const base = env.cashfree.environment === "production" ? "https://api.cashfree.com/pg" : "https://sandbox.cashfree.com/pg";
   try {
-    const response = await fetchWithTimeout("https://api.razorpay.com/v1/payments?count=1", { headers: { Authorization: `Basic ${auth}` } });
-    if (response.ok) return status("razorpay", "online", "Operational; credentials verified.");
-    if (response.status === 401) return status("razorpay", "offline", "Authentication failed.");
-    if (response.status === 403) return status("razorpay", "degraded", "Credentials were accepted, but account access is restricted.");
-    return status("razorpay", "degraded", "Provider responded, but the account check was unavailable.");
+    const response = await fetchWithTimeout(`${base}/orders/service_status_check`, { headers: { "x-client-id": env.cashfree.clientId, "x-client-secret": env.cashfree.clientSecret, "x-api-version": env.cashfree.apiVersion } });
+    if (response.status === 404) return status("cashfree", "online", "Operational; credentials verified.");
+    if (response.status === 401) return status("cashfree", "offline", "Authentication failed.");
+    return status("cashfree", "degraded", "Provider reachable; checkout availability requires a live order.");
   } catch {
-    return status("razorpay", "offline", "Connection failed.");
+    return status("cashfree", "offline", "Connection failed.");
   }
 }
 
@@ -178,7 +177,7 @@ async function checkTurnstile() {
 
 async function refreshServiceStatus() {
   const results = await Promise.all([
-    checkRazorpay(),
+    checkCashfree(),
     checkResend(),
     checkGoogleOAuth(),
     checkCloudinary(),

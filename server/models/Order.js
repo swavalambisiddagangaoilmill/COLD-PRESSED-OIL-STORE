@@ -49,11 +49,14 @@ const orderSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     products: [orderItemSchema],
     shippingAddress: shippingAddressSchema,
-    paymentMethod: { type: String, enum: ["cod", "razorpay", "card", "upi"], default: "cod" },
+    paymentMethod: { type: String, enum: ["cod", "cashfree", "razorpay", "card", "upi"], default: "cod" },
     paymentStatus: { type: String, enum: ["pending", "paid", "failed", "refunded"], default: "pending" },
     razorpayOrderId: { type: String },
     razorpayPaymentId: { type: String },
     razorpaySignature: { type: String },
+    cashfreeOrderId: { type: String },
+    cashfreeCfOrderId: { type: String },
+    cashfreePaymentId: { type: String },
     orderStatus: { type: String, enum: ["placed", "confirmed", "packed", "shipped", "delivered", "cancelled"], default: "placed" },
     subtotal: { type: Number, min: 0 },
     shippingAmount: { type: Number, default: 0, min: 0 },
@@ -89,5 +92,7 @@ orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
 orderSchema.index({ razorpayPaymentId: 1 }, { unique: true, sparse: true });
 orderSchema.index({ razorpayOrderId: 1 }, { sparse: true });
+orderSchema.index({ cashfreePaymentId: 1 }, { unique: true, sparse: true });
+orderSchema.index({ cashfreeOrderId: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model("Order", orderSchema);

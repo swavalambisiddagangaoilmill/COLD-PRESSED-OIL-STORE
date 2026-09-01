@@ -12,7 +12,7 @@ export default function OrderSuccess() {
 
   const orderId = order._id || order.id;
   const items = order.items || order.products || [];
-  const total = order.total || order.totalAmount || 0;
+  const total = order.total ?? order.totalAmount ?? items.reduce((sum, item) => sum + Number(item.total ?? (Number(item.price || 0) * Number(item.quantity || 1))), 0);
   const subtotal = order.subtotal || items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
   const shipping = order.shippingAmount || order.shippingFee || order.deliveryCharge || 0;
   const discount = order.discountAmount || order.couponDiscount || 0;

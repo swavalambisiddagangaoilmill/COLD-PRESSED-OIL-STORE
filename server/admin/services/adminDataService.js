@@ -15,6 +15,8 @@ import { normalizeCouponCode } from "../../services/couponService.js";
 import { deleteImage } from "../../services/uploadService.js";
 import { ApiError } from "../../utils/ApiError.js";
 import { slugify } from "../../utils/slugify.js";
+import { withOrderTotals } from "../../utils/orderTotals.js";
+import { createProductWithGeneratedSku, prepareProductVariants } from "../../services/productSkuService.js";
 
 const orderTransitions = {
   placed: ["confirmed", "cancelled"],
@@ -64,7 +66,7 @@ export async function listOrders(query) {
   if (query.shippingStatus) filter.shippingStatus = query.shippingStatus;
   if (query.search) filter.$or = [{ _id: query.search.match(/^[a-f\d]{24}$/i) ? query.search : undefined }, { "shippingAddress.fullName": new RegExp(query.search, "i") }].filter((item) => Object.values(item)[0]);
   const [items, total] = await Promise.all([Order.find(filter).populate("user", "name email phone").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit), Order.countDocuments(filter)]);
-  return { items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
+  return { items: items.map(withOrderTotals), pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
 }
 
 export async function updateOrderStatus(id, nextStatus) {
@@ -84,7 +86,7 @@ export async function updateOrderStatus(id, nextStatus) {
       order.inventoryRestoredAt = new Date();
       await order.save();
       const restoredProducts = await Product.find({ _id: { $in: order.products.map((item) => item.product) } });
-      await Promise.all(restoredProducts.map((product) => createInventoryNotifications(product)));
+      await Promise.allSettled(restoredProducts.map((product) => createInventoryNotifications(product)));
     } catch (error) {
       order.orderStatus = previousStatus;
       order.shippingStatus = previousShippingStatus;
@@ -92,6 +94,8 @@ export async function updateOrderStatus(id, nextStatus) {
       throw error;
     }
   }
+  const notification = nextStatus === "cancelled" ? { type: "order_cancelled", title: "Order Cancelled", description: `Order ${order._id} was cancelled.` } : nextStatus === "delivered" ? { type: "order_delivered", title: "Order Delivered", description: `Order ${order._id} was delivered.` } : null;
+  if (notification) await Promise.allSettled([createAdminNotification({ category: "orders", ...notification, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } })]);
   return order;
 }
 
@@ -112,34 +116,14 @@ export async function listProducts(query) {
   return { items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
 }
 
-function skuPart(value, fallback) {
-  const clean = String(value || "").normalize("NFKD").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toUpperCase();
-  return clean || fallback;
-}
-
-async function generateProductSku(data, id) {
-  const category = await Category.findById(data.category).select("name slug").lean();
-  if (!category) throw new ApiError("Select a valid product category.", 400);
-  const weight = Number(data.weight);
-  const base = [skuPart(category.slug || category.name, "CAT").slice(0, 8), skuPart(data.title, "PRODUCT").slice(0, 12), Number.isFinite(weight) && weight > 0 ? skuPart(weight, "UNIT") : "UNIT"].join("-");
-  let sku = base;
-  let suffix = 1;
-  while (await Product.exists({ sku, ...(id ? { _id: { $ne: id } } : {}) })) {
-    suffix += 1;
-    sku = `${base}-${suffix}`;
-  }
-  return sku;
-}
-
 export async function saveProduct(payload, id) {
-  const allowed = ["title", "description", "benefits", "price", "discountPrice", "stock", "category", "images", "featured", "bestSeller", "newArrival", "codEnabled", "onlinePaymentEnabled", "returnEligible", "exchangeEligible", "isActive", "weight", "dimensions"];
+  const allowed = ["title", "description", "benefits", "price", "discountPrice", "stock", "category", "images", "featured", "bestSeller", "newArrival", "codEnabled", "onlinePaymentEnabled", "returnEligible", "exchangeEligible", "isActive", "size", "variants"];
   const data = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
   if (data.title) data.slug = slugify(data.title);
   const current = id ? await Product.findById(id) : null;
   if (id && !current) throw new ApiError("Product not found.", 404);
-  const skuSource = { title: data.title || current?.title, category: data.category || current?.category, weight: data.weight ?? current?.weight };
-  data.sku = await generateProductSku(skuSource, id);
-  const product = id ? await Product.findByIdAndUpdate(id, data, { new: true, runValidators: true }).populate("category", "name slug") : await Product.create(data);
+  if (id && Array.isArray(data.variants)) data.variants = await prepareProductVariants(data.variants, current.sku, current.variants || []);
+  const product = id ? await Product.findByIdAndUpdate(id, data, { new: true, runValidators: true }).populate("category", "name slug") : await createProductWithGeneratedSku(data);
   return id ? product : product.populate("category", "name slug");
 }
 
@@ -279,7 +263,7 @@ export async function listCustomers() {
 export async function listPayments(query) {
   const filter = {};
   if (query.status) filter.paymentStatus = query.status;
-  return Order.find(filter).populate("user", "name email").select("user paymentMethod paymentStatus razorpayPaymentId totalAmount createdAt").sort({ createdAt: -1 }).limit(100);
+  return (await Order.find(filter).populate("user", "name email").select("user products subtotal shippingAmount couponDiscount taxAmount paymentMethod paymentStatus cashfreePaymentId razorpayPaymentId totalAmount createdAt").sort({ createdAt: -1 }).limit(100).lean()).map(withOrderTotals);
 }
 
 export async function reports(type = "sales") {

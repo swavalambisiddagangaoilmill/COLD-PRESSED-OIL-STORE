@@ -83,7 +83,7 @@ function totals(order, items) {
   const shipping = Number(order.shippingAmount || order.shippingFee || order.deliveryCharge || 0);
   const discount = Number(order.discountAmount || order.couponDiscount || 0);
   const tax = Number(order.taxAmount || order.gstAmount || 0);
-  const grandTotal = Number(order.total || order.totalAmount || Math.max(0, subtotal + shipping + tax - discount));
+  const grandTotal = Number(order.total ?? order.totalAmount ?? Math.max(0, subtotal + shipping + tax - discount));
   return { subtotal, shipping, discount, tax, grandTotal };
 }
 

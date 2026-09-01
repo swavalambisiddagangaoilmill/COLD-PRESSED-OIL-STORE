@@ -4,17 +4,18 @@ import mongoose from "mongoose";
 const paymentCheckoutSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    provider: { type: String, default: "razorpay" },
-    type: { type: String, enum: ["upi_qr"], required: true },
-    status: { type: String, enum: ["created", "paid", "expired", "failed"], default: "created", index: true },
+    provider: { type: String, default: "cashfree" },
+    type: { type: String, enum: ["hosted_checkout"], default: "hosted_checkout" },
+    status: { type: String, enum: ["created", "processing", "paid", "expired", "failed", "cancelled"], default: "created", index: true },
     amount: { type: Number, required: true, min: 1 },
     currency: { type: String, default: "INR" },
-    razorpayQrId: { type: String, required: true, unique: true },
-    razorpayPaymentId: { type: String, unique: true, sparse: true },
-    imageUrl: { type: String },
+    cashfreeOrderId: { type: String, required: true, unique: true },
+    cashfreeCfOrderId: { type: String },
+    cashfreePaymentId: { type: String, unique: true, sparse: true },
+    paymentSessionId: { type: String, select: false },
     orderPayload: { type: mongoose.Schema.Types.Mixed, required: true },
     order: { type: mongoose.Schema.Types.ObjectId, ref: "Order" },
-    expiresAt: { type: Date, required: true, index: true },
+    expiresAt: { type: Date, index: true },
   },
   { timestamps: true }
 );

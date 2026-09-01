@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
 import { slugify } from "../utils/slugify.js";
+import { createProductWithGeneratedSku, prepareProductVariants } from "./productSkuService.js";
 
 function normalizeSearch(value = "") {
   return String(value).trim().replace(/\s+/g, " ");
@@ -155,11 +156,19 @@ export async function getRelatedProducts(productId, limit = 6) {
 
 export async function createProduct(payload) {
   const slug = payload.slug || slugify(payload.title);
-  return Product.create({ ...payload, slug });
+  return createProductWithGeneratedSku({ ...payload, slug });
 }
 
 export async function updateProduct(id, payload) {
-  const updates = payload.title && !payload.slug ? { ...payload, slug: slugify(payload.title) } : payload;
+  const updates = payload.title && !payload.slug ? { ...payload, slug: slugify(payload.title) } : { ...payload };
+  delete updates.sku;
+  delete updates.weight;
+  delete updates.dimensions;
+  if (Array.isArray(updates.variants)) {
+    const current = await Product.findById(id).select("sku variants");
+    if (!current) throw new ApiError("Product not found.", 404);
+    updates.variants = await prepareProductVariants(updates.variants, current.sku, current.variants || []);
+  }
   const product = await Product.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
   if (!product) throw new ApiError("Product not found.", 404);
   return product;
