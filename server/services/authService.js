@@ -38,7 +38,7 @@ function createSessionId() {
 }
 
 const customerOtpTtlMs = 5 * 60 * 1000;
-const customerOtpCooldownMs = 60 * 1000;
+const customerOtpCooldownMs = 50 * 1000;
 const customerOtpWindowMs = 60 * 60 * 1000;
 const customerOtpMaxRequests = 5;
 
