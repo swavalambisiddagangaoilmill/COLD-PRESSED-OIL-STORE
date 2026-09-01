@@ -23,14 +23,20 @@ export const adminApi = {
     return apiRequest("/upload/image", { method: "POST", body: form });
   },
   carousel: () => apiRequest("/admin/carousel"),
-  createCarousel: (file) => {
+  createCarousel: (file, category) => {
     const form = new FormData();
     form.append("image", file);
+    form.append("category", category);
     return promotionChanged(apiRequest("/admin/carousel", { method: "POST", body: form }));
+  },
+  replaceCarousel: (id, file) => {
+    const form = new FormData();
+    form.append("image", file);
+    return promotionChanged(apiRequest(`/admin/carousel/${id}/image`, { method: "PUT", body: form }));
   },
   carouselStatus: (id, isActive) => promotionChanged(apiRequest(`/admin/carousel/${id}/status`, { method: "PATCH", body: JSON.stringify({ isActive }) })),
   deleteCarousel: (id) => promotionChanged(apiRequest(`/admin/carousel/${id}`, { method: "DELETE" })),
-  reorderCarousel: (ids) => promotionChanged(apiRequest("/admin/carousel/reorder", { method: "PATCH", body: JSON.stringify({ ids }) })),
+  reorderCarousel: (category, ids) => promotionChanged(apiRequest("/admin/carousel/reorder", { method: "PATCH", body: JSON.stringify({ category, ids }) })),
   bulkPreview: (payload) => apiRequest(`${base}/products/bulk-price/preview`, { method: "POST", body: JSON.stringify(payload) }),
   bulkApply: (payload) => apiRequest(`${base}/products/bulk-price/apply`, { method: "POST", body: JSON.stringify(payload) }),
   inventory: (id, payload) => apiRequest(`${base}/inventory/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
@@ -52,15 +58,6 @@ export const adminApi = {
   customers: () => apiRequest(`${base}/customers`),
   payments: () => apiRequest(`${base}/payments`),
   messages: () => apiRequest(`${base}/messages`),
-  whatsappOverview: () => apiRequest(`${base}/whatsapp/overview`),
-  whatsappTemplates: () => apiRequest(`${base}/whatsapp/templates`),
-  whatsappCustomers: (q = "") => apiRequest(`${base}/whatsapp/customers${q ? `?q=${encodeURIComponent(q)}` : ""}`),
-  whatsappAudiencePreview: (payload) => apiRequest(`${base}/whatsapp/audience-preview`, { method: "POST", body: JSON.stringify(payload) }),
-  whatsappTemplatePreview: (payload) => apiRequest(`${base}/whatsapp/preview`, { method: "POST", body: JSON.stringify(payload) }),
-  whatsappTest: (payload) => apiRequest(`${base}/whatsapp/test`, { method: "POST", body: JSON.stringify(payload) }),
-  whatsappCreateCampaign: (payload, idempotencyKey) => apiRequest(`${base}/whatsapp/campaigns`, { method: "POST", headers: { "X-Idempotency-Key": idempotencyKey }, body: JSON.stringify(payload) }),
-  whatsappCampaigns: () => apiRequest(`${base}/whatsapp/campaigns`),
-  whatsappCampaign: (id) => apiRequest(`${base}/whatsapp/campaigns/${id}`),
   messageStatus: (id, status) => apiRequest(`${base}/messages/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
   reports: (type = "sales") => apiRequest(`${base}/reports?type=${type}`),
   users: () => apiRequest(`${base}/users`),

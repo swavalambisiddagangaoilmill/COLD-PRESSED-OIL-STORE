@@ -17,7 +17,15 @@ function hasValidImageSignature(file) {
   );
 }
 
-export async function uploadImage(file, folder = "products") {
+function carouselWarning(width, height, category) {
+  const target = category === "mobile" ? { width: 1080, height: 1350 } : { width: 1920, height: 700 };
+  const ratioDifference = Math.abs((width / height) - (target.width / target.height)) / (target.width / target.height);
+  return ratioDifference > 0.12 || width !== target.width || height !== target.height
+    ? `Image is ${width} × ${height}px; ${category === "mobile" ? "mobile" : "desktop"} recommendation is ${target.width} × ${target.height}px.`
+    : "";
+}
+
+export async function uploadImage(file, folder = "products", options = {}) {
   if (folder === "carousel" && !["image/jpeg", "image/png", "image/webp"].includes(file?.mimetype)) throw new ApiError("Carousel images must be JPEG, PNG, or WebP.", 400);
   if (!hasValidImageSignature(file)) throw new ApiError("Uploaded file is not a valid image.", 400);
   if (!isServiceAvailable("cloudinary")) throw new ApiError("Image uploads are temporarily unavailable.", 503);
@@ -25,12 +33,11 @@ export async function uploadImage(file, folder = "products") {
   try {
     const safeFolder = ["products", "carousel"].includes(folder) ? folder : "products";
     const result = await cloudinary.uploader.upload(dataUri, { folder: `ss-oil-mill/${safeFolder}`, resource_type: "image", quality: "auto:good", fetch_format: "auto" });
-    if (safeFolder === "carousel" && (result.width < 800 || result.height < 300)) {
+    if (safeFolder === "carousel" && (result.width < 500 || result.height < 300)) {
       await cloudinary.uploader.destroy(result.public_id);
-      throw new ApiError("Carousel images must be at least 800 × 300 pixels.", 400);
+      throw new ApiError("Carousel images must be at least 500 × 300 pixels.", 400);
     }
-    const ratio = result.width / result.height;
-    return { url: result.secure_url, publicId: result.public_id, provider: "cloudinary", width: result.width, height: result.height, aspectWarning: safeFolder === "carousel" && Math.abs(ratio - (16 / 9)) > 0.25 ? "Image differs from the recommended 16:9 carousel ratio." : "" };
+    return { url: result.secure_url, publicId: result.public_id, provider: "cloudinary", width: result.width, height: result.height, aspectWarning: safeFolder === "carousel" ? carouselWarning(result.width, result.height, options.category) : "" };
   } catch (error) {
     if (error instanceof ApiError) throw error;
     logExternalFailure("cloudinary", error, { action: "upload_image" });

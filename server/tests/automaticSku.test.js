@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import Product from "../models/Product.js";
 import { createProduct, generateProductSku, generateVariantSku, updateProduct } from "../services/productService.js";
+import { saveProduct as saveAdminProduct } from "../admin/services/adminDataService.js";
 import { getVariantShippingDefaults, parseVariantVolume } from "../utils/variantShippingDefaults.js";
 
 const variant = (name, sku) => ({ name, sku, price: 100, mrp: 120, stock: 1, weight: 1, dimensions: { length: 1, width: 1, height: 1 }, images: [{ url: "image.jpg" }], isActive: true });
@@ -20,6 +21,34 @@ test("new products and variants receive server-generated URL-safe unique SKUs", 
     assert.equal(saved.variants[0].weight, 1.05);
     assert.deepEqual(saved.variants[1].dimensions, { length: 20, width: 15, height: 30 });
     assert.equal(saved.variants[1].weight, 5);
+  } finally { Product.create = originalCreate; }
+});
+
+test("admin product creation generates and validates all internal 1L variant fields before save", async () => {
+  const originalCreate = Product.create;
+  let saved;
+  Product.create = async (value) => {
+    const product = new Product(value);
+    await product.validate();
+    saved = product;
+    return product;
+  };
+  try {
+    await saveAdminProduct({
+      title: "Test Groundnut Oil",
+      description: "Fresh cold pressed oil",
+      variants: [{ name: "1L", price: 1000, mrp: 1500, stock: 3, images: [{ url: "https://res.cloudinary.com/demo/image/upload/product.webp", publicId: "products/test" }], isActive: true }],
+      isActive: true,
+    });
+    assert.match(saved.sku, /^PRD-TESTGROU-[A-F0-9]{6}$/);
+    assert.equal(saved.variants[0].name, "1L");
+    assert.match(saved.variants[0].sku, new RegExp(`^${saved.sku}-1L-[A-F0-9]{4}$`));
+    assert.equal(saved.variants[0].price, 1000);
+    assert.equal(saved.variants[0].mrp, 1500);
+    assert.equal(saved.variants[0].stock, 3);
+    assert.equal(saved.variants[0].images[0].url, "https://res.cloudinary.com/demo/image/upload/product.webp");
+    assert.equal(saved.variants[0].weight, 1.05);
+    assert.deepEqual(saved.variants[0].dimensions.toObject(), { length: 10, width: 10, height: 30 });
   } finally { Product.create = originalCreate; }
 });
 

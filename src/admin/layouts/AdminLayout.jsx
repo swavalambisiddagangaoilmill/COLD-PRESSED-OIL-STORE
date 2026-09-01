@@ -1,6 +1,6 @@
 // Admin shell with permission-aware navigation, global search, and profile controls.
 import "../adminTheme.css";
-import { BarChart3, Bell, Boxes, ChevronDown, ClipboardList, History, Image as ImageIcon, LayoutDashboard, LockKeyhole, Mail, Megaphone, Menu, MessageCircle, Package, Percent, Settings, ShieldCheck, Truck, Users, X } from "lucide-react";
+import { BarChart3, Bell, Boxes, ChevronDown, ClipboardList, Image as ImageIcon, LayoutDashboard, LockKeyhole, Mail, Megaphone, Menu, Package, Percent, Settings, ShieldCheck, Truck, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -29,9 +29,6 @@ const navItems = [
   { label: "Customers", to: "/admin/customers", icon: Users },
   { label: "Payments", to: "/admin/payments", icon: BarChart3 },
   { label: "Messages", to: "/admin/messages", icon: Mail },
-  { label: "WhatsApp Overview", to: "/admin/whatsapp", icon: MessageCircle, group: "WhatsApp", end: true },
-  { label: "WhatsApp Marketing", to: "/admin/whatsapp/marketing", icon: Megaphone, group: "WhatsApp" },
-  { label: "Message History", to: "/admin/whatsapp/history", icon: History, group: "WhatsApp" },
   { label: "Reports", to: "/admin/reports", icon: BarChart3 },
   { label: "Notifications", to: "/admin/notifications", icon: BellIcon },
   { label: "Admin Users", to: "/admin/users", icon: ShieldCheck },

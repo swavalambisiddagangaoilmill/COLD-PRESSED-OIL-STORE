@@ -15,6 +15,7 @@ import { assignRequestId, preventParameterPollution, sanitizeRequest } from "./m
 import { restrictionGuard } from "./middleware/restrictionGuard.js";
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import adminCarouselRoutes from "./routes/adminCarouselRoutes.js";
 import adminAuthRoutes from "./routes/adminAuthRoutes.js";
 import adminApiRoutes from "./admin/routes/adminApiRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
@@ -93,6 +94,7 @@ app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 150, standardHeaders: true,
 app.get("/api/carousel", getActiveCarousel);
 app.use("/api/auth", authRoutes);
 app.use("/api/admin-auth", adminAuthRoutes);
+app.use("/api/admin/carousel", adminCarouselRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/admin-panel", adminApiRoutes);
 app.use("/api/ai", aiRoutes);

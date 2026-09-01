@@ -12,6 +12,7 @@ import User from "../../models/User.js";
 import { createReadyToShipShipment, advanceMockShipment, markShipmentHandedOver } from "../../services/shiprocketService.js";
 import { createAdminNotification, createInventoryNotifications } from "../../services/adminNotificationService.js";
 import { normalizeCouponCode } from "../../services/couponService.js";
+import { createProduct, updateProduct } from "../../services/productService.js";
 import { deleteImage } from "../../services/uploadService.js";
 import { ApiError } from "../../utils/ApiError.js";
 import { slugify } from "../../utils/slugify.js";
@@ -111,16 +112,7 @@ export async function listProducts(query) {
 export async function saveProduct(payload, id) {
   const allowed = ["title", "description", "benefits", "variants", "featured", "bestSeller", "newArrival", "codEnabled", "onlinePaymentEnabled", "returnEligible", "exchangeEligible", "isActive"];
   const data = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
-  if (data.title) data.slug = slugify(data.title);
-  const current = id ? await Product.findById(id) : null;
-  if (id && !current) throw new ApiError("Product not found.", 404);
-  const incomingIds = new Set((data.variants || []).map((variant) => String(variant._id || "")).filter(Boolean));
-  const archived = id ? current.variants.filter((variant) => !incomingIds.has(String(variant._id))).map((variant) => ({ ...variant.toObject(), isActive: false, isArchived: true })) : [];
-  data.variants = [...(data.variants || current?.variants || []).map((variant) => ({ ...variant, discount: Math.max(0, Number(variant.mrp) - Number(variant.price)) })), ...archived];
-  const product = id ? current : new Product();
-  product.set(data);
-  await product.save();
-  return product;
+  return id ? updateProduct(id, data) : createProduct(data);
 }
 
 export async function archiveProduct(id) {

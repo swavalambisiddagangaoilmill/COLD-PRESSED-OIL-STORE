@@ -151,7 +151,10 @@ export async function createProduct(payload) {
     const sku = generateProductSku(payload.title);
     const variants = (payload.variants || []).map(({ sku: _ignoredSku, weight: _ignoredWeight, dimensions: _ignoredDimensions, ...variant }) => {
       const shipping = getVariantShippingDefaults(variant.name);
-      return { ...variant, ...shipping, sku: generateVariantSku(sku, shipping.name), discount: Math.max(0, Number(variant.mrp) - Number(variant.price)) };
+      const price = Number(variant.price);
+      const mrp = Number(variant.mrp);
+      const stock = Number(variant.stock);
+      return { ...variant, ...shipping, price, mrp, stock, sku: generateVariantSku(sku, shipping.name), discount: Math.max(0, mrp - price) };
     });
     try { return await Product.create({ ...payload, sku, variants, slug }); }
     catch (error) { if (!duplicateKey(error) || attempt === 4) throw error; }
