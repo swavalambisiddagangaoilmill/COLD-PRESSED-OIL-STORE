@@ -21,7 +21,7 @@ test("customer signup OTP is server-generated, hashed, emailed, verified once, a
   OtpVerification.findOneAndUpdate = async (_filter, update) => { if (createdRecord.consumedAt) return null; if (update.$inc) { createdRecord.attempts += 1; return createdRecord; } createdRecord.consumedAt = new Date(); return createdRecord; };
   global.fetch = async (_url, options) => { const body = JSON.parse(options.body); assert.equal(options.headers.Authorization, "Bearer test-resend-secret"); emailedOtp = body.text.match(/\b\d{6}\b/)?.[0]; return { ok: true, json: async () => ({ id: "resend-message-id" }) }; };
   try {
-    const response = await requestAuthOtp({ email: " Customer@Example.COM ", purpose: "signup", name: "Customer" }, request);
+    const response = await requestAuthOtp({ email: " Customer@Example.COM ", name: "Customer" }, request);
     assert.deepEqual(response, { purpose: "signup", expiresIn: 300, resendAfter: 60 });
     assert.match(emailedOtp, /^\d{6}$/);
     assert.notEqual(createdRecord.otpHash, emailedOtp);

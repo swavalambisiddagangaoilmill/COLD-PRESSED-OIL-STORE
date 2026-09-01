@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
 import { slugify } from "../utils/slugify.js";
+import { getVariantShippingDefaults } from "../utils/variantShippingDefaults.js";
 
 const skuPart = (value, fallback) => String(value || "").toUpperCase().replace(/[^A-Z0-9]+/g, "").slice(0, 8) || fallback;
 export const generateProductSku = (title) => `PRD-${skuPart(title, "ITEM")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
@@ -148,7 +149,10 @@ export async function createProduct(payload) {
   const slug = payload.slug || slugify(payload.title);
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const sku = generateProductSku(payload.title);
-    const variants = (payload.variants || []).map(({ sku: _ignoredSku, ...variant }) => ({ ...variant, sku: generateVariantSku(sku, variant.name), discount: Math.max(0, Number(variant.mrp) - Number(variant.price)) }));
+    const variants = (payload.variants || []).map(({ sku: _ignoredSku, weight: _ignoredWeight, dimensions: _ignoredDimensions, ...variant }) => {
+      const shipping = getVariantShippingDefaults(variant.name);
+      return { ...variant, ...shipping, sku: generateVariantSku(sku, shipping.name), discount: Math.max(0, Number(variant.mrp) - Number(variant.price)) };
+    });
     try { return await Product.create({ ...payload, sku, variants, slug }); }
     catch (error) { if (!duplicateKey(error) || attempt === 4) throw error; }
   }
@@ -161,7 +165,9 @@ export async function updateProduct(id, payload) {
   const archived = payload.variants ? current.variants.filter((variant) => !incomingIds.has(String(variant._id))).map((variant) => ({ ...variant.toObject(), isActive: false, isArchived: true })) : [];
   const normalizedVariants = payload.variants?.map((variant) => {
     const existing = variant._id ? current.variants.id(variant._id) : null;
-    return { ...variant, sku: existing?.sku || generateVariantSku(current.sku || `PRD-${skuPart(current.title, "ITEM")}-${String(current._id).slice(-6).toUpperCase()}`, variant.name), discount: Math.max(0, Number(variant.mrp) - Number(variant.price)) };
+    if (existing) return { ...variant, sku: existing.sku, weight: existing.weight, dimensions: existing.dimensions?.toObject?.() || existing.dimensions, discount: Math.max(0, Number(variant.mrp) - Number(variant.price)) };
+    const shipping = getVariantShippingDefaults(variant.name);
+    return { ...variant, ...shipping, sku: generateVariantSku(current.sku || `PRD-${skuPart(current.title, "ITEM")}-${String(current._id).slice(-6).toUpperCase()}`, shipping.name), discount: Math.max(0, Number(variant.mrp) - Number(variant.price)) };
   });
   const { sku: _ignoredProductSku, ...safePayload } = payload;
   const normalized = payload.variants ? { ...safePayload, variants: [...normalizedVariants, ...archived] } : safePayload;

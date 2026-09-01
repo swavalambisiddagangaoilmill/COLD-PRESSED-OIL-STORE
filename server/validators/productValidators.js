@@ -1,5 +1,6 @@
 // Validation chains for product routes.
 import { body, param, query } from "express-validator";
+import { parseVariantVolume } from "../utils/variantShippingDefaults.js";
 
 export const productIdValidator = [param("id").isMongoId().withMessage("Valid product id is required.")];
 export const productSlugValidator = [param("slug").trim().notEmpty().withMessage("Product slug is required.")];
@@ -24,15 +25,11 @@ const productFields = [
   body("isActive").optional().isBoolean().withMessage("isActive must be boolean."),
   body("variants").isArray({ min: 1 }).withMessage("At least one variant is required."),
   body("variants.*._id").optional().isMongoId().withMessage("Invalid variant id."),
-  body("variants.*.name").trim().notEmpty().withMessage("Variant name is required."),
+  body("variants.*.name").trim().custom((value) => { parseVariantVolume(value); return true; }).withMessage("Size must be a positive volume such as 500ml, 1L, or 16.5L."),
   body("variants.*.sku").optional({ values: "falsy" }).trim().matches(/^[A-Z0-9-]+$/i).withMessage("Variant SKU is invalid."),
   body("variants.*.price").isFloat({ gt: 0 }).withMessage("Variant price must be greater than zero."),
   body("variants.*.mrp").isFloat({ gt: 0 }).custom((value, { req, path }) => { const index = Number(path.match(/variants\[(\d+)\]/)?.[1]); return Number(value) >= Number(req.body.variants?.[index]?.price); }).withMessage("Variant MRP must be at least its price."),
   body("variants.*.stock").isInt({ min: 0 }).withMessage("Variant stock cannot be negative."),
-  body("variants.*.weight").isFloat({ min: 0 }).withMessage("Variant weight cannot be negative."),
-  body("variants.*.dimensions.length").isFloat({ min: 0 }).withMessage("Variant package length cannot be negative."),
-  body("variants.*.dimensions.width").isFloat({ min: 0 }).withMessage("Variant package width cannot be negative."),
-  body("variants.*.dimensions.height").isFloat({ min: 0 }).withMessage("Variant package height cannot be negative."),
   body("variants.*.images").isArray({ min: 1 }).withMessage("Each variant needs at least one image."),
   body("variants.*.isActive").optional().isBoolean().withMessage("Variant active status must be boolean."),
   body("variants").custom((variants) => variants.some((variant) => variant.isActive !== false && !variant.isArchived)).withMessage("At least one active variant is required."),

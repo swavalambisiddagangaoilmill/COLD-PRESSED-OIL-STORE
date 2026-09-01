@@ -29,12 +29,13 @@ export async function issueSession(user, id = crypto.randomUUID(), req = null) {
 
 export async function requestAuthOtp({ email, purpose, name }, req) {
   const normalizedEmail = normalizeCustomerEmail(email);
+  const resolvedPurpose = purpose || (String(name || "").trim() ? "signup" : "login");
   const existingUser = await User.findOne({ email: normalizedEmail });
-  const eligible = existingUser?.role !== "admin" && (purpose === "signup" || Boolean(existingUser));
-  if (purpose === "signup" && String(name || "").trim().length < 2) throw new ApiError("Enter your full name.", 422);
+  const eligible = existingUser?.role !== "admin" && (resolvedPurpose === "signup" || Boolean(existingUser));
+  if (resolvedPurpose === "signup" && String(name || "").trim().length < 2) throw new ApiError("Enter your full name.", 422);
   if (!eligible) {
     crypto.createHmac("sha256", env.jwtSecret).update(`${normalizedEmail}:${crypto.randomBytes(8).toString("hex")}`).digest();
-    return { purpose, expiresIn: 300, resendAfter: 60 };
+    return { purpose: resolvedPurpose, expiresIn: 300, resendAfter: 60 };
   }
   const recent = await OtpVerification.find({ email: normalizedEmail, createdAt: { $gt: new Date(Date.now() - EMAIL_WINDOW_MS) } }).sort({ createdAt: -1 }).lean();
   if (recent[0] && Date.now() - new Date(recent[0].createdAt).getTime() < RESEND_COOLDOWN_MS) {
@@ -44,10 +45,10 @@ export async function requestAuthOtp({ email, purpose, name }, req) {
   if (recent.length >= EMAIL_LIMIT) throw new ApiError("Too many OTP requests. Please try again later.", 429, [{ code: "OTP_RATE_LIMIT" }]);
   await OtpVerification.updateMany({ email: normalizedEmail, consumedAt: null }, { $set: { consumedAt: new Date() } });
   const otp = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
-  const record = await OtpVerification.create({ email: normalizedEmail, purpose, fullName: purpose === "signup" ? String(name).trim() : existingUser?.name, otpHash: otpHash(normalizedEmail, otp), expiresAt: new Date(Date.now() + OTP_TTL_MS), requestedByIpHash: requestHash(req.ip), requestedByDeviceHash: requestHash(getDeviceFingerprint(req)) });
+  const record = await OtpVerification.create({ email: normalizedEmail, purpose: resolvedPurpose, fullName: resolvedPurpose === "signup" ? String(name).trim() : existingUser?.name, otpHash: otpHash(normalizedEmail, otp), expiresAt: new Date(Date.now() + OTP_TTL_MS), requestedByIpHash: requestHash(req.ip), requestedByDeviceHash: requestHash(getDeviceFingerprint(req)) });
   try { await sendCustomerOtpEmail({ email: normalizedEmail, name: record.fullName || existingUser?.name }, otp); }
   catch { await OtpVerification.findByIdAndDelete(record._id); throw new ApiError("Unable to send the verification code. Please try again.", 502, [{ code: "EMAIL_SEND_FAILED" }]); }
-  return { purpose, expiresIn: 300, resendAfter: 60 };
+  return { purpose: resolvedPurpose, expiresIn: 300, resendAfter: 60 };
 }
 
 export async function verifyAuthOtp({ email, purpose, otp }, req) {

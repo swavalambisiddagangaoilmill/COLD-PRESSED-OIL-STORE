@@ -254,13 +254,13 @@ function ProductEditor({ open, onClose, product, onSaved }) {
   const { data: serviceData } = useAdminData(adminApi.serviceStatus);
   const uploadAvailable = serviceData?.services?.cloudinary?.available !== false;
   const uploadMessage = serviceData?.services?.cloudinary?.message || "Image uploads are temporarily unavailable.";
-  const blankVariant = () => ({ name: "", sku: "", price: "", mrp: "", stock: "", weight: "", dimensions: { length: "", width: "", height: "" }, images: [], isActive: true });
+  const blankVariant = () => ({ name: "", price: "", mrp: "", stock: "", images: [], isActive: true });
   const empty = { title: "", description: "", variants: [blankVariant()], featured: false, bestSeller: false, newArrival: false, codEnabled: true, onlinePaymentEnabled: true, returnEligible: true, exchangeEligible: false, isActive: true };
   const [form, setForm] = useState(product || empty);
   const [errors, setErrors] = useState({});
   const [uploadState, setUploadState] = useState({ status: "idle", message: "" });
   useEffect(() => {
-    setForm(product ? { ...empty, ...product, variants: (product.variants || []).filter((variant) => !variant.isArchived).map((variant) => ({ ...blankVariant(), ...variant, dimensions: { ...blankVariant().dimensions, ...(variant.dimensions || {}) } })) } : empty);
+    setForm(product ? { ...empty, ...product, variants: (product.variants || []).filter((variant) => !variant.isArchived).map((variant) => ({ ...blankVariant(), ...variant })) } : empty);
     setErrors({});
     setUploadState({ status: "idle", message: "" });
   }, [product, open]);
@@ -269,7 +269,7 @@ function ProductEditor({ open, onClose, product, onSaved }) {
     const next = {
       title: form.title?.trim() ? "" : "Product title is required.",
       description: form.description?.trim() ? "" : "Description is required.",
-      variants: form.variants?.some((v) => v.isActive) && form.variants.every((v) => v.name?.trim() && v.sku?.trim() && Number(v.price) > 0 && Number(v.mrp) >= Number(v.price) && Number.isInteger(Number(v.stock)) && Number(v.stock) >= 0 && Number(v.weight) >= 0 && [v.dimensions?.length, v.dimensions?.width, v.dimensions?.height].every((value) => Number(value) >= 0) && v.images?.length) && new Set(form.variants.map((v) => v.name.trim().toLowerCase())).size === form.variants.length && new Set(form.variants.map((v) => v.sku.trim().toUpperCase())).size === form.variants.length ? "" : "Add at least one active variant. Every variant needs a unique size and SKU, valid price/MRP, non-negative stock, weight and dimensions, and at least one image.",
+      variants: form.variants?.some((v) => v.isActive) && form.variants.every((v) => /^(\d+(?:\.\d+)?)\s*(ml|l|litres?|liters?)$/i.test(v.name?.trim()) && Number(v.price) > 0 && Number(v.mrp) >= Number(v.price) && Number.isInteger(Number(v.stock)) && Number(v.stock) >= 0 && v.images?.length) && new Set(form.variants.map((v) => v.name.trim().toLowerCase())).size === form.variants.length ? "" : "Add at least one active variant. Every variant needs a unique volume such as 500ml, 1L, or 16.5L, valid price/MRP, non-negative stock, and at least one image.",
     };
     setErrors(next);
     return !Object.values(next).some(Boolean);
@@ -291,10 +291,9 @@ function ProductEditor({ open, onClose, product, onSaved }) {
 
   const save = async () => {
     if (pending["product:image"] || !validate()) return;
-    const optionalNumber = (value) => value === "" || value === undefined || value === null ? undefined : Number(value);
     const payload = {
       ...form,
-      variants: form.variants.map((variant) => ({ ...variant, price: Number(variant.price), mrp: Number(variant.mrp), stock: Number(variant.stock), weight: Number(variant.weight), dimensions: { length: Number(variant.dimensions?.length), width: Number(variant.dimensions?.width), height: Number(variant.dimensions?.height) } })),
+      variants: form.variants.map(({ sku: _sku, weight: _weight, dimensions: _dimensions, ...variant }) => ({ ...variant, price: Number(variant.price), mrp: Number(variant.mrp), stock: Number(variant.stock) })),
     };
     const result = await run("product:save", () => adminApi.saveProduct(payload, product?._id), "Product saved.");
     if (result?.product) { onSaved(result.product); window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["products", "inventory", "dashboard"] } })); onClose(); }
@@ -312,7 +311,6 @@ function ProductEditor({ open, onClose, product, onSaved }) {
         {errors.variants && <p className="mt-2 text-xs font-semibold text-red-700">{errors.variants}</p>}
         <div className="mt-4 grid gap-5">{form.variants.map((variant, variantIndex) => {
           const updateVariant = (updates) => setForm({ ...form, variants: form.variants.map((item, index) => index === variantIndex ? { ...item, ...updates } : item) });
-          const updateDimensions = (updates) => updateVariant({ dimensions: { ...(variant.dimensions || {}), ...updates } });
           return <article key={variant._id || variantIndex} aria-labelledby={`variant-heading-${variantIndex}`} className="overflow-hidden rounded-xl border border-[var(--admin-border)] bg-white shadow-sm">
             <header className="flex items-center justify-between gap-3 border-b border-[var(--admin-border)] bg-linen/55 px-4 py-3">
               <div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--admin-primary)] text-sm font-extrabold text-white">{variantIndex + 1}</span><div><p id={`variant-heading-${variantIndex}`} className="text-base font-extrabold uppercase tracking-[0.08em] text-ink">Variant {variantIndex + 1}</p><p className="text-xs font-semibold text-ink/45">Independent size, pricing, stock and images</p></div></div>
@@ -321,17 +319,10 @@ function ProductEditor({ open, onClose, product, onSaved }) {
             <div className="p-4">
             <div className="grid gap-3 md:grid-cols-2">
               <AdminInput label="Size / Unit" value={variant.name || ""} onChange={(e) => updateVariant({ name: e.target.value })} />
-              <AdminInput label="SKU" value={variant.sku || ""} onChange={(e) => updateVariant({ sku: e.target.value.toUpperCase() })} />
               <AdminInput label="Selling Price (₹)" type="number" value={variant.price ?? ""} {...numberProps} onChange={(e) => updateVariant({ price: e.target.value })} />
               <AdminInput label="MRP (₹)" type="number" value={variant.mrp ?? ""} {...numberProps} onChange={(e) => updateVariant({ mrp: e.target.value })} />
               <AdminInput label="Stock / Quantity" type="number" step="1" value={variant.stock ?? ""} {...numberProps} onChange={(e) => updateVariant({ stock: e.target.value })} />
-              <AdminInput label="Weight (kg)" type="number" step="0.01" value={variant.weight ?? ""} {...numberProps} onChange={(e) => updateVariant({ weight: e.target.value })} />
             </div>
-            <div className="mt-4 rounded-lg border border-[var(--admin-border)] bg-linen/25 p-3"><p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-ink/50">Package dimensions</p><div className="grid gap-3 sm:grid-cols-3">
-              <AdminInput label="Package Length (cm)" type="number" step="0.01" value={variant.dimensions?.length ?? ""} {...numberProps} onChange={(e) => updateDimensions({ length: e.target.value })} />
-              <AdminInput label="Package Width (cm)" type="number" step="0.01" value={variant.dimensions?.width ?? ""} {...numberProps} onChange={(e) => updateDimensions({ width: e.target.value })} />
-              <AdminInput label="Package Height (cm)" type="number" step="0.01" value={variant.dimensions?.height ?? ""} {...numberProps} onChange={(e) => updateDimensions({ height: e.target.value })} />
-            </div></div>
             <p className="mt-4 text-sm font-bold text-ink/70">Variant Images</p>
             <div className="mt-2 flex flex-wrap gap-3">{variant.images.map((image, imageIndex) => <div key={`${image.url}-${imageIndex}`} className="relative"><img src={image.url} alt="" className="h-20 w-20 rounded-lg object-cover" /><button type="button" onClick={() => updateVariant({ images: variant.images.filter((_, index) => index !== imageIndex) })} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-white">×</button></div>)}<label className="grid h-20 w-20 cursor-pointer place-items-center rounded-lg border border-dashed text-xs font-bold">Add Images<input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => { for (const file of Array.from(e.target.files || [])) await upload(file, null, variantIndex); e.target.value = ""; }} /></label></div>
             {form.variants.length > 1 && <div className="mt-4 flex justify-end border-t border-[var(--admin-border)] pt-4"><AdminButton variant="danger" onClick={() => setForm({ ...form, variants: removeVariant(form.variants, variantIndex) })}>Remove Variant {variantIndex + 1}</AdminButton></div>}
