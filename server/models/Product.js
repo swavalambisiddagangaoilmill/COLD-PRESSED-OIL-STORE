@@ -30,6 +30,7 @@ const variantSchema = new mongoose.Schema(
 const productSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
+    sku: { type: String, trim: true, uppercase: true },
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
     description: { type: String, required: true, trim: true },
     benefits: [{ type: String, trim: true }],
@@ -64,6 +65,7 @@ productSchema.index({ title: "text", description: "text", "variants.name": "text
 productSchema.index({ featured: 1, isActive: 1, createdAt: -1 });
 productSchema.index({ bestSeller: 1, isActive: 1, createdAt: -1 });
 productSchema.index({ newArrival: 1, isActive: 1, createdAt: -1 });
+productSchema.index({ sku: 1 }, { unique: true, sparse: true });
 productSchema.index({ "variants.sku": 1 }, { unique: true, sparse: true });
 productSchema.index({ "variants.stock": 1, "variants.isActive": 1 });
 

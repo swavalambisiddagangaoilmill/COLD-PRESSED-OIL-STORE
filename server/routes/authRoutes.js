@@ -6,7 +6,7 @@ import { validate } from "../middleware/validate.js";
 import { addressIdValidator, addressValidator, requestOtpValidator, sessionIdValidator, updateProfileValidator, verifyOtpValidator } from "../validators/authValidators.js";
 
 const router = Router();
-const generationLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 12, standardHeaders: true, legacyHeaders: false, keyGenerator: (req) => `${req.ip}:${req.get("x-device-fingerprint") || "browser"}`, message: { success: false, message: "Too many OTP requests. Please try again later.", errors: [{ code: "OTP_RATE_LIMIT" }] } });
+const generationLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 12, standardHeaders: true, legacyHeaders: false, keyGenerator: (req) => req.ip, message: { success: false, message: "Too many OTP requests. Please try again later.", errors: [{ code: "OTP_RATE_LIMIT" }] } });
 const verificationLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many verification attempts. Please try again later.", errors: [{ code: "OTP_RATE_LIMIT" }] } });
 
 router.post("/otp/request", generationLimiter, requestOtpValidator, validate, requestOtp);

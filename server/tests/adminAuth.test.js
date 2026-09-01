@@ -39,11 +39,12 @@ test("valid admin email and password require email OTP before a session is issue
   }
 });
 
-test("customer WhatsApp login rejects an admin account before sending an OTP", async () => {
+test("customer email OTP cannot authenticate an admin account and does not enumerate it", async () => {
   const originalFindOne = User.findOne;
   User.findOne = async () => ({ role: "admin" });
   try {
-    await assert.rejects(() => requestAuthOtp({ phone: "9876543210", purpose: "login" }, request), (error) => error.statusCode === 404 && error.errors?.[0]?.code === "ACCOUNT_NOT_FOUND");
+    const result = await requestAuthOtp({ email: "admin@example.com", purpose: "login" }, request);
+    assert.deepEqual(result, { purpose: "login", expiresIn: 300, resendAfter: 60 });
   } finally {
     User.findOne = originalFindOne;
   }

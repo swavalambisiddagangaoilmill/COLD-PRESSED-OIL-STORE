@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 
 const otpVerificationSchema = new mongoose.Schema({
-  phoneNumber: { type: String, required: true, index: true },
+  email: { type: String, lowercase: true, trim: true, index: true },
+  phoneNumber: { type: String, index: true },
   otpHash: { type: String, required: true, select: false },
   purpose: { type: String, enum: ["signup", "login"], required: true },
   fullName: { type: String, trim: true },
@@ -13,6 +14,11 @@ const otpVerificationSchema = new mongoose.Schema({
   requestedByDeviceHash: { type: String, select: false },
 }, { timestamps: true });
 
+otpVerificationSchema.pre("validate", function requireIdentity(next) {
+  if (!this.email && !this.phoneNumber) return next(new Error("OTP identity is required."));
+  next();
+});
+otpVerificationSchema.index({ email: 1, purpose: 1, createdAt: -1 });
 otpVerificationSchema.index({ phoneNumber: 1, purpose: 1, createdAt: -1 });
 
 export default mongoose.model("OtpVerification", otpVerificationSchema);

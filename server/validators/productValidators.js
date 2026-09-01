@@ -25,7 +25,7 @@ const productFields = [
   body("variants").isArray({ min: 1 }).withMessage("At least one variant is required."),
   body("variants.*._id").optional().isMongoId().withMessage("Invalid variant id."),
   body("variants.*.name").trim().notEmpty().withMessage("Variant name is required."),
-  body("variants.*.sku").trim().notEmpty().withMessage("Variant SKU is required."),
+  body("variants.*.sku").optional({ values: "falsy" }).trim().matches(/^[A-Z0-9-]+$/i).withMessage("Variant SKU is invalid."),
   body("variants.*.price").isFloat({ gt: 0 }).withMessage("Variant price must be greater than zero."),
   body("variants.*.mrp").isFloat({ gt: 0 }).custom((value, { req, path }) => { const index = Number(path.match(/variants\[(\d+)\]/)?.[1]); return Number(value) >= Number(req.body.variants?.[index]?.price); }).withMessage("Variant MRP must be at least its price."),
   body("variants.*.stock").isInt({ min: 0 }).withMessage("Variant stock cannot be negative."),
@@ -37,7 +37,7 @@ const productFields = [
   body("variants.*.isActive").optional().isBoolean().withMessage("Variant active status must be boolean."),
   body("variants").custom((variants) => variants.some((variant) => variant.isActive !== false && !variant.isArchived)).withMessage("At least one active variant is required."),
   body("variants").custom((variants) => new Set(variants.filter((variant) => !variant.isArchived).map((variant) => String(variant.name).trim().toLowerCase())).size === variants.filter((variant) => !variant.isArchived).length).withMessage("Variant sizes must be unique within a product."),
-  body("variants").custom((variants) => new Set(variants.filter((variant) => !variant.isArchived).map((variant) => String(variant.sku).trim().toUpperCase())).size === variants.filter((variant) => !variant.isArchived).length).withMessage("Variant SKUs must be unique."),
+  body("variants").custom((variants) => { const skus = variants.filter((variant) => !variant.isArchived && variant.sku).map((variant) => String(variant.sku).trim().toUpperCase()); return new Set(skus).size === skus.length; }).withMessage("Variant SKUs must be unique."),
 ];
 
 export const productValidator = [

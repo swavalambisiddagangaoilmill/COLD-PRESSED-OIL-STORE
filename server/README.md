@@ -35,9 +35,9 @@ All endpoints are mounted under `/api`.
 
 - Auth: `/api/auth/otp/request`, `/api/auth/otp/verify`, `/api/auth/logout`, `/api/auth/refresh`, `/api/auth/profile`
 
-## WhatsApp OTP authentication
+## Customer email OTP authentication
 
-Customer browser authentication uses Indian mobile numbers and WhatsApp OTP. Admin authentication is separate and uses admin email, bcrypt-hashed password, and a required email OTP at `/admin/login`. Both use HttpOnly cookies; browser JavaScript does not store bearer or refresh tokens.
+Customer browser authentication uses normalized email addresses and passwordless Resend OTP. Admin authentication is separate and continues to use admin email, bcrypt-hashed password, and its required email OTP at `/admin/login`. Both use HttpOnly cookies; browser JavaScript does not store bearer or refresh tokens.
 
 Use `WHATSAPP_MODE=mock` only for local development. Live mode requires the Meta WhatsApp Cloud API token, phone-number ID, business-account ID, API version, and approved authentication and order-tracking templates listed in `.env.example`. Invoices remain website-only downloads and are never sent through WhatsApp.
 

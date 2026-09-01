@@ -51,6 +51,19 @@ export function sendOtpEmail(user, code, purpose) {
   return sendMail({ to: user.email, subject: "Swavalambi Siddaganga Oil Mill security code", text: `Your ${purpose} code is ${code}. It expires shortly.`, html: htmlLayout("Security code", `<p>Your ${purpose} code is:</p><p style="font-size:28px;font-weight:800;letter-spacing:4px">${code}</p><p>This code expires shortly.</p>`) });
 }
 
+export async function sendCustomerOtpEmail({ email, name }, code) {
+  if (env.email.provider !== "resend" || !env.email.resendApiKey || !env.email.from) throw new ApiError("Email delivery is unavailable.", 503);
+  const safeName = String(name || "there").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+  const result = await sendWithResend({
+    to: email,
+    subject: "Your verification code",
+    text: `Hi ${name || "there"},\n\nYour verification code is ${code}.\n\nThis code expires in 5 minutes.\n\nIf you did not request this code, you can safely ignore this email.\n\nDo not share this code with anyone.`,
+    html: htmlLayout("Your verification code", `<p>Hi ${safeName},</p><p>Your verification code is:</p><p style="font-size:28px;font-weight:800;letter-spacing:4px">${code}</p><p>This code expires in 5 minutes.</p><p>If you did not request this code, you can safely ignore this email.</p><p>Do not share this code with anyone.</p>`),
+  });
+  if (!result?.id) throw new ApiError("Email delivery was not accepted.", 502);
+  return { accepted: true };
+}
+
 export function sendNewDeviceEmail(user, details) {
   return sendMail({ to: user.email, subject: "New Swavalambi Siddaganga Oil Mill login detected", text: `New login detected from ${details.browser || "Unknown browser"} on ${details.os || "Unknown OS"}.` });
 }
