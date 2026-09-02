@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "../../components/features/feedback/ToastProvider.jsx";
 import { AdminBadge, AdminButton, AdminCard, AdminFilters, AdminInput, AdminModal, AdminPageHeader, AdminSelect, AdminTable, AdminTextarea } from "../components/AdminUi.jsx";
 import { adminApi } from "../services/adminApi.js";
+import { addVariant, removeVariant } from "../utils/variantForm.js";
 import AdminSettingsExtras from "./AdminSettingsExtras.jsx";
 
 const money = (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
@@ -168,13 +169,14 @@ function ProductEditor({ open, onClose, product, categories, onSaved }) {
   const { data: serviceData } = useAdminData(adminApi.serviceStatus);
   const uploadAvailable = serviceData?.services?.cloudinary?.available !== false;
   const uploadMessage = serviceData?.services?.cloudinary?.message || "Image uploads are temporarily unavailable.";
-  const emptyVariant = () => ({ size: "", price: "", mrp: "", stock: "" });
-  const empty = { title: "", description: "", price: "", discountPrice: "", stock: "", size: "", images: [], variants: [], featured: false, bestSeller: false, newArrival: false, codEnabled: true, onlinePaymentEnabled: true, returnEligible: true, exchangeEligible: false, isActive: true };
+  const emptyVariant = () => ({ size: "", price: "", mrp: "", stock: "", images: [], isActive: true });
+  const empty = { title: "", description: "", category: "", variants: [emptyVariant()], featured: false, bestSeller: false, newArrival: false, codEnabled: true, onlinePaymentEnabled: true, returnEligible: true, exchangeEligible: false, isActive: true };
   const [form, setForm] = useState(product || empty);
   const [errors, setErrors] = useState({});
   const [uploadState, setUploadState] = useState({ status: "idle", message: "" });
   useEffect(() => {
-    setForm(product ? { ...empty, ...product, category: product.category?._id || product.category } : empty);
+    const variants = product?.variants?.length ? product.variants.map((variant) => ({ ...emptyVariant(), ...variant })) : product ? [{ ...emptyVariant(), size: product.size, price: product.price, mrp: product.discountPrice || product.price, stock: product.stock, images: product.images || [] }] : [emptyVariant()];
+    setForm(product ? { ...empty, ...product, category: product.category?._id || product.category, variants } : { ...empty, variants });
     setErrors({});
     setUploadState({ status: "idle", message: "" });
   }, [product, open]);
@@ -184,26 +186,20 @@ function ProductEditor({ open, onClose, product, categories, onSaved }) {
       title: form.title?.trim() ? "" : "Product title is required.",
       description: form.description?.trim() ? "" : "Description is required.",
       category: form.category ? "" : "Select a category.",
-      price: numericError(form.price, "Price", { required: true }),
-      discountPrice: numericError(form.discountPrice, "Discount price"),
-      stock: numericError(form.stock, "Stock", { required: true, integer: true }),
-      size: form.size?.trim() ? "" : "Size is required (for example, 1L or 500ml).",
-      images: form.images?.length ? "" : "Upload at least one product image.",
-      variants: (form.variants || []).some((variant) => !variant.size?.trim() || numericError(variant.price, "Variant price", { required: true }) || numericError(variant.mrp, "Variant MRP", { required: true }) || Number(variant.mrp) < Number(variant.price) || numericError(variant.stock, "Stock", { required: true, integer: true })) ? "Each variant needs a valid size, price, MRP not lower than price, and non-negative stock." : "",
+      variants: form.variants?.some((variant) => variant.isActive !== false) && form.variants.every((variant) => /^(\d+(?:\.\d+)?)\s*(ml|l|litres?|liters?)$/i.test(variant.size?.trim()) && Number(variant.price) > 0 && Number(variant.mrp) >= Number(variant.price) && Number.isInteger(Number(variant.stock)) && Number(variant.stock) >= 0 && variant.images?.length) && new Set(form.variants.map((variant) => variant.size.trim().toLowerCase())).size === form.variants.length ? "" : "Add at least one active variant. Every variant needs a unique volume such as 500ml, 1L, or 16.5L, valid price/MRP, non-negative stock, and at least one image.",
     };
-    if (!next.discountPrice && form.discountPrice !== "" && Number(form.discountPrice) >= Number(form.price)) next.discountPrice = "Discount price must be lower than the regular price.";
     setErrors(next);
     return !Object.values(next).some(Boolean);
   };
 
-  const upload = async (file, input) => {
+  const upload = async (file, input, variantIndex) => {
     if (!uploadAvailable || pending["product:image"]) return;
     setUploadState({ status: "uploading", message: `Uploading ${file.name}...` });
     const data = await run("product:image", () => adminApi.uploadImage(file), "Image uploaded.");
     if (input) input.value = "";
     if (data) {
-      setForm((current) => ({ ...current, images: [...(current.images || []), data.image || data] }));
-      setErrors((current) => ({ ...current, images: "" }));
+      setForm((current) => ({ ...current, variants: current.variants.map((variant, index) => index === variantIndex ? { ...variant, images: [...variant.images, data.image || data] } : variant) }));
+      setErrors((current) => ({ ...current, variants: "" }));
       setUploadState({ status: "success", message: "Image uploaded successfully." });
     } else {
       setUploadState({ status: "error", message: "Image upload failed. Select the file and try again." });
@@ -212,14 +208,17 @@ function ProductEditor({ open, onClose, product, categories, onSaved }) {
 
   const save = async () => {
     if (pending["product:image"] || !validate()) return;
-    const optionalNumber = (value) => value === "" || value === undefined || value === null ? undefined : Number(value);
+    const variants = form.variants.map(({ sku: _sku, shippingWeight: _shippingWeight, dimensions: _dimensions, ...variant }) => ({ ...variant, size: variant.size.trim(), price: Number(variant.price), mrp: Number(variant.mrp), stock: Number(variant.stock) }));
+    const primary = variants.find((variant) => variant.isActive !== false) || variants[0];
     const payload = {
       ...form,
-      price: Number(form.price),
-      discountPrice: optionalNumber(form.discountPrice),
-      stock: Number(form.stock),
+      price: primary.price,
+      discountPrice: undefined,
+      stock: variants.reduce((total, variant) => total + variant.stock, 0),
+      size: primary.size,
+      images: primary.images,
       category: form.category?._id || form.category,
-      variants: (form.variants || []).map((variant) => ({ ...variant, price: Number(variant.price), mrp: Number(variant.mrp), stock: Number(variant.stock) })),
+      variants,
     };
     const result = await run("product:save", () => adminApi.saveProduct(payload, product?._id), "Product saved.");
     if (result?.product) { onSaved(result.product); window.dispatchEvent(new CustomEvent("ss-admin-data-changed", { detail: { scopes: ["products", "inventory", "dashboard"] } })); onClose(); }
@@ -232,13 +231,22 @@ function ProductEditor({ open, onClose, product, categories, onSaved }) {
       <label className="grid gap-1.5 text-sm font-semibold text-ink/65"><span>Description</span><textarea value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} className={`min-h-24 rounded-lg border bg-white px-3 py-2 text-sm text-ink outline-none ${errors.description ? "border-red-400" : "border-ink/10 focus:border-leaf"}`} />{errors.description && <span className="text-xs text-red-700">{errors.description}</span>}</label>
       <div className="grid gap-4 md:grid-cols-2">
         <label className="grid gap-1.5 text-sm font-semibold text-ink/65"><span>Category</span><select value={form.category?._id || form.category || ""} onChange={(e) => { setForm({ ...form, category: e.target.value }); setErrors((current) => ({ ...current, category: "" })); }} className={`h-10 rounded-lg border bg-white px-3 text-sm ${errors.category ? "border-red-400" : "border-ink/10"}`}><option value="">Select a category</option>{categories.map((item) => <option key={item._id} value={item._id}>{item.name}</option>)}</select>{errors.category && <span className="text-xs text-red-700">{errors.category}</span>}</label>
-        <AdminInput label="Price (₹)" type="number" step="0.01" value={form.price ?? ""} error={errors.price} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, price: e.target.value })} />
-        <AdminInput label="Discount Price (₹)" type="number" step="0.01" value={form.discountPrice ?? ""} error={errors.discountPrice} {...numberProps} min="0.01" onChange={(e) => setForm({ ...form, discountPrice: e.target.value })} />
-        <AdminInput label="Stock / Quantity (units)" type="number" step="1" value={form.stock ?? ""} error={errors.stock} {...numberProps} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
-        <AdminInput label="Size / Volume" value={form.size || ""} error={errors.size} placeholder="Example: 1L or 500ml" onChange={(e) => setForm({ ...form, size: e.target.value })} />
       </div>
-      <div><p className="text-sm font-bold text-ink/70">Product Images</p><div className="mt-2 flex flex-wrap gap-3">{(form.images || []).map((image, index) => <div key={`${image.url}-${index}`} className="relative"><img src={image.url} alt="" className="h-20 w-20 rounded-lg object-cover" /><button type="button" disabled={pending["product:image"]} onClick={() => setForm({ ...form, images: form.images.filter((_, i) => i !== index) })} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-xs text-white">x</button></div>)}<label title={uploadAvailable ? "" : uploadMessage} className={`grid h-20 w-20 place-items-center rounded-lg border border-dashed border-[var(--admin-border)] text-xs font-bold text-ink/45 ${uploadAvailable && !pending["product:image"] ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}>{pending["product:image"] ? <span className="grid place-items-center gap-1"><Loader2 size={18} className="animate-spin" />Uploading</span> : "Upload"}<input type="file" accept="image/*" disabled={!uploadAvailable || pending["product:image"]} className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], e.target)} /></label></div>{errors.images && <p className="mt-2 text-xs font-semibold text-red-700">{errors.images}</p>}{uploadState.message && <p role="status" className={`mt-3 inline-flex items-center gap-2 text-sm font-semibold ${uploadState.status === "error" ? "text-red-700" : uploadState.status === "success" ? "text-leaf" : "text-ink/60"}`}>{uploadState.status === "uploading" ? <Loader2 size={15} className="animate-spin" /> : uploadState.status === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}{uploadState.message}</p>}</div>
-      <div><div className="flex items-center justify-between"><p className="text-sm font-bold text-ink/70">Variants</p><AdminButton type="button" variant="secondary" onClick={() => setForm({ ...form, variants: [...(form.variants || []), emptyVariant()] })}>Add Variant</AdminButton></div><div className="mt-3 grid gap-3">{(form.variants || []).map((variant, index) => <div key={variant._id || index} className="grid gap-3 rounded-xl border border-ink/10 p-3 md:grid-cols-5"><AdminInput label="Size" value={variant.size || ""} onChange={(e) => setForm({ ...form, variants: form.variants.map((item, i) => i === index ? { ...item, size: e.target.value } : item) })} /><AdminInput label="Price (₹)" type="number" min="0.01" step="0.01" value={variant.price ?? ""} {...numberProps} onChange={(e) => setForm({ ...form, variants: form.variants.map((item, i) => i === index ? { ...item, price: e.target.value } : item) })} /><AdminInput label="MRP (₹)" type="number" min="0.01" step="0.01" value={variant.mrp ?? ""} {...numberProps} onChange={(e) => setForm({ ...form, variants: form.variants.map((item, i) => i === index ? { ...item, mrp: e.target.value } : item) })} /><AdminInput label="Stock" type="number" min="0" step="1" value={variant.stock ?? ""} {...numberProps} onChange={(e) => setForm({ ...form, variants: form.variants.map((item, i) => i === index ? { ...item, stock: e.target.value } : item) })} /><AdminButton type="button" variant="danger" onClick={() => setForm({ ...form, variants: form.variants.filter((_, i) => i !== index) })}>Remove</AdminButton></div>)}</div>{errors.variants && <p className="mt-2 text-xs font-semibold text-red-700">{errors.variants}</p>}</div>
+      <section aria-labelledby="product-variants-heading">
+        <div className="flex items-end justify-between gap-4 border-b border-[var(--admin-border)] pb-3"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--admin-primary)]">Product options</p><h3 id="product-variants-heading" className="mt-1 text-lg font-bold">Variants</h3></div><span className="rounded-full bg-linen px-3 py-1 text-xs font-bold text-ink/55">{form.variants.length} {form.variants.length === 1 ? "variant" : "variants"}</span></div>
+        {errors.variants && <p className="mt-2 text-xs font-semibold text-red-700">{errors.variants}</p>}
+        <div className="mt-4 grid gap-5">{form.variants.map((variant, variantIndex) => {
+          const updateVariant = (updates) => setForm({ ...form, variants: form.variants.map((item, index) => index === variantIndex ? { ...item, ...updates } : item) });
+          return <article key={variant._id || variantIndex} aria-labelledby={`variant-heading-${variantIndex}`} className="overflow-hidden rounded-xl border border-[var(--admin-border)] bg-white shadow-sm">
+            <header className="flex items-center justify-between gap-3 border-b border-[var(--admin-border)] bg-linen/55 px-4 py-3"><div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--admin-primary)] text-sm font-extrabold text-white">{variantIndex + 1}</span><div><p id={`variant-heading-${variantIndex}`} className="text-base font-extrabold uppercase tracking-[0.08em] text-ink">Variant {variantIndex + 1}</p><p className="text-xs font-semibold text-ink/45">Independent size, pricing, stock and images</p></div></div><Toggle label="Active" checked={variant.isActive} onChange={(value) => updateVariant({ isActive: value })} /></header>
+            <div className="p-4"><div className="grid gap-3 md:grid-cols-2"><AdminInput label="Size / Unit" value={variant.size || ""} onChange={(e) => updateVariant({ size: e.target.value })} /><AdminInput label="Selling Price (₹)" type="number" value={variant.price ?? ""} {...numberProps} onChange={(e) => updateVariant({ price: e.target.value })} /><AdminInput label="MRP (₹)" type="number" value={variant.mrp ?? ""} {...numberProps} onChange={(e) => updateVariant({ mrp: e.target.value })} /><AdminInput label="Stock / Quantity" type="number" step="1" value={variant.stock ?? ""} {...numberProps} onChange={(e) => updateVariant({ stock: e.target.value })} /></div>
+            <p className="mt-4 text-sm font-bold text-ink/70">Variant Images</p><div className="mt-2 flex flex-wrap gap-3">{variant.images.map((image, imageIndex) => <div key={`${image.url}-${imageIndex}`} className="relative"><img src={image.url} alt="" className="h-20 w-20 rounded-lg object-cover" /><button type="button" onClick={() => updateVariant({ images: variant.images.filter((_, index) => index !== imageIndex) })} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-red-600 text-white">×</button></div>)}<label title={uploadAvailable ? "" : uploadMessage} className={`grid h-20 w-20 place-items-center rounded-lg border border-dashed text-xs font-bold ${uploadAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}>Add Images<input type="file" accept="image/*" multiple disabled={!uploadAvailable || pending["product:image"]} className="hidden" onChange={async (event) => { for (const file of Array.from(event.target.files || [])) await upload(file, null, variantIndex); event.target.value = ""; }} /></label></div>
+            {uploadState.message && <p role="status" className={`mt-3 inline-flex items-center gap-2 text-sm font-semibold ${uploadState.status === "error" ? "text-red-700" : uploadState.status === "success" ? "text-leaf" : "text-ink/60"}`}>{uploadState.status === "uploading" ? <Loader2 size={15} className="animate-spin" /> : uploadState.status === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}{uploadState.message}</p>}
+            {form.variants.length > 1 && <div className="mt-4 flex justify-end border-t border-[var(--admin-border)] pt-4"><AdminButton variant="danger" onClick={() => setForm({ ...form, variants: removeVariant(form.variants, variantIndex) })}>Remove Variant {variantIndex + 1}</AdminButton></div>}</div>
+          </article>;
+        })}</div>
+        <button type="button" onClick={() => setForm({ ...form, variants: addVariant(form.variants, emptyVariant) })} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--admin-primary)]/40 bg-[var(--admin-primary)]/5 text-sm font-extrabold text-[var(--admin-primary)] transition hover:border-[var(--admin-primary)] hover:bg-[var(--admin-primary)]/10 focus:outline-none focus:ring-4 focus:ring-[var(--admin-primary)]/15"><Plus size={17} /> Add Variant</button>
+      </section>
       <div className="grid gap-3 md:grid-cols-2"><Toggle label="Featured" checked={form.featured} onChange={(value) => setForm({ ...form, featured: value })} /><Toggle label="Best Seller" checked={form.bestSeller} onChange={(value) => setForm({ ...form, bestSeller: value })} /><Toggle label="New Arrival" checked={form.newArrival} onChange={(value) => setForm({ ...form, newArrival: value })} /><Toggle label="COD Enabled" checked={form.codEnabled !== false} onChange={(value) => setForm({ ...form, codEnabled: value })} /><Toggle label="Online Payment Enabled" checked={form.onlinePaymentEnabled !== false} onChange={(value) => setForm({ ...form, onlinePaymentEnabled: value })} /><Toggle label="Return Eligible" checked={form.returnEligible !== false} onChange={(value) => setForm({ ...form, returnEligible: value })} /><Toggle label="Exchange Eligible" checked={form.exchangeEligible} onChange={(value) => setForm({ ...form, exchangeEligible: value })} /><Toggle label="Active" checked={form.isActive} onChange={(value) => setForm({ ...form, isActive: value })} /></div>
     </div>
   </AdminModal>;
