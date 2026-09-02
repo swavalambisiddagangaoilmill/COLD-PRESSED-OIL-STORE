@@ -284,21 +284,6 @@ export async function createReadyToShipShipment(orderId) {
     order.estimatedDelivery = parseEstimatedDelivery(courier.estimatedDelivery) || order.estimatedDelivery;
     order.shippingStatus = "awb_assigned";
     if (["placed", "confirmed"].includes(order.orderStatus)) order.orderStatus = "packed";
-    await order.save();
-
-    const pickup = await shiprocketRequest("/courier/generate/pickup", { method: "POST", body: { shipment_id: [order.shiprocketShipmentId] } });
-    order.pickupStatus = pickup?.pickup_status || pickup?.message || "Pickup requested";
-    order.shippingStatus = "pickup_generated";
-    await order.save();
-
-    const label = await shiprocketRequest("/courier/generate/label", { method: "POST", body: { shipment_id: [order.shiprocketShipmentId] } });
-    order.labelUrl = extractLabelUrl(label) || order.labelUrl;
-    order.shippingStatus = "label_generated";
-    await order.save();
-
-    const manifest = await shiprocketRequest("/manifests/generate", { method: "POST", body: { shipment_id: [order.shiprocketShipmentId] } });
-    order.manifestUrl = extractManifestUrl(manifest) || order.manifestUrl;
-    order.shippingStatus = "ready_for_pickup";
     order.readyToShipAt = new Date();
     order.shippingFailureReason = "";
     await order.save();
