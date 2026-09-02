@@ -25,6 +25,8 @@ test("Cashfree session is created server-side and response exposes no secret", a
   assert.equal(result.paymentSessionId, "safe-session");
   assert.equal(JSON.stringify(result).includes("client-secret"), false);
   assert.equal(stored.amount, sent.body.order_amount);
+  assert.equal(stored.razorpayQrId, sent.body.order_id);
+  assert.equal(stored.idempotencyKey, sent.headers["x-idempotency-key"]);
 });
 
 test("server verification rejects wrong amount and non-paid status", async () => {

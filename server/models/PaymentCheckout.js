@@ -13,6 +13,8 @@ const paymentCheckoutSchema = new mongoose.Schema(
     cashfreeCfOrderId: { type: String },
     cashfreePaymentId: { type: String, unique: true, sparse: true },
     paymentSessionId: { type: String, select: false },
+    razorpayQrId: { type: String, select: false },
+    idempotencyKey: { type: String, select: false },
     orderPayload: { type: mongoose.Schema.Types.Mixed, required: true },
     order: { type: mongoose.Schema.Types.ObjectId, ref: "Order" },
     expiresAt: { type: Date, index: true },

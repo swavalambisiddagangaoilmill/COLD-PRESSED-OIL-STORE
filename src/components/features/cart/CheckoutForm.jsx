@@ -56,6 +56,7 @@ export default function CheckoutForm() {
   const { items, totals, clearCart, appliedCoupon } = useCart();
   const serviceStatus = useServiceStatus();
   const formRef = useRef(null);
+  const submissionInFlightRef = useRef(false);
   const [savedAddresses, setSavedAddresses] = useState([]);
   const [profile, setProfile] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("online");
@@ -153,7 +154,7 @@ export default function CheckoutForm() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (processing) return;
+    if (processing || submissionInFlightRef.current) return;
     if (!getAuthToken()) {
       navigate("/login", { state: { from: "/checkout" } });
       return;
@@ -161,6 +162,7 @@ export default function CheckoutForm() {
     if (paymentMethod === 'cod' && !codAvailable) { setError('Cash on delivery is not available for one or more products in your cart.'); return; }
     if (paymentMethod !== 'cod' && !onlineAvailable) { setError(onlineServiceAvailable ? 'Online payment is not available for one or more products in your cart.' : onlineUnavailableMessage); return; }
     const orderPayload = getOrderPayload(event.currentTarget);
+    submissionInFlightRef.current = true;
     setError("");
     try {
       if (paymentMethod === "cod") await submitCodOrder(orderPayload);
@@ -168,6 +170,7 @@ export default function CheckoutForm() {
     } catch (err) {
       setError(err.message || "Unable to complete payment. Please try again.");
     } finally {
+      submissionInFlightRef.current = false;
       setProcessingStep("");
     }
   };
