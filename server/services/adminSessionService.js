@@ -41,7 +41,8 @@ export async function assertAdminSessionCapacity(req, admin) {
 
 export async function createAdminSession(req, admin, refreshToken) {
   if (admin.role !== "admin") return null;
-  const session = await AdminSession.create({ admin: admin._id, status: "active", sessionId: crypto.randomUUID(), refreshTokenHash: hash(refreshToken), loginAt: new Date(), lastActiveAt: new Date(), ...parseDevice(req) });
+  const sessionId = crypto.randomUUID();
+  const session = await AdminSession.create({ admin: admin._id, status: "active", sessionId, refreshTokenHash: hash(refreshToken || sessionId), loginAt: new Date(), lastActiveAt: new Date(), ...parseDevice(req) });
   await createAdminNotification({ category: "security", type: "admin_login", title: "Admin Login", description: `${admin.email} signed in on ${session.deviceName}.`, related: { kind: "User", id: admin._id, label: admin.email, path: "/admin/settings" } });
   return session;
 }
