@@ -27,7 +27,10 @@ test("complete admin password and email-code login creates one valid session", a
 
   User.findOne = () => ({ select: async () => admin });
   User.find = () => ({ select: () => ({ lean: async () => [] }) });
-  AdminSession.find = () => ({ sort: async () => [] });
+  AdminSession.find = () => ({
+    sort: async () => [],
+    select: () => ({ lean: async () => [] }),
+  });
   AdminSession.create = async (payload) => { created.push(payload); return { ...payload, deviceName: "Browser on Windows" }; };
   AdminSession.updateOne = async (...args) => { updates.push(args); return { acknowledged: true }; };
 
@@ -37,6 +40,7 @@ test("complete admin password and email-code login creates one valid session", a
     assert.ok(result.token);
     assert.ok(result.refreshToken);
     assert.equal(created.length, 1);
+    assert.equal(created[0].slot, 1);
     assert.ok(created[0].pendingTokenHash);
     assert.ok(created[0].refreshTokenHash);
     assert.equal(updates.length, 1);

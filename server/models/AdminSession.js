@@ -6,6 +6,7 @@ const adminSessionSchema = new mongoose.Schema(
     admin: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     status: { type: String, enum: ["pending", "active", "revoked"], default: "pending", index: true },
     sessionId: { type: String, required: true, unique: true },
+    slot: { type: Number, min: 1, max: 3 },
     pendingTokenHash: { type: String, select: false },
     refreshTokenHash: { type: String, select: false },
     deviceName: { type: String, trim: true },

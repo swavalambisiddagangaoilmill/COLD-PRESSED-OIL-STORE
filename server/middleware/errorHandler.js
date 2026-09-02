@@ -12,14 +12,6 @@ export function errorHandler(error, req, res, next) {
   }
 
   if (error.code === 11000) {
-    if (req.originalUrl === "/api/auth/login") {
-      console.error("Admin login duplicate key", {
-        collection: error.collection,
-        index: error.index,
-        keyPattern: error.keyPattern,
-        operation: error.stack,
-      });
-    }
     statusCode = 409;
     message = "Duplicate resource value.";
     errors = Object.keys(error.keyValue || {}).map((field) => ({ field, message: `${field} already exists.` }));
