@@ -104,12 +104,12 @@ export const processSteps = [
 ];
 
 export const testimonials = [
-  { name: "Ananya Rao", role: "Home chef", rating: 5, review: "Verified pantry review", quote: "The groundnut oil has the kind of aroma I remember from my grandmother's kitchen, but the packaging feels beautifully modern." },
-  { name: "Ritwik Sharma", role: "Cafe owner", rating: 5, review: "Repeat buyer", quote: "Consistent batches, honest flavor, and an elegant shelf presence. The sesame oil is now part of our signature menu." },
-  { name: "Mira Nair", role: "Nutrition coach", rating: 5, review: "Wellness kitchen review", quote: "I recommend Swavalambi Siddaganga Oil Mill to clients who want cleaner pantry staples without compromising taste or cooking performance." },
-  { name: "Devika Menon", role: "Family kitchen buyer", rating: 5, review: "Monthly subscriber", quote: "The oils feel fresh from the first pour. Mustard for pickles and groundnut for daily cooking have become our regular pair." },
-  { name: "Kabir Sethi", role: "Private chef", rating: 5, review: "Chef tested", quote: "What stands out is balance. The oils carry flavor without overpowering the dish, and the bottles look refined on open shelves." },
-  { name: "Nisha Iyer", role: "New parent", rating: 5, review: "Family review", quote: "I wanted pantry staples that felt trustworthy and simple. Swavalambi Siddaganga Oil Mill made it easy to switch without changing the way we cook." },
+  { name: "Jayashree Manjunath", role: "Google customer", rating: 5, review: "Source: Google", quote: "Siddaganga Oil Mill products maintain high quality with consistent aroma and rich flavor. The oils are pure, free from adulteration, and offered at a comparatively reasonable price!!!" },
+  { name: "Dakshina Murthy", role: "Google customer", rating: 5, review: "Source: Google", quote: "Highly recommended for pure groundnut oil and other oil. I purchased Ground nut oil and Other products here.. good price (wholesale price), environment friendly person (No plastic)." },
+  { name: "Vijaya Shankar", role: "Google customer", rating: 5, review: "Source: Google", quote: "Hi I am using the groundnut oil since two years the quality is good and price also very affordable and staff behaviour good and I recommend every one to purchase" },
+  { name: "Kavya Shree", role: "Google customer", rating: 5, review: "Source: Google", quote: "We are regular customer to siddaganga oil mill. The Oil quality which they are giving is very pure. This time we purchased from his new factory. Their we witnessed more than 10 machines are in function.The  place also neat and tidy. We recommand siddaganga oil mill for your good health and reasonable price." },
+  { name: "Sahana Sahana", role: "Google customer", rating: 5, review: "Source: Google", quote: "It's nice oil and we are coming 2years and natural oil  it will get every type of oil here and come and visit here it's nice quality and pure...!!🍃🥥" },
+  { name: "Hanumappa Hanumappa", role: "Google customer", rating: 5, review: "Source: Google", quote: "This oil proves that purity needs no additives. Its natural aroma is a mark of genuine quality." },
 ];
 
 export const faqs = [
