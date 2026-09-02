@@ -1,4 +1,5 @@
 // Renders CheckoutForm for cart and checkout flows.
+import { load as loadCashfree } from "@cashfreepayments/cashfree-js";
 import { CreditCard, Home, Truck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -12,16 +13,17 @@ import { writeGuestSession } from "../../../utils/guestSession.js";
 import Button from "../../ui/Button.jsx";
 import Input from "../../ui/Input.jsx";
 
-function loadCashfreeCheckout() {
-  if (window.Cashfree) return Promise.resolve(true);
-  return new Promise((resolve) => {
-    const script = document.createElement("script");
-    script.src = "https://sdk.cashfree.com/js/v3/cashfree.js";
-    script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
+const cashfreeLoaders = new Map();
+
+function loadCashfreeCheckout(mode) {
+  if (!cashfreeLoaders.has(mode)) {
+    const loader = loadCashfree({ mode }).catch((error) => {
+      cashfreeLoaders.delete(mode);
+      throw error;
+    });
+    cashfreeLoaders.set(mode, loader);
+  }
+  return cashfreeLoaders.get(mode);
 }
 
 function formatOrderForSuccess(order, shippingAddress, items, total, profile) {
@@ -137,12 +139,11 @@ export default function CheckoutForm() {
 
   const submitCashfreeOrder = async (orderPayload) => {
     setProcessingStep("preparing");
-    const loaded = await loadCashfreeCheckout();
-    if (!loaded || !window.Cashfree) throw new Error("Unable to load Cashfree Checkout. Please try again.");
-
     const { payment } = await createPaymentIntent({ order: orderPayload.order });
     if (!payment?.paymentSessionId || !payment?.orderId) throw new Error("Cashfree is not configured. Please choose Cash on delivery or try again later.");
-    const cashfree = window.Cashfree({ mode: payment.environment === "production" ? "production" : "sandbox" });
+    const mode = payment.environment === "production" ? "production" : "sandbox";
+    const cashfree = await loadCashfreeCheckout(mode);
+    if (!cashfree) throw new Error("Unable to load Cashfree Checkout. Please try again.");
     const result = await cashfree.checkout({ paymentSessionId: payment.paymentSessionId, redirectTarget: "_modal" });
     if (result?.error) throw new Error(result.error.message || "Payment failed. Your cart has not been changed.");
     setProcessingStep("verifying");

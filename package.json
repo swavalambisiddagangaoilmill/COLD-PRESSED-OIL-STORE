@@ -10,6 +10,7 @@
     "start": "npm --prefix server start"
   },
   "dependencies": {
+    "@cashfreepayments/cashfree-js": "^1.0.7",
     "framer-motion": "^11.15.0",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
