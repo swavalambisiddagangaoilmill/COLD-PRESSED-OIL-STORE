@@ -1,7 +1,7 @@
-import { SlidersHorizontal, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { getCategories, getProducts } from "../../services/catalogService.js";
+import { getProducts } from "../../services/catalogService.js";
 import { formatCurrency } from "../../utils/formatCurrency.js";
 import SafeImage from "../common/SafeImage.jsx";
 import WishlistToggle from "../features/product/WishlistToggle.jsx";
@@ -11,8 +11,6 @@ const trending = ["Groundnut", "Sesame", "Coconut", "Mustard"];
 export default function MobileSearchPanel({ open, query, onQueryChange, onClose }) {
   const [products, setProducts] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
-  const [categories, setCategories] = useState([{ name: "All" }]);
-  const [category, setCategory] = useState("All");
   const [sort, setSort] = useState("featured");
   const [pagination, setPagination] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -20,12 +18,8 @@ export default function MobileSearchPanel({ open, query, onQueryChange, onClose 
   useEffect(() => {
     if (!open) return undefined;
     document.body.style.overflow = "hidden";
-    Promise.all([
-      getProducts({ limit: 4, sort: "featured" }),
-      getCategories(),
-    ]).then(([top, categoryItems]) => {
+    getProducts({ limit: 4, sort: "featured" }).then((top) => {
       setTopProducts(top.products);
-      setCategories([{ name: "All" }, ...categoryItems]);
     }).catch(() => undefined);
     return () => { document.body.style.overflow = ""; };
   }, [open]);
@@ -39,11 +33,9 @@ export default function MobileSearchPanel({ open, query, onQueryChange, onClose 
     let active = true;
     setLoading(true);
     const timer = window.setTimeout(() => {
-      const categoryId = categories.find((item) => item.name === category)?.id;
       getProducts({
         limit: 20,
         search: query.trim(),
-        category: category === "All" ? undefined : categoryId,
         sort: sort === "price-low" ? "priceAsc" : sort === "price-high" ? "priceDesc" : sort === "rating" ? "rating" : "featured",
       }).then((data) => {
         if (!active) return;
@@ -52,7 +44,7 @@ export default function MobileSearchPanel({ open, query, onQueryChange, onClose 
       }).catch(() => active && setProducts([])).finally(() => active && setLoading(false));
     }, 250);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [categories, category, open, query, sort]);
+  }, [open, query, sort]);
 
   const total = useMemo(() => pagination?.total ?? products.length, [pagination, products.length]);
   if (!open) return null;
@@ -83,10 +75,7 @@ export default function MobileSearchPanel({ open, query, onQueryChange, onClose 
           </>
         ) : (
           <>
-            <div className="grid grid-cols-2 overflow-hidden rounded-md border border-ink/15">
-              <label className="flex h-11 items-center gap-2 border-r border-ink/15 px-3 text-xs font-semibold text-brand">Sort by<select value={sort} onChange={(event) => setSort(event.target.value)} className="min-w-0 flex-1 bg-white text-xs outline-none"><option value="featured">Featured</option><option value="price-low">Price: low first</option><option value="price-high">Price: high first</option><option value="rating">Top rated</option></select></label>
-              <label className="flex h-11 items-center gap-2 px-3 text-xs font-semibold text-brand"><SlidersHorizontal size={14} /><select value={category} onChange={(event) => setCategory(event.target.value)} className="min-w-0 flex-1 bg-white text-xs outline-none"><option value="All">Filters</option>{categories.slice(1).map((item) => <option key={item.id || item.name} value={item.name}>{item.name}</option>)}</select></label>
-            </div>
+            <label className="flex h-11 max-w-xs items-center gap-2 rounded-md border border-ink/15 px-3 text-xs font-semibold text-brand">Sort by<select value={sort} onChange={(event) => setSort(event.target.value)} className="min-w-0 flex-1 bg-white text-xs outline-none"><option value="featured">Featured</option><option value="price-low">Price: low first</option><option value="price-high">Price: high first</option><option value="rating">Top rated</option></select></label>
             <p className="py-5 text-sm text-ink/65">{loading ? "Searching products..." : `${total} ${total === 1 ? "result" : "results"} found for “${query.trim()}”:`}</p>
             {!loading && <div className="grid grid-cols-2 gap-x-3 gap-y-6 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {products.map((product) => (

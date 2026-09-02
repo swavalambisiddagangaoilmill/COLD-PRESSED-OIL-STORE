@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Heart, LogOut, Search, ShoppingBag, UserRound, X } from "lucide-react";
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { aboutMenuLinks, categoryMenuLinks, essentialOilLinks, oilMenuLinks } from "../../data/siteData.js";
+import { aboutMenuLinks, essentialOilLinks, oilMenuLinks } from "../../data/siteData.js";
 import { useCart } from "../../hooks/useCart.jsx";
 import Button from "../ui/Button.jsx";
 import AccordionMenu from "./AccordionMenu.jsx";
@@ -31,9 +31,9 @@ export default function MobileDrawer({ open, onClose, onWishlist, onLogout, acco
             <Link to="/shop?focus=search" onClick={onClose} className="mt-6 flex h-12 items-center gap-3 rounded-2xl bg-white px-4 text-sm font-semibold text-ink/65 shadow-sm"><Search size={18} />Search oils</Link>
             <nav className="mt-4" aria-label="Drawer navigation">
               <Link to="/" onClick={onClose} className="block border-b border-ink/10 py-4 text-lg font-semibold">Home</Link>
-              <AccordionMenu title="Shop" href="/shop" state={{ resetShop: true }} links={categoryMenuLinks.slice(0, 4)} onClose={onClose} />
+              <AccordionMenu title="Shop" href="/shop" state={{ resetShop: true }} links={oilMenuLinks.slice(0, 5)} onClose={onClose} />
               <AccordionMenu title="Cold Pressed Oils" href="/shop?q=Cold%20Pressed%20Oils&focus=search" state={{ resetShop: true }} links={oilMenuLinks} onClose={onClose} />
-              <AccordionMenu title="Essential Oils" href="/shop?q=Essential%20Oils&focus=search" state={{ resetShop: true }} links={essentialOilLinks} onClose={onClose} />
+              <AccordionMenu title="Specialty Oils" href="/shop?q=Specialty%20Oils&focus=search" state={{ resetShop: true }} links={essentialOilLinks} onClose={onClose} />
               <AccordionMenu title="About" href="/about/story" links={aboutMenuLinks} onClose={onClose} />
               <Link to="/contact" onClick={onClose} className="block border-b border-ink/10 py-4 text-lg font-semibold">Contact</Link>
             </nav>

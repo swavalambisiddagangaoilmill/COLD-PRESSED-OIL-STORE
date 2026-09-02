@@ -7,7 +7,7 @@ import MegaMenu from "./MegaMenu.jsx";
 const desktopItems = [
   { label: "Shop", href: "/shop", dropdown: "shop", state: { resetShop: true } },
   { label: "Cold Pressed Oils", href: "/shop?q=Cold%20Pressed%20Oils&focus=search", dropdown: "coldPressed", state: { resetShop: true } },
-  { label: "Essential Oils", href: "/shop?q=Essential%20Oils&focus=search", dropdown: "essential", state: { resetShop: true } },
+  { label: "Specialty Oils", href: "/shop?q=Specialty%20Oils&focus=search", dropdown: "essential", state: { resetShop: true } },
   { label: "About", href: "/about/story", dropdown: "about" },
   { label: "Contact", href: "/contact" },
 ];

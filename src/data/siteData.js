@@ -6,7 +6,7 @@ export const announcementMessages = [
   "Chemical Free",
   "Free Shipping Above Rs. 999",
   "Farm Fresh",
-  "Wooden Ghani Extracted",
+  "Cold Pressed",
 ];
 
 export const oilMenuLinks = [
@@ -27,11 +27,10 @@ export const categoryMenuLinks = [
 ];
 
 export const essentialOilLinks = [
-  { label: "Lavender Oil", href: "/shop" },
-  { label: "Tea Tree Oil", href: "/shop" },
-  { label: "Eucalyptus Oil", href: "/shop" },
-  { label: "Peppermint Oil", href: "/shop" },
-  { label: "Rosemary Oil", href: "/shop" },
+  { label: "Castor Oil", href: "/shop" },
+  { label: "Neem Oil", href: "/shop" },
+  { label: "Caranja Oil", href: "/shop" },
+  { label: "Herbal Oil", href: "/shop" },
 ];
 
 export const aboutMenuLinks = [
@@ -46,44 +45,46 @@ export const megaMenus = {
     variant: "shop",
     links: oilMenuLinks,
     banner: {
-      href: "/shop?q=Cooking%20Oils&focus=search",
-      image: "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=1300&q=85",
-      eyebrow: "Signature collection",
-      title: "Pure oils for everyday cooking rituals.",
-      description: "Choose small-batch pantry staples pressed slowly for aroma, freshness, and honest flavor.",
+      href: "/shop?q=Groundnut%20Oil&focus=search",
+      image: "/shop-groundnut.png",
+      eyebrow: "Groundnut oil",
+      title: "Pure groundnut oil, cold pressed.",
+      description: "Made from fresh groundnuts for a rich, natural cooking oil.",
     },
   },
   coldPressed: {
     variant: "compact",
     links: oilMenuLinks,
     banner: {
-      href: "/shop?q=Cold%20Pressed%20Oils&focus=search",
-      image: "https://images.unsplash.com/photo-1495521821757-a1efb6729352?auto=format&fit=crop&w=1300&q=85",
-      eyebrow: "Cold pressed oils",
-      title: "Wooden ghani extracted oils with natural character.",
-      description: "Explore clean, slow-pressed edible oils made for modern kitchens and traditional recipes.",
+      href: "/shop?q=Coconut%20Oil&focus=search",
+      image: "/cold-pressed-coconut.png",
+      rotateImage: true,
+      eyebrow: "Coconut oil",
+      title: "Pure coconut oil, cold pressed.",
+      description: "Made from fresh coconuts with a naturally rich aroma.",
     },
   },
   essential: {
     variant: "compact",
     links: essentialOilLinks,
     banner: {
-      href: "/shop?q=Essential%20Oils&focus=search",
-      image: "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=1300&q=85",
-      eyebrow: "Essential oils",
-      title: "Aromatic oils for calming everyday rituals.",
-      description: "Discover premium botanical oils selected for wellness, care routines, and refined gifting.",
+      href: "/shop?q=Neem%20Oil&focus=search",
+      image: "/specialty-oils-neem.png",
+      eyebrow: "Neem oil",
+      title: "Pure neem oil, naturally pressed.",
+      description: "Made from neem seeds for traditional and versatile everyday use.",
     },
   },
   about: {
     variant: "compact",
     links: aboutMenuLinks,
     banner: {
-      href: "/about/story",
-      image: "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=1300&q=85",
-      eyebrow: "Swavalambi Siddaganga Oil Mill story",
-      title: "A slower oil house for everyday kitchens.",
-      description: "Learn about our sourcing values, family kitchen roots, and the care behind every bottle.",
+      href: "/about",
+      image: "/about-oil-mill.png",
+      ctaLabel: "About Us",
+      eyebrow: "Our oil mill",
+      title: "Inside our cold pressed oil mill.",
+      description: "See the equipment and careful process used to prepare our oils.",
     },
   },
 };

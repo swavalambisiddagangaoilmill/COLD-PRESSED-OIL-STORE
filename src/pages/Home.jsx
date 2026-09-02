@@ -42,8 +42,8 @@ export default function Home() {
             </Button>
           </div>
           <img
-            src="https://images.unsplash.com/photo-1606787366850-de6330128bfc?auto=format&fit=crop&w=1400&q=85"
-            alt="Premium pantry ingredients"
+            src="/our-story-community.png"
+            alt="Swavalambi Siddaganga Oil Mill community gathering"
             loading="lazy"
             className="aspect-[16/10] w-full object-cover"
           />

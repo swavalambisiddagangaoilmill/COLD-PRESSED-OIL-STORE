@@ -6,6 +6,7 @@ import { useAuth } from "../../context/AuthContext.jsx";
 import { usePopup } from "../../context/PopupContext.jsx";
 import { useCart } from "../../hooks/useCart.jsx";
 import { useWishlist } from "../../context/WishlistContext.jsx";
+import useTypewriterPlaceholder from "../../hooks/useTypewriterPlaceholder.js";
 import DesktopMenu from "./DesktopMenu.jsx";
 import MobileDrawer from "./MobileDrawer.jsx";
 import MobileSearchPanel from "./MobileSearchPanel.jsx";
@@ -66,6 +67,7 @@ export default function Navbar() {
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
   const accountPath = authenticated ? "/account" : "/login";
   const isAdmin = user?.role === "admin";
+  const searchPlaceholder = useTypewriterPlaceholder(searchValue);
 
   const handleLogout = async () => {
     if (!window.confirm("Are you sure you want to log out?")) return;
@@ -180,7 +182,7 @@ export default function Navbar() {
                   value={searchValue}
                   onFocus={() => homeSearchOverlay ? openMobileSearch() : navigateToShopSearch(searchValue, location.pathname === "/shop")}
                   onChange={handleDesktopSearchChange}
-                  placeholder="Search oils"
+                  placeholder={searchPlaceholder}
                   aria-label="Search oils"
                   className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-ink/70 placeholder:text-ink/50 outline-none"
                 />
@@ -258,7 +260,7 @@ export default function Navbar() {
         <div className="border-t border-ink/10 px-4 py-2.5 xl:hidden">
           <form role="search" onSubmit={(event) => { event.preventDefault(); openMobileSearch(); }} className="mx-auto flex h-10 max-w-2xl items-center gap-3 rounded-md border border-ink/30 bg-white px-3 focus-within:border-leaf">
             <Search size={17} className="text-ink/50" />
-            <input ref={mobileSearchInputRef} value={searchValue} onFocus={openMobileSearch} onChange={(event) => { setSearchValue(event.target.value); if (!mobileSearchOpen) openMobileSearch(); }} placeholder="Search For" aria-label="Search products" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink/40" />
+            <input ref={mobileSearchInputRef} value={searchValue} onFocus={openMobileSearch} onChange={(event) => { setSearchValue(event.target.value); if (!mobileSearchOpen) openMobileSearch(); }} placeholder={searchPlaceholder} aria-label="Search products" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink/40" />
             {mobileSearchOpen && <button type="button" aria-label={searchValue ? "Clear search" : "Close search"} onClick={() => searchValue ? setSearchValue("") : closeMobileSearch()} className="grid h-8 w-8 place-items-center text-ink/55 hover:text-leaf"><X size={17} /></button>}
           </form>
         </div>
