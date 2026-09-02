@@ -35,14 +35,15 @@ export async function assertAdminSessionCapacity(req, admin) {
   const active = await AdminSession.find({ admin: admin._id, status: "active", expiresAt: { $gt: new Date() } }).sort({ lastActiveAt: -1 });
   if (active.length < MAX_ADMIN_SESSIONS) return { allowed: true };
   const pendingToken = crypto.randomBytes(32).toString("hex");
-  await AdminSession.create({ admin: admin._id, status: "pending", sessionId: crypto.randomUUID(), pendingTokenHash: hash(pendingToken), ...parseDevice(req), expiresAt: new Date(Date.now() + 10 * 60 * 1000) });
+  const sessionId = crypto.randomUUID();
+  await AdminSession.create({ admin: admin._id, status: "pending", sessionId, pendingTokenHash: hash(pendingToken), refreshTokenHash: hash(`${sessionId}:refresh`), ...parseDevice(req), expiresAt: new Date(Date.now() + 10 * 60 * 1000) });
   throw new ApiError("Maximum active admin sessions reached.", 409, [{ code: "ADMIN_SESSION_LIMIT", pendingToken, sessions: active.map((session) => publicSession(session)) }]);
 }
 
 export async function createAdminSession(req, admin, refreshToken) {
   if (admin.role !== "admin") return null;
   const sessionId = crypto.randomUUID();
-  const session = await AdminSession.create({ admin: admin._id, status: "active", sessionId, refreshTokenHash: hash(refreshToken || sessionId), loginAt: new Date(), lastActiveAt: new Date(), ...parseDevice(req) });
+  const session = await AdminSession.create({ admin: admin._id, status: "active", sessionId, pendingTokenHash: hash(`${sessionId}:pending`), refreshTokenHash: hash(refreshToken || `${sessionId}:refresh`), loginAt: new Date(), lastActiveAt: new Date(), ...parseDevice(req) });
   await createAdminNotification({ category: "security", type: "admin_login", title: "Admin Login", description: `${admin.email} signed in on ${session.deviceName}.`, related: { kind: "User", id: admin._id, label: admin.email, path: "/admin/settings" } });
   return session;
 }
@@ -72,7 +73,6 @@ export async function continuePendingAdminLogin(req, pendingToken, revokeSession
     throw new ApiError("Maximum active admin sessions reached.", 409, [{ code: "ADMIN_SESSION_LIMIT", pendingToken, sessions: active.map((session) => publicSession(session)) }]);
   }
   pending.status = "active";
-  pending.pendingTokenHash = undefined;
   pending.loginAt = new Date();
   pending.lastActiveAt = new Date();
   pending.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
