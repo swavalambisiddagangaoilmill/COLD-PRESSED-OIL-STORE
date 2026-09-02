@@ -13,17 +13,21 @@ export default function Contact() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileKey, setTurnstileKey] = useState(0);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (loading) return;
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     setLoading(true);
     setMessage("");
     try {
       await submitContactMessage({ name: form.get("name"), email: form.get("email"), message: form.get("message"), turnstileToken });
       setMessage("Message sent successfully.");
-      event.currentTarget.reset();
+      formElement?.reset();
+      setTurnstileToken("");
+      setTurnstileKey((key) => key + 1);
     } catch (err) {
       setMessage(err.message || "Unable to send message. Please try again.");
     } finally {
@@ -42,7 +46,7 @@ export default function Contact() {
             {message && <p className="mt-5 rounded-2xl bg-linen p-4 text-sm font-semibold text-ink/65">{message}</p>}
             <div className="mt-8 grid gap-5 sm:grid-cols-2"><Input label="Name" name="name" required /><Input label="Email" name="email" type="email" required /></div>
             <div className="mt-5"><label className="block"><span className="mb-2 block text-sm font-semibold text-ink/75">Message</span><textarea name="message" className="min-h-40 w-full rounded-xl border border-ink/10 bg-white p-4 outline-none focus:border-leaf focus:ring-4 focus:ring-leaf/10" required /></label></div>
-            <TurnstileWidget onVerify={setTurnstileToken} className="mt-5 min-h-[65px]" />
+            <TurnstileWidget key={turnstileKey} onVerify={setTurnstileToken} className="mt-5 min-h-[65px]" />
             <Button type="submit" className="mt-6" loading={loading}>Send Message</Button>
           </form>
           <div className="space-y-5">
