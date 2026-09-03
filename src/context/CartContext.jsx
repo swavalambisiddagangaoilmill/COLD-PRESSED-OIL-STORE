@@ -1,23 +1,47 @@
 // Provides cart state synchronized with backend cart APIs.
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getAuthToken } from "../api/apiClient.js";
 import { useAuth } from "./AuthContext.jsx";
 import { addCartItem, clearCartApi, fetchCart, removeCartItem, syncCart, updateCartItem } from "../services/cartService.js";
 import { validateCoupon as validateCouponApi } from "../services/promotionService.js";
 import { readGuestSession, writeGuestSession } from "../utils/guestSession.js";
+import { useToast } from "../components/features/feedback/ToastProvider.jsx";
+import { reconcileGuestCart, removePurchasedItems } from "../utils/reconcileGuestCommerce.js";
 
 const CartContext = createContext(null);
 const COUPON_SESSION_KEY = "ss_oil_mill_applied_coupon";
+const CART_SYNC_KEY = "ss_oil_mill_cart_sync";
+
+function cartSignature(cart) {
+  return cart.map((item) => `${item._id || item.id}:${item.quantity}:${item.price}:${item.stock}`).sort().join("|");
+}
 
 function readAppliedCoupon() {
   try { return JSON.parse(window.sessionStorage.getItem(COUPON_SESSION_KEY)) || null; } catch { return null; }
 }
 
 export function CartProvider({ children }) {
-  const [items, setItems] = useState(() => readGuestSession().data.cart);
+  const [items, setItems] = useState(() => readGuestSession().data.cart.filter(Boolean));
   const [appliedCoupon, setAppliedCoupon] = useState(readAppliedCoupon);
   const { authenticated } = useAuth();
+  const { showToast } = useToast();
   const cartLoadRef = useRef(null);
+  const itemsRef = useRef(items);
+
+  useEffect(() => { itemsRef.current = items; }, [items]);
+
+  const signalCartChange = useCallback(() => {
+    window.localStorage.setItem(CART_SYNC_KEY, String(Date.now()));
+  }, []);
+
+  const revalidateCart = useCallback(async ({ notify = false } = {}) => {
+    const before = itemsRef.current;
+    const fresh = getAuthToken() ? await fetchCart() : await reconcileGuestCart(before);
+    const changed = cartSignature(before) !== cartSignature(fresh);
+    setItems(fresh);
+    if (changed && notify) showToast("Your cart was updated to match current availability, stock, and prices.", "warning", null, { id: "cart-revalidated", duration: 4800 });
+    return { items: fresh, changed };
+  }, [showToast]);
 
   useEffect(() => {
     const token = getAuthToken();
@@ -39,6 +63,18 @@ export function CartProvider({ children }) {
     });
     return undefined;
   }, [authenticated]);
+
+  useEffect(() => {
+    const refresh = () => revalidateCart({ notify: true }).catch(() => {});
+    refresh();
+    const onVisibility = () => { if (document.visibilityState === "visible") refresh(); };
+    const onStorage = (event) => { if (event.key === CART_SYNC_KEY || event.key === "ss_oil_mill_guest_session_v1") refresh(); };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("storage", onStorage);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); window.removeEventListener("storage", onStorage); document.removeEventListener("visibilitychange", onVisibility); };
+  }, [authenticated, revalidateCart]);
 
   useEffect(() => {
     if (!authenticated) writeGuestSession({ cart: items });
@@ -97,6 +133,7 @@ export function CartProvider({ children }) {
     try {
       const synced = await addCartItem(product._id || product.id, safeQuantity);
       setItems(synced);
+      signalCartChange();
       return synced;
     } catch (error) {
       setItems(previousItems);
@@ -113,6 +150,7 @@ export function CartProvider({ children }) {
     try {
       const synced = await updateCartItem(id, safeQuantity);
       setItems(synced);
+      signalCartChange();
       return synced;
     } catch (error) {
       setItems(previousItems);
@@ -120,21 +158,48 @@ export function CartProvider({ children }) {
     }
   };
 
-  const removeItem = (id) => {
+  const removeItem = async (id) => {
     let previousItems = [];
     setItems((current) => {
       previousItems = current;
       return current.filter((item) => item.id !== id);
     });
-    if (getAuthToken()) removeCartItem(id).then(setItems).catch(() => setItems(previousItems));
+    if (!getAuthToken()) return;
+    try {
+      const cart = await removeCartItem(id);
+      setItems(cart);
+      signalCartChange();
+    } catch (error) {
+      setItems(previousItems);
+      throw error;
+    }
   };
 
   const clearCart = () => {
     const previousItems = items;
     setItems([]);
     setAppliedCoupon(null);
-    if (getAuthToken()) clearCartApi().then(setItems).catch(() => setItems(previousItems));
+    if (getAuthToken()) clearCartApi().then((cart) => { setItems(cart); signalCartChange(); }).catch(() => setItems(previousItems));
   };
+
+  const completePurchase = useCallback(async (productIds = []) => {
+    const remaining = removePurchasedItems(itemsRef.current, productIds);
+    setAppliedCoupon(null);
+    window.sessionStorage.removeItem(COUPON_SESSION_KEY);
+    setItems(remaining);
+    if (!getAuthToken()) {
+      writeGuestSession({ cart: remaining });
+      return remaining;
+    }
+    signalCartChange();
+    try {
+      const fresh = await fetchCart();
+      setItems(fresh);
+      return fresh;
+    } catch {
+      return remaining;
+    }
+  }, [signalCartChange]);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -149,7 +214,7 @@ export function CartProvider({ children }) {
   const isInCart = (id) => items.some((item) => item.id === id);
   const getItemQuantity = (id) => items.find((item) => item.id === id)?.quantity || 0;
 
-  return <CartContext.Provider value={{ items, addItem, updateQuantity, removeItem, clearCart, totals, isInCart, getItemQuantity, appliedCoupon, validateCoupon, clearCoupon }}>{children}</CartContext.Provider>;
+  return <CartContext.Provider value={{ items, addItem, updateQuantity, removeItem, clearCart, completePurchase, revalidateCart, totals, isInCart, getItemQuantity, appliedCoupon, validateCoupon, clearCoupon }}>{children}</CartContext.Provider>;
 }
 
 export function useCartContext() {

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useToast } from "../feedback/ToastProvider.jsx";
 import { useCart } from "../../../hooks/useCart.jsx";
 import Button from "../../ui/Button.jsx";
+import { customerMessage } from "../../../utils/customerMessage.js";
 
 export default function AddToCartButton({ product, quantity = 1, className = "", iconSize = 18, onAdded }) {
   const { addItem, updateQuantity, getItemQuantity } = useCart();
@@ -30,7 +31,7 @@ export default function AddToCartButton({ product, quantity = 1, className = "",
       onAdded?.({ quantity: addMore && inCart ? totalQuantity : selectedQuantity, addedQuantity: selectedQuantity, updated: addMore && inCart });
       return true;
     } catch (error) {
-      showToast(error.message || "Unable to update cart. Please try again.", "error", null, { id: `cart-error-${product.id}` });
+      showToast(customerMessage(error, "Unable to update your cart."), "error", null, { id: `cart-error-${product.id}` });
       return false;
     } finally {
       setLoading(false);

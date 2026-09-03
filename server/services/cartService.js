@@ -4,9 +4,19 @@ import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
 
 async function populatedCart(userId) {
-  const user = await User.findById(userId).populate("cart.product");
+  const user = await User.findById(userId).select("cart").lean();
   if (!user) throw new ApiError("User not found.", 404);
-  return user.cart.filter((item) => item.product).map((item) => ({ product: item.product, quantity: item.quantity }));
+  const productIds = user.cart.map((item) => item.product).filter(Boolean);
+  const products = await Product.find({ _id: { $in: productIds }, isActive: true, stock: { $gt: 0 } });
+  const productMap = new Map(products.map((product) => [product._id.toString(), product]));
+  const cart = user.cart.flatMap((item) => {
+    const product = productMap.get(item.product?.toString());
+    if (!product) return [];
+    return [{ product: product._id, quantity: Math.min(requestedQuantity(item.quantity), product.stock) }];
+  });
+  const changed = cart.length !== user.cart.length || cart.some((item, index) => item.product.toString() !== user.cart[index]?.product?.toString() || item.quantity !== user.cart[index]?.quantity);
+  if (changed) await User.updateOne({ _id: userId }, { cart });
+  return cart.map((item) => ({ product: productMap.get(item.product.toString()), quantity: item.quantity }));
 }
 
 function requestedQuantity(quantity) {

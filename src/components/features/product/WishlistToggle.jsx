@@ -3,17 +3,22 @@ import { motion } from "framer-motion";
 import { Heart } from "lucide-react";
 import { useToast } from "../feedback/ToastProvider.jsx";
 import { useWishlist } from "../../../context/WishlistContext.jsx";
+import { customerMessage } from "../../../utils/customerMessage.js";
 
 export default function WishlistToggle({ product, className = "", size = 18, labelPrefix = "Wishlist" }) {
   const { isWishlisted, toggleWishlistItem } = useWishlist();
   const { showToast } = useToast();
   const active = isWishlisted(product.id);
 
-  const handleToggle = (event) => {
+  const handleToggle = async (event) => {
     event.preventDefault();
     event.stopPropagation();
-    const added = toggleWishlistItem(product);
-    showToast(added ? "Saved to Wishlist" : "Removed from Wishlist", "wishlist", null, { id: `wishlist-${product.id}` });
+    try {
+      const added = await toggleWishlistItem(product);
+      showToast(added ? "Saved to Wishlist" : "Removed from Wishlist", "wishlist", null, { id: `wishlist-${product.id}` });
+    } catch (error) {
+      showToast(customerMessage(error, "Unable to update your Wishlist."), "error", null, { id: `wishlist-error-${product.id}` });
+    }
   };
 
   return (

@@ -1,6 +1,7 @@
 // Order business logic.
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
+import User from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { withOrderTotals } from "../utils/orderTotals.js";
 import { createAdminNotification, createInventoryNotifications } from "./adminNotificationService.js";
@@ -68,6 +69,7 @@ export async function createOrder(userId, payload) {
       await Order.findByIdAndDelete(order._id);
       throw error;
     }
+    await clearPurchasedCart(userId, productIds);
     await Promise.allSettled([
       createAdminNotification({ category: "orders", type: "new_order", title: "New Order", description: `Order ${order._id} was placed for Rs. ${totals.totalAmount}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } }),
       ...productIds.map((id) => Product.findById(id).then((product) => product && createInventoryNotifications(product))),
@@ -111,3 +113,7 @@ export async function updateOrderStatus(orderId, payload) {
   return order;
 }
 
+export async function clearPurchasedCart(userId, productIds) {
+  if (!productIds.length) return;
+  await User.updateOne({ _id: userId }, { $pull: { cart: { product: { $in: productIds } } } });
+}

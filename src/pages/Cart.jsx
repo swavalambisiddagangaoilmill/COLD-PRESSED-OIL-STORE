@@ -7,9 +7,30 @@ import Button from "../components/ui/Button.jsx";
 import Container from "../components/ui/Container.jsx";
 import { useCart } from "../hooks/useCart.jsx";
 import { formatCurrency } from "../utils/formatCurrency.js";
+import { customerMessage } from "../utils/customerMessage.js";
+import { useToast } from "../components/features/feedback/ToastProvider.jsx";
 
 export default function Cart() {
   const { items, updateQuantity, removeItem, totals } = useCart();
+  const { showToast } = useToast();
+
+  const changeQuantity = async (item, quantity) => {
+    try {
+      await updateQuantity(item.id, quantity);
+      showToast("Cart updated.", "success", null, { id: `cart-quantity-${item.id}` });
+    } catch (error) {
+      showToast(customerMessage(error, "Unable to update this item. Please try again."), "error", { label: "Retry", onClick: () => changeQuantity(item, quantity) }, { id: `cart-quantity-error-${item.id}` });
+    }
+  };
+
+  const remove = async (item) => {
+    try {
+      await removeItem(item.id);
+      showToast("Removed from cart.", "success", null, { id: `cart-remove-${item.id}` });
+    } catch (error) {
+      showToast(customerMessage(error, "Unable to remove this item. Please try again."), "error", { label: "Retry", onClick: () => remove(item) }, { id: `cart-remove-error-${item.id}` });
+    }
+  };
   return (
     <>
       <Breadcrumb items={[{ label: "Cart" }]} />
@@ -33,8 +54,8 @@ export default function Cart() {
                       <p className="mt-3 font-bold">{formatCurrency(item.price)}</p>
                     </div>
                     <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
-                      <QuantitySelector value={item.quantity} onChange={(value) => updateQuantity(item.id, value)} />
-                      <button type="button" aria-label={`Remove ${item.name}`} onClick={() => removeItem(item.id)} className="rounded-full bg-linen p-3 text-ink/60 transition hover:text-danger"><Trash2 size={18} /></button>
+                      <QuantitySelector value={item.quantity} onChange={(value) => changeQuantity(item, value)} />
+                      <button type="button" aria-label={`Remove ${item.name}`} onClick={() => remove(item)} className="rounded-full bg-linen p-3 text-ink/60 transition hover:text-danger"><Trash2 size={18} /></button>
                     </div>
                   </article>
                 ))}

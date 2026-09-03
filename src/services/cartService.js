@@ -2,9 +2,9 @@
 import { API_ENDPOINTS } from "../constants/apiConfig.js";
 import { apiRequest } from "../api/apiClient.js";
 
-function normalizeCartItem(item) {
+export function normalizeCartItem(item) {
   const product = item.product || item;
-  return { ...(product || {}), id: product?._id || product?.id, name: product?.title || product?.name, image: product?.images?.[0]?.url || product?.image || "", price: product?.discountPrice || product?.price || 0, mrp: product?.price || product?.mrp || 0, quantity: item.quantity || 1, category: product?.category?.name || product?.category || "Oil", volume: product?.volume || "1L", codEnabled: product?.codEnabled !== false, onlinePaymentEnabled: product?.onlinePaymentEnabled !== false, returnEligible: product?.returnEligible !== false, exchangeEligible: Boolean(product?.exchangeEligible) };
+  return { ...(product || {}), id: product?._id || product?.id, name: product?.title || product?.name, image: product?.images?.[0]?.url || product?.image || "", price: product?.discountPrice || product?.price || 0, mrp: product?.price || product?.mrp || 0, stock: product?.stock ?? 0, isActive: product?.isActive !== false, quantity: item.quantity || 1, category: product?.category?.name || product?.category || "Oil", volume: product?.volume || "1L", codEnabled: product?.codEnabled !== false, onlinePaymentEnabled: product?.onlinePaymentEnabled !== false, returnEligible: product?.returnEligible !== false, exchangeEligible: Boolean(product?.exchangeEligible) };
 }
 
 export async function fetchCart() {

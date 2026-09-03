@@ -1,6 +1,7 @@
 // Product catalog business logic.
 import mongoose from "mongoose";
 import Product from "../models/Product.js";
+import User from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { slugify } from "../utils/slugify.js";
 import { createProductWithGeneratedSku, prepareProductVariants } from "./productSkuService.js";
@@ -177,6 +178,7 @@ export async function updateProduct(id, payload) {
 export async function deleteProduct(id) {
   const product = await Product.findByIdAndUpdate(id, { isActive: false }, { new: true });
   if (!product) throw new ApiError("Product not found.", 404);
+  await User.updateMany({ $or: [{ wishlist: product._id }, { "cart.product": product._id }] }, { $pull: { wishlist: product._id, cart: { product: product._id } } });
   return product;
 }
 

@@ -10,6 +10,7 @@ export default function CartSummary({ totals, showCheckout = true }) {
   const { appliedCoupon, validateCoupon, clearCoupon } = useCart();
   const [coupon, setCoupon] = useState(appliedCoupon?.code || "");
   const [couponMessage, setCouponMessage] = useState("");
+  const [couponMessageType, setCouponMessageType] = useState("");
   const [checking, setChecking] = useState(false);
   const minimumOrder = 500;
   const belowMinimum = totals.subtotal > 0 && totals.subtotal < minimumOrder;
@@ -19,10 +20,12 @@ export default function CartSummary({ totals, showCheckout = true }) {
     if (!code) {
       clearCoupon();
       setCouponMessage("Enter a coupon code first.");
+      setCouponMessageType("error");
       return;
     }
     if (appliedCoupon?.code === code.toUpperCase()) {
       setCouponMessage("This coupon is already applied.");
+      setCouponMessageType("success");
       return;
     }
     setChecking(true);
@@ -31,9 +34,11 @@ export default function CartSummary({ totals, showCheckout = true }) {
       const result = await validateCoupon(code);
       setCoupon(result.code);
       setCouponMessage(result.message || "Coupon applied successfully.");
+      setCouponMessageType("success");
     } catch (err) {
       clearCoupon();
       setCouponMessage(err.message || "This coupon cannot be applied right now.");
+      setCouponMessageType("error");
     } finally {
       setChecking(false);
     }
@@ -51,8 +56,14 @@ export default function CartSummary({ totals, showCheckout = true }) {
       </div>
       <div className="mt-6 grid gap-2">
         <div className="flex gap-2"><Input className="flex-1" placeholder="Coupon code" aria-label="Coupon code" value={coupon} onChange={(event) => setCoupon(event.target.value.toUpperCase())} /><Button type="button" variant="outline" className="h-[52px] px-4" onClick={applyCoupon} disabled={checking || appliedCoupon?.code === coupon.trim().toUpperCase()}>{checking ? "Checking" : appliedCoupon?.code === coupon.trim().toUpperCase() ? "Applied" : "Apply"}</Button></div>
-        {appliedCoupon && <button type="button" className="justify-self-start text-sm font-bold text-clay hover:text-danger" onClick={() => { clearCoupon(); setCoupon(""); setCouponMessage("Coupon removed."); }}>Remove coupon</button>}
-        {couponMessage && <p className={`text-sm font-semibold ${appliedCoupon ? "text-leaf" : "text-danger"}`}>{couponMessage}</p>}
+        {appliedCoupon && <button type="button" className="justify-self-start text-sm font-bold text-clay hover:text-danger" onClick={() => { clearCoupon(); setCoupon(""); setCouponMessage("Coupon removed."); setCouponMessageType("info"); }}>Remove coupon</button>}
+        {couponMessage && couponMessageType === "success" && (
+          <p role="status" className="flex items-center gap-2 rounded-xl border border-leaf/20 bg-leaf/10 px-3 py-2.5 text-sm font-bold text-leaf">
+            <span aria-hidden="true" className="text-base">🎉</span>
+            <span>{couponMessage}</span>
+          </p>
+        )}
+        {couponMessage && couponMessageType !== "success" && <p className={`text-sm font-semibold ${couponMessageType === "error" ? "text-danger" : "text-ink/60"}`}>{couponMessage}</p>}
         {belowMinimum && <p className="text-sm font-semibold text-clay">Minimum order is {formatCurrency(minimumOrder)}.</p>}
         <p className="text-sm text-ink/55">Delivery estimate: 2-5 business days after confirmation.</p>
       </div>

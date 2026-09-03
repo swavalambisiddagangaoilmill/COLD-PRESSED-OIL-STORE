@@ -10,6 +10,8 @@ import { useCart } from "../../../hooks/useCart.jsx";
 import { useServiceStatus } from "../../../hooks/useServiceStatus.js";
 import { formatCurrency } from "../../../utils/formatCurrency.js";
 import { writeGuestSession } from "../../../utils/guestSession.js";
+import { customerMessage } from "../../../utils/customerMessage.js";
+import { useToast } from "../feedback/ToastProvider.jsx";
 import Button from "../../ui/Button.jsx";
 import Input from "../../ui/Input.jsx";
 
@@ -53,7 +55,8 @@ function formatOrderForSuccess(order, shippingAddress, items, total, profile) {
 
 export default function CheckoutForm() {
   const navigate = useNavigate();
-  const { items, totals, clearCart, appliedCoupon } = useCart();
+  const { items, totals, completePurchase, revalidateCart, appliedCoupon } = useCart();
+  const { showToast, showCritical } = useToast();
   const serviceStatus = useServiceStatus();
   const formRef = useRef(null);
   const submissionInFlightRef = useRef(false);
@@ -99,7 +102,7 @@ export default function CheckoutForm() {
     form.elements.pin.value = address.postalCode || "";
   };
 
-  const getOrderPayload = (formElement) => {
+  const getOrderPayload = (formElement, checkoutItems = items) => {
     const form = new FormData(formElement);
     const shippingAddress = {
       fullName: `${form.get("firstName")} ${form.get("lastName")}`.trim(),
@@ -112,7 +115,7 @@ export default function CheckoutForm() {
     };
     return {
       order: {
-        products: items.map((item) => ({ product: item._id || item.id, quantity: item.quantity })),
+        products: checkoutItems.map((item) => ({ product: item._id || item.id, quantity: item.quantity })),
         shippingAddress,
         paymentMethod: paymentMethod === "cod" ? "cod" : "cashfree",
         couponCode: appliedCoupon?.code,
@@ -125,20 +128,21 @@ export default function CheckoutForm() {
     };
   };
 
-  const finishOrder = (order, shippingAddress) => {
+  const finishOrder = async (order, shippingAddress, purchasedItems) => {
     writeGuestSession({ checkoutDraft: {} });
-    clearCart();
-    navigate("/order/success", { state: { order: formatOrderForSuccess(order, shippingAddress, items, totals.total, profile) } });
+    await completePurchase(purchasedItems.map((item) => item._id || item.id));
+    showToast("Order placed successfully.", "success", null, { id: `order-${order?._id || "complete"}` });
+    navigate("/order/success", { state: { order: formatOrderForSuccess(order, shippingAddress, purchasedItems, totals.total, profile) } });
   };
 
-  const submitCodOrder = async (orderPayload) => {
+  const submitCodOrder = async (orderPayload, purchasedItems) => {
     setProcessingStep("cod");
     const response = await createOrder({ ...orderPayload.order, paymentMethod: "cod" });
-    finishOrder(response.order, orderPayload.order.shippingAddress);
+    await finishOrder(response.order, orderPayload.order.shippingAddress, purchasedItems);
   };
 
 
-  const submitCashfreeOrder = async (orderPayload) => {
+  const submitCashfreeOrder = async (orderPayload, purchasedItems) => {
     setProcessingStep("preparing");
     const { payment } = await createPaymentIntent({ order: orderPayload.order });
     if (!payment?.paymentSessionId || !payment?.orderId) throw new Error("Cashfree is not configured. Please choose Cash on delivery or try again later.");
@@ -146,10 +150,10 @@ export default function CheckoutForm() {
     const cashfree = await loadCashfreeCheckout(mode);
     if (!cashfree) throw new Error("Unable to load Cashfree Checkout. Please try again.");
     const result = await cashfree.checkout({ paymentSessionId: payment.paymentSessionId, redirectTarget: "_modal" });
-    if (result?.error) throw new Error(result.error.message || "Payment failed. Your cart has not been changed.");
+    if (result?.error) throw new Error("Payment was not completed. Your cart is unchanged.");
     setProcessingStep("verifying");
     const verified = await verifyPayment({ cashfreeOrderId: payment.orderId });
-    finishOrder(verified.order, orderPayload.order.shippingAddress);
+    await finishOrder(verified.order, orderPayload.order.shippingAddress, purchasedItems);
   };
 
   const handleSubmit = async (event) => {
@@ -159,16 +163,21 @@ export default function CheckoutForm() {
       navigate("/login", { state: { from: "/checkout" } });
       return;
     }
-    if (paymentMethod === 'cod' && !codAvailable) { setError('Cash on delivery is not available for one or more products in your cart.'); return; }
-    if (paymentMethod !== 'cod' && !onlineAvailable) { setError(onlineServiceAvailable ? 'Online payment is not available for one or more products in your cart.' : onlineUnavailableMessage); return; }
-    const orderPayload = getOrderPayload(event.currentTarget);
     submissionInFlightRef.current = true;
     setError("");
     try {
-      if (paymentMethod === "cod") await submitCodOrder(orderPayload);
-      else await submitCashfreeOrder(orderPayload);
+      const validated = await revalidateCart({ notify: true });
+      if (!validated.items.length) { showToast("Your cart has no available products.", "warning", null, { id: "checkout-empty" }); return; }
+      if (validated.changed) return;
+      const codAllowed = validated.items.every((item) => item.codEnabled !== false);
+      const onlineAllowed = onlineServiceAvailable && validated.items.every((item) => item.onlinePaymentEnabled !== false);
+      if (paymentMethod === "cod" && !codAllowed) { setError("Cash on delivery is not available for one or more products in your cart."); return; }
+      if (paymentMethod !== "cod" && !onlineAllowed) { setError(onlineServiceAvailable ? "Online payment is not available for one or more products in your cart." : onlineUnavailableMessage); return; }
+      const orderPayload = getOrderPayload(event.currentTarget, validated.items);
+      if (paymentMethod === "cod") await submitCodOrder(orderPayload, validated.items);
+      else await submitCashfreeOrder(orderPayload, validated.items);
     } catch (err) {
-      setError(err.message || "Unable to complete payment. Please try again.");
+      showCritical("Checkout could not be completed", customerMessage(err, "Please review your cart and try again. Your cart has not been changed."), { action: { label: "Review Cart", to: "/cart" } });
     } finally {
       submissionInFlightRef.current = false;
       setProcessingStep("");
