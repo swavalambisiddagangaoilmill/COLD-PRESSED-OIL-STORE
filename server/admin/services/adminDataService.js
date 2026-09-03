@@ -18,6 +18,8 @@ import { slugify } from "../../utils/slugify.js";
 import { withOrderTotals } from "../../utils/orderTotals.js";
 import { createProductWithGeneratedSku, prepareProductVariants } from "../../services/productSkuService.js";
 import { sendOrderConfirmationEmail } from "../../services/emailService.js";
+import { createCategory, listCategories as listCanonicalCategories, requireCanonicalCategory, updateCategory } from "../../services/categoryService.js";
+import { priceProducts } from "../../services/offerPricingService.js";
 
 const orderTransitions = {
   placed: ["confirmed", "cancelled"],
@@ -131,13 +133,14 @@ export async function listProducts(query) {
   if (query.stock === "out") filter.stock = 0;
   if (query.search) filter.$text = { $search: query.search };
   const [items, total] = await Promise.all([Product.find(filter).populate("category", "name slug").sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit), Product.countDocuments(filter)]);
-  return { items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
+  return { items: await priceProducts(items), pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
 }
 
 export async function saveProduct(payload, id) {
   const allowed = ["title", "description", "benefits", "price", "discountPrice", "stock", "category", "images", "featured", "bestSeller", "newArrival", "codEnabled", "onlinePaymentEnabled", "returnEligible", "exchangeEligible", "isActive", "size", "variants"];
   const data = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
   if (data.title) data.slug = slugify(data.title);
+  if (data.category) await requireCanonicalCategory(data.category);
   const current = id ? await Product.findById(id) : null;
   if (id && !current) throw new ApiError("Product not found.", 404);
   if (id && Array.isArray(data.variants)) data.variants = await prepareProductVariants(data.variants, current.sku, current.variants || []);
@@ -177,6 +180,7 @@ export async function bulkPricePreview(payload) {
 }
 
 export async function bulkPriceApply(payload) {
+  if (payload.operation === "move_category") await requireCanonicalCategory(payload.category);
   const products = await Product.find(buildBulkFilter(payload.target || {}));
   await Promise.all(products.map((product) => {
     const value = Number(payload.value) || 0;
@@ -252,11 +256,21 @@ export async function reorderGalleryImages(ids = []) {
   await GalleryImage.bulkWrite(ids.map((id, index) => ({ updateOne: { filter: { _id: id }, update: { sortOrder: index + 1 } } })));
   return listGalleryImages();
 }
-export async function listCategories() { return Category.find().sort({ name: 1 }); }
-export async function saveCategory(payload, id) { const data = { name: payload.name, slug: payload.slug || slugify(payload.name), description: payload.description, image: payload.image, isActive: payload.isActive !== false }; return id ? Category.findByIdAndUpdate(id, data, { new: true, runValidators: true }) : Category.create(data); }
+export async function listCategories() { return listCanonicalCategories(); }
+export async function saveCategory(payload, id) { return id ? updateCategory(id, payload) : createCategory(payload); }
 
-export const listOffers = () => Offer.find().populate("category", "name").populate("products", "title").sort({ createdAt: -1 });
-export const saveOffer = (payload, userId, id) => id ? Offer.findByIdAndUpdate(id, payload, { new: true, runValidators: true }) : Offer.create({ ...payload, createdBy: userId });
+export const listOffers = () => Offer.find().populate("category", "name").populate("categories", "name").populate("products", "title variants").sort({ createdAt: -1 });
+export async function saveOffer(payload, userId, id) {
+  const data = { ...payload, discountType: "PERCENTAGE", discountValue: Number(payload.discountValue), categories: payload.categories || [], products: payload.products || [], variants: payload.variants || [] };
+  if (!Number.isFinite(data.discountValue) || data.discountValue <= 0 || data.discountValue > 100) throw new ApiError("Discount percentage must be between 0 and 100.", 400);
+  if (!data.startDate || !data.endDate || new Date(data.endDate) <= new Date(data.startDate)) throw new ApiError("Offer end date must be after its start date.", 400);
+  await Promise.all(data.categories.map(requireCanonicalCategory));
+  const selectedProducts = await Product.find({ _id: { $in: [...data.products, ...data.variants.map((item) => item.product)] } }).select("variants");
+  const productMap = new Map(selectedProducts.map((product) => [String(product._id), product]));
+  if (productMap.size !== new Set([...data.products, ...data.variants.map((item) => String(item.product))]).size) throw new ApiError("One or more selected products are invalid.", 400);
+  if (data.variants.some((item) => !productMap.get(String(item.product))?.variants.some((variant) => String(variant._id) === String(item.variant)))) throw new ApiError("One or more selected variants are invalid.", 400);
+  return id ? Offer.findByIdAndUpdate(id, data, { new: true, runValidators: true }) : Offer.create({ ...data, createdBy: userId });
+}
 export const deleteOffer = (id) => Offer.findByIdAndDelete(id);
 export const listCoupons = () => Coupon.find().populate("categories", "name").populate("products", "title").sort({ createdAt: -1 });
 export const saveCoupon = (payload, userId, id) => {

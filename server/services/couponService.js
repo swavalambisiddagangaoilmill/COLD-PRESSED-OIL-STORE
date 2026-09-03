@@ -155,7 +155,7 @@ export async function validateCouponPayload({ code, userId, products = [] }) {
   const items = requested.map((item) => {
     const product = productMap.get(item.product.toString());
     if (!product) throw new ApiError("One or more products are unavailable.", 400);
-    return { product, quantity: item.quantity, price: product.discountPrice || product.price };
+    return { product, quantity: item.quantity, price: product.effectivePrice ?? product.discountPrice ?? product.price };
   });
   const result = await validateCouponForItems({ code, userId, items });
   return { code: result.coupon.code, discountAmount: result.discountAmount, description: result.coupon.description || "", message: "Coupon applied successfully." };

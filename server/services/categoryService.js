@@ -1,32 +1,49 @@
 ﻿// Category business logic.
 import Category from "../models/Category.js";
 import { ApiError } from "../utils/ApiError.js";
-import { slugify } from "../utils/slugify.js";
+import { PRODUCT_CATEGORIES, PRODUCT_CATEGORY_SLUGS, isCanonicalProductCategory } from "../../shared/productCategories.js";
 
-export function listCategories() {
-  return Category.find().sort({ name: 1 });
+const categoryOrder = Object.fromEntries(PRODUCT_CATEGORIES.map((name, index) => [name, index]));
+
+export async function requireCanonicalCategory(id) {
+  const category = await Category.findById(id).select("name slug");
+  if (!category || !isCanonicalProductCategory(category.name, category.slug)) throw new ApiError("Select one of the 16 valid product categories.", 400, [{ field: "category", message: "Product category is not valid." }]);
+  return category;
+}
+
+export async function listCategories() {
+  const categories = await Category.find({ name: { $in: PRODUCT_CATEGORIES }, isActive: true });
+  return categories.sort((a, b) => categoryOrder[a.name] - categoryOrder[b.name]);
 }
 
 export async function getCategory(idOrSlug) {
   const query = /^[0-9a-fA-F]{24}$/.test(idOrSlug) ? { _id: idOrSlug } : { slug: idOrSlug };
   const category = await Category.findOne(query);
-  if (!category) throw new ApiError("Category not found.", 404);
+  if (!category || !isCanonicalProductCategory(category.name, category.slug)) throw new ApiError("Category not found.", 404);
   return category;
 }
 
 export function createCategory(payload) {
-  return Category.create({ ...payload, slug: payload.slug || slugify(payload.name) });
+  const canonical = PRODUCT_CATEGORY_SLUGS.find(({ name }) => name === payload.name);
+  if (!canonical) throw new ApiError("Category name must be one of the 16 canonical categories.", 400, [{ field: "name", message: "Category name is not valid." }]);
+  if (payload.slug && payload.slug !== canonical.slug) throw new ApiError("Category slug must match its canonical name.", 400, [{ field: "slug", message: `Use ${canonical.slug}.` }]);
+  return Category.create({ ...payload, name: canonical.name, slug: canonical.slug, isActive: true });
 }
 
 export async function updateCategory(id, payload) {
-  const updates = payload.name && !payload.slug ? { ...payload, slug: slugify(payload.name) } : payload;
+  const current = await Category.findById(id);
+  if (!current) throw new ApiError("Category not found.", 404);
+  const name = payload.name || current.name;
+  const canonical = PRODUCT_CATEGORY_SLUGS.find((item) => item.name === name);
+  if (!canonical) throw new ApiError("Category name must be one of the 16 canonical categories.", 400, [{ field: "name", message: "Category name is not valid." }]);
+  if (payload.slug && payload.slug !== canonical.slug) throw new ApiError("Category slug must match its canonical name.", 400, [{ field: "slug", message: `Use ${canonical.slug}.` }]);
+  const updates = { ...payload, name: canonical.name, slug: canonical.slug };
   const category = await Category.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
-  if (!category) throw new ApiError("Category not found.", 404);
   return category;
 }
 
 export async function deleteCategory(id) {
-  const category = await Category.findByIdAndDelete(id);
+  const category = await Category.findById(id);
   if (!category) throw new ApiError("Category not found.", 404);
-  return category;
+  throw new ApiError("Canonical product categories cannot be deleted.", 409);
 }

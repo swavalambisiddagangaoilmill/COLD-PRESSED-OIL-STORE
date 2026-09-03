@@ -4,7 +4,9 @@ import { apiRequest } from "../api/apiClient.js";
 
 export function normalizeCartItem(item) {
   const product = item.product || item;
-  return { ...(product || {}), id: product?._id || product?.id, name: product?.title || product?.name, image: product?.images?.[0]?.url || product?.image || "", price: product?.discountPrice || product?.price || 0, mrp: product?.price || product?.mrp || 0, stock: product?.stock ?? 0, isActive: product?.isActive !== false, quantity: item.quantity || 1, category: product?.category?.name || product?.category || "Oil", volume: product?.volume || "1L", codEnabled: product?.codEnabled !== false, onlinePaymentEnabled: product?.onlinePaymentEnabled !== false, returnEligible: product?.returnEligible !== false, exchangeEligible: Boolean(product?.exchangeEligible) };
+  const baseSellingPrice = product?.baseSellingPrice ?? product?.discountPrice ?? product?.price ?? 0;
+  const price = product?.effectivePrice ?? baseSellingPrice;
+  return { ...(product || {}), id: product?._id || product?.id, name: product?.title || product?.name, image: product?.images?.[0]?.url || product?.image || "", price, effectivePrice: price, baseSellingPrice, mrp: product?.appliedOffer ? baseSellingPrice : product?.price || product?.mrp || baseSellingPrice, stock: product?.stock ?? 0, isActive: product?.isActive !== false, quantity: item.quantity || 1, category: product?.category?.name || product?.category || "Oil", volume: product?.volume || "1L", appliedOffer: product?.appliedOffer || null, codEnabled: product?.codEnabled !== false, onlinePaymentEnabled: product?.onlinePaymentEnabled !== false, returnEligible: product?.returnEligible !== false, exchangeEligible: Boolean(product?.exchangeEligible) };
 }
 
 export async function fetchCart() {

@@ -5,6 +5,8 @@ import User from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { slugify } from "../utils/slugify.js";
 import { createProductWithGeneratedSku, prepareProductVariants } from "./productSkuService.js";
+import { requireCanonicalCategory } from "./categoryService.js";
+import { activeOffers, priceProduct, priceProducts } from "./offerPricingService.js";
 
 function normalizeSearch(value = "") {
   return String(value).trim().replace(/\s+/g, " ");
@@ -122,19 +124,19 @@ export async function listProducts(query) {
     }
   );
   const [result] = await Product.aggregate(pipeline);
-  const items = result?.items || [];
+  const items = await priceProducts(result?.items || []);
   const total = result?.total?.[0]?.count || 0;
   return { items, pagination: { page: includeAll ? 1 : page, limit: includeAll ? total : limit, total, pages: includeAll ? (total ? 1 : 0) : Math.ceil(total / limit) } };
 }
 
 export async function getFeaturedProducts() {
-  return Product.find({ featured: true, isActive: true }).populate("category", "name slug").sort({ createdAt: -1 }).limit(12);
+  return priceProducts(await Product.find({ featured: true, isActive: true }).populate("category", "name slug").sort({ createdAt: -1 }).limit(12));
 }
 
 export async function getProductBySlug(slug) {
   const product = await Product.findOne({ slug, isActive: true }).populate("category", "name slug");
   if (!product) throw new ApiError("Product not found.", 404);
-  return product;
+  return priceProduct(product, await activeOffers());
 }
 
 export async function getProductsByCategory(categoryId, query) {
@@ -148,11 +150,11 @@ export async function getRelatedProducts(productId, limit = 6) {
   const sameCategory = await Product.find({ _id: { $ne: current._id }, category: current.category, isActive: true })
     .populate("category", "name slug")
     .limit(safeLimit);
-  if (sameCategory.length >= safeLimit) return sameCategory;
+  if (sameCategory.length >= safeLimit) return priceProducts(sameCategory);
   const fallback = await Product.find({ _id: { $ne: current._id }, category: { $ne: current.category }, isActive: true })
     .populate("category", "name slug")
     .limit(safeLimit - sameCategory.length);
-  return [...sameCategory, ...fallback];
+  return priceProducts([...sameCategory, ...fallback]);
 }
 
 export async function createProduct(payload) {
@@ -165,6 +167,7 @@ export async function updateProduct(id, payload) {
   delete updates.sku;
   delete updates.weight;
   delete updates.dimensions;
+  if (updates.category) await requireCanonicalCategory(updates.category);
   if (Array.isArray(updates.variants)) {
     const current = await Product.findById(id).select("sku variants");
     if (!current) throw new ApiError("Product not found.", 404);

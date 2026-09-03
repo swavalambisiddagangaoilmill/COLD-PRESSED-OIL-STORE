@@ -4,7 +4,7 @@ export const products = [
     id: 1,
     slug: "heritage-groundnut-oil",
     name: "Heritage Groundnut Oil",
-    category: "Groundnut",
+    category: "Groundnut Oil",
     price: 420,
     mrp: 520,
     rating: 4.9,
@@ -25,7 +25,7 @@ export const products = [
     id: 2,
     slug: "black-sesame-oil",
     name: "Black Sesame Oil",
-    category: "Sesame",
+    category: "Black Sesame Oil",
     price: 510,
     mrp: 640,
     rating: 4.8,
@@ -46,7 +46,7 @@ export const products = [
     id: 3,
     slug: "bold-mustard-oil",
     name: "Bold Mustard Oil",
-    category: "Mustard",
+    category: "Mustard Oil",
     price: 360,
     mrp: 450,
     rating: 4.7,
@@ -67,7 +67,7 @@ export const products = [
     id: 4,
     slug: "virgin-coconut-oil",
     name: "Virgin Coconut Oil",
-    category: "Coconut",
+    category: "Coconut Oil",
     price: 560,
     mrp: 690,
     rating: 4.9,
@@ -88,7 +88,7 @@ export const products = [
     id: 5,
     slug: "safflower-heart-oil",
     name: "Safflower Heart Oil",
-    category: "Safflower",
+    category: "Safflower Oil",
     price: 470,
     mrp: 590,
     rating: 4.6,
@@ -109,7 +109,7 @@ export const products = [
     id: 6,
     slug: "sunflower-gold-oil",
     name: "Sunflower Gold Oil",
-    category: "Sunflower",
+    category: "Sunflower Oil",
     price: 390,
     mrp: 490,
     rating: 4.7,
@@ -130,7 +130,7 @@ export const products = [
     id: 7,
     slug: "traditional-castor-oil",
     name: "Traditional Castor Oil",
-    category: "Castor",
+    category: "Castor Oil",
     price: 330,
     mrp: 420,
     rating: 4.8,
@@ -147,27 +147,6 @@ export const products = [
     benefits: ["Thick natural texture", "Hexane free", "Made in small batches"],
     specifications: { Source: "Castor beans", Pressing: "Cold pressed", Shelf: "12 months", Pack: "Glass bottle" },
   },
-  {
-    id: 8,
-    slug: "chef-selection-duo",
-    name: "Chef Selection Duo",
-    category: "Bundles",
-    price: 820,
-    mrp: 1040,
-    rating: 4.9,
-    stock: 10,
-    volume: "2 x 1 L",
-    tags: ["Bundle", "Best value"],
-    image: "https://images.unsplash.com/photo-1600857544200-b2f666a9a2ec?auto=format&fit=crop&w=900&q=80",
-    gallery: [
-      "https://images.unsplash.com/photo-1600857544200-b2f666a9a2ec?auto=format&fit=crop&w=1200&q=80",
-      "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=1200&q=80",
-      "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=1200&q=80",
-    ],
-    description: "A kitchen-ready pairing of groundnut and sesame oils for daily cooking, finishing, and festive meals.",
-    benefits: ["Two bestselling oils", "Gift-ready packaging", "Balanced flavor profiles"],
-    specifications: { Source: "Groundnut and sesame", Pressing: "Cold pressed", Shelf: "9 months", Pack: "Gift carton" },
-  },
 ];
 
 export const categories = ["All", ...new Set(products.map((product) => product.category))];
@@ -179,7 +158,6 @@ const homeProductDetails = {
   4: { reviews: 164 },
   5: { reviews: 96 },
   6: { reviews: 118 },
-  8: { reviews: 152 },
 };
 
 const withHomeDetails = (product) => ({
@@ -189,7 +167,7 @@ const withHomeDetails = (product) => ({
 
 export const everydayEssentials = [products[0], products[1], products[2], products[3], products[5]].map(withHomeDetails);
 
-export const bestSellerProducts = [products[0], products[1], products[3], products[5], products[7]].map(withHomeDetails);
+export const bestSellerProducts = [products[0], products[1], products[3], products[5], products[6]].map(withHomeDetails);
 
 
 

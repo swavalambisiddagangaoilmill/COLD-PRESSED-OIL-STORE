@@ -72,9 +72,9 @@ function normalizeItems(order) {
     const variant = item.variant || item.volume || product.volume || item.weight || "-";
     const quantity = Number(item.quantity || 1);
     const unitPrice = Number(item.price || item.unitPrice || product.discountPrice || product.price || 0);
-    const listPrice = Number(item.originalPrice || item.listPrice || product.originalPrice || unitPrice);
+    const listPrice = Number(item.basePrice || item.originalPrice || item.listPrice || product.originalPrice || unitPrice);
     const discount = Math.max(0, listPrice - unitPrice);
-    return { name, variant, quantity, unitPrice, listPrice, discount, total: unitPrice * quantity };
+    return { name, variant, quantity, unitPrice, listPrice, discount, offerName: item.offerName || "", offerPercentage: item.offerPercentage, total: unitPrice * quantity };
   });
 }
 
@@ -199,7 +199,8 @@ function buildContent(order, hasLogo, pageInfo = { page: 1, pages: 1, last: true
 
   let y = tableTop - 39;
   items.forEach((item) => {
-    const name = wrapText(`${item.name}${item.variant && item.variant !== "-" ? ` (${item.variant})` : ""}`, 38)[0];
+    const offer = item.offerName ? ` · ${item.offerName}${item.offerPercentage ? ` ${item.offerPercentage}%` : ""}` : "";
+    const name = wrapText(`${item.name}${item.variant && item.variant !== "-" ? ` (${item.variant})` : ""}${offer}`, 38)[0];
     text(name, col.product, y, bodyFont, "F1");
     text(String(item.quantity), col.qty + 8, y, bodyFont, "F1");
     rightText(money(item.listPrice), col.list, y, bodyFont, "F1");

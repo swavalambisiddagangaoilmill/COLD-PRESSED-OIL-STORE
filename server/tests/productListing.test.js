@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import Product from "../models/Product.js";
+import Offer from "../models/Offer.js";
 import { listProducts } from "../services/productService.js";
 
 const originalAggregate = Product.aggregate;
 
 afterEach(() => { Product.aggregate = originalAggregate; });
+
+Offer.find = () => ({ lean: async () => [] });
 
 test("all-products mode returns the complete filtered dataset in one page", async () => {
   let receivedPipeline;

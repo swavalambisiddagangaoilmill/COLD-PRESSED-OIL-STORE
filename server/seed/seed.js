@@ -7,6 +7,7 @@ import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import User from "../models/User.js";
 import { slugify } from "../utils/slugify.js";
+import { PRODUCT_CATEGORIES } from "../../shared/productCategories.js";
 
 if (process.env.NODE_ENV === "production") {
   console.error("Seed script is disabled in production.");
@@ -20,23 +21,19 @@ const imageUrls = [
   "https://images.unsplash.com/photo-1620706857370-e1b9770e8bb1?auto=format&fit=crop&w=900&q=80",
 ];
 
-const categorySeeds = [
-  { name: "Groundnut Oils", description: "Nutty everyday cold-pressed oils for Indian kitchens." },
-  { name: "Coconut Oils", description: "Aromatic coconut oils for cooking, baking, and pantry care." },
-  { name: "Sesame Oils", description: "Traditional gingelly oils with rich roasted depth." },
-];
+const categorySeeds = PRODUCT_CATEGORIES.map((name) => ({ name, description: `${name} products and services.` }));
 
 const productSeeds = [
-  { title: "Wood Pressed Groundnut Oil 1L", price: 399, discountPrice: 349, stock: 40, category: "Groundnut Oils", featured: true, bestSeller: true, tags: ["groundnut", "wood pressed", "cooking oil"] },
-  { title: "Classic Groundnut Oil 500ml", price: 229, discountPrice: 199, stock: 55, category: "Groundnut Oils", featured: false, bestSeller: true, tags: ["groundnut", "daily cooking"] },
-  { title: "Premium Groundnut Oil 5L Tin", price: 1899, discountPrice: 1699, stock: 18, category: "Groundnut Oils", featured: true, bestSeller: false, tags: ["groundnut", "family pack"] },
-  { title: "Virgin Coconut Oil 500ml", price: 349, discountPrice: 299, stock: 32, category: "Coconut Oils", featured: true, bestSeller: true, tags: ["coconut", "virgin oil"] },
-  { title: "Cold Pressed Coconut Oil 1L", price: 549, discountPrice: 499, stock: 27, category: "Coconut Oils", featured: true, bestSeller: false, tags: ["coconut", "cold pressed"] },
-  { title: "Coconut Oil Family Pack 2L", price: 999, discountPrice: 899, stock: 14, category: "Coconut Oils", featured: false, bestSeller: false, tags: ["coconut", "family pack"] },
-  { title: "Traditional Gingelly Oil 1L", price: 479, discountPrice: 429, stock: 35, category: "Sesame Oils", featured: true, bestSeller: true, tags: ["sesame", "gingelly"] },
-  { title: "Sesame Oil 500ml", price: 279, discountPrice: 249, stock: 48, category: "Sesame Oils", featured: false, bestSeller: false, tags: ["sesame", "cooking oil"] },
-  { title: "Black Sesame Oil 250ml", price: 249, discountPrice: 219, stock: 22, category: "Sesame Oils", featured: false, bestSeller: false, tags: ["black sesame", "wellness"] },
-  { title: "Festival Sesame Oil 2L", price: 929, discountPrice: 849, stock: 16, category: "Sesame Oils", featured: true, bestSeller: false, tags: ["sesame", "festival", "traditional"] },
+  { title: "Wood Pressed Groundnut Oil 1L", price: 399, discountPrice: 349, stock: 40, category: "Groundnut Oil", featured: true, bestSeller: true, tags: ["groundnut", "wood pressed", "cooking oil"] },
+  { title: "Classic Groundnut Oil 500ml", price: 229, discountPrice: 199, stock: 55, category: "Groundnut Oil", featured: false, bestSeller: true, tags: ["groundnut", "daily cooking"] },
+  { title: "Premium Groundnut Oil 5L Tin", price: 1899, discountPrice: 1699, stock: 18, category: "Groundnut Oil", featured: true, bestSeller: false, tags: ["groundnut", "family pack"] },
+  { title: "Virgin Coconut Oil 500ml", price: 349, discountPrice: 299, stock: 32, category: "Coconut Oil", featured: true, bestSeller: true, tags: ["coconut", "virgin oil"] },
+  { title: "Cold Pressed Coconut Oil 1L", price: 549, discountPrice: 499, stock: 27, category: "Coconut Oil", featured: true, bestSeller: false, tags: ["coconut", "cold pressed"] },
+  { title: "Coconut Oil Family Pack 2L", price: 999, discountPrice: 899, stock: 14, category: "Coconut Oil", featured: false, bestSeller: false, tags: ["coconut", "family pack"] },
+  { title: "Traditional White Sesame Oil 1L", price: 479, discountPrice: 429, stock: 35, category: "White Sesame Oil", featured: true, bestSeller: true, tags: ["white sesame", "gingelly"] },
+  { title: "White Sesame Oil 500ml", price: 279, discountPrice: 249, stock: 48, category: "White Sesame Oil", featured: false, bestSeller: false, tags: ["white sesame", "cooking oil"] },
+  { title: "Black Sesame Oil 250ml", price: 249, discountPrice: 219, stock: 22, category: "Black Sesame Oil", featured: false, bestSeller: false, tags: ["black sesame", "wellness"] },
+  { title: "Festival White Sesame Oil 2L", price: 929, discountPrice: 849, stock: 16, category: "White Sesame Oil", featured: true, bestSeller: false, tags: ["white sesame", "festival", "traditional"] },
 ];
 
 const address = {

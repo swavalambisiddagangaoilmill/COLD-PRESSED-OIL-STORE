@@ -11,6 +11,7 @@ export const productQueryValidator = [
   query("all").optional().isBoolean().withMessage("All products flag must be boolean."),
   query("minPrice").optional().isFloat({ min: 0 }).withMessage("Minimum price must be positive."),
   query("maxPrice").optional().isFloat({ min: 0 }).withMessage("Maximum price must be positive."),
+  query("category").optional().isMongoId().withMessage("Category filter must be a valid category id."),
 ];
 
 const productFields = [

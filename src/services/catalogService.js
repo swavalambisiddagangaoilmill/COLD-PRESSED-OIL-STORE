@@ -5,8 +5,9 @@ import { apiRequest } from "../api/apiClient.js";
 function normalizeProduct(product) {
   if (!product) return null;
   const categoryName = typeof product.category === "object" ? product.category?.name : product.category;
-  const price = product.discountPrice || product.price || 0;
-  const mrp = product.discountPrice ? product.price : product.mrp || product.price;
+  const baseSellingPrice = product.baseSellingPrice ?? product.discountPrice ?? product.price ?? 0;
+  const price = product.effectivePrice ?? baseSellingPrice;
+  const mrp = product.appliedOffer ? baseSellingPrice : product.discountPrice ? product.price : product.mrp || product.price;
   return {
     id: product._id || product.id,
     _id: product._id || product.id,
@@ -17,6 +18,11 @@ function normalizeProduct(product) {
     price,
     mrp,
     discountPrice: product.discountPrice,
+    baseSellingPrice,
+    effectivePrice: price,
+    discountAmount: product.discountAmount || 0,
+    appliedOffer: product.appliedOffer || null,
+    variants: product.variants || [],
     category: categoryName || "Oils",
     categoryId: typeof product.category === "object" ? product.category?._id : product.category,
     image: product.image || product.images?.[0]?.url || "",

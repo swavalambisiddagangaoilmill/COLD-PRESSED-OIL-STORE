@@ -8,6 +8,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { createAdminNotification } from "./adminNotificationService.js";
 import { calculateCheckoutTotals, validateCouponForItems } from "./couponService.js";
 import { createOrder as createStoreOrder, ensureOrderCartCleanup } from "./orderService.js";
+import { priceProducts } from "./offerPricingService.js";
 
 const UNAVAILABLE = "Online payments are temporarily unavailable.";
 const CURRENCY = "INR";
@@ -30,14 +31,15 @@ async function request(path, options = {}) {
 
 async function calculateAmount(productsPayload, userId, couponCode) {
   const products = await Product.find({ _id: { $in: productsPayload.map((item) => item.product) }, isActive: true });
-  const byId = new Map(products.map((product) => [product._id.toString(), product]));
+  const pricedProducts = await priceProducts(products);
+  const byId = new Map(pricedProducts.map((product) => [product._id.toString(), product]));
   const items = productsPayload.map((item) => {
     const product = byId.get(item.product.toString());
     if (!product) throw new ApiError("One or more products are unavailable.", 400);
     const quantity = Math.max(1, Number(item.quantity) || 1);
     if (product.stock < quantity) throw new ApiError(`${product.title} does not have enough stock.`, 400);
     if (product.onlinePaymentEnabled === false) throw new ApiError(`${product.title} is not eligible for online payment.`, 400);
-    return { product, quantity, price: product.discountPrice || product.price };
+    return { product, quantity, price: product.effectivePrice };
   });
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const coupon = await validateCouponForItems({ code: couponCode, userId, items, subtotal });

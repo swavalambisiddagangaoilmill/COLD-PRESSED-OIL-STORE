@@ -1,5 +1,6 @@
 // Static site navigation and marketing content used across layout sections.
 import { Leaf, ShieldCheck, Sprout, Truck, Wheat, BadgeCheck } from "lucide-react";
+import { PRODUCT_CATEGORY_SLUGS } from "../../shared/productCategories.js";
 
 export const announcementMessages = [
   "100% Cold Pressed Oils",
@@ -9,29 +10,11 @@ export const announcementMessages = [
   "Cold Pressed",
 ];
 
-export const oilMenuLinks = [
-  { label: "Groundnut Oil", href: "/shop" },
-  { label: "Sesame Oil", href: "/shop" },
-  { label: "Coconut Oil", href: "/shop" },
-  { label: "Mustard Oil", href: "/shop" },
-  { label: "Safflower Oil", href: "/shop" },
-];
+export const oilMenuLinks = PRODUCT_CATEGORY_SLUGS.map(({ name, slug }) => ({ label: name, href: `/shop?category=${slug}` }));
 
-export const categoryMenuLinks = [
-  { label: "Cooking Oils", href: "/shop" },
-  { label: "Health Oils", href: "/shop" },
-  { label: "Combo Packs", href: "/shop" },
-  { label: "Gift Packs", href: "/shop" },
-  { label: "Family Staples", href: "/shop" },
-  { label: "Wellness Rituals", href: "/shop" },
-];
+export const categoryMenuLinks = oilMenuLinks;
 
-export const essentialOilLinks = [
-  { label: "Castor Oil", href: "/shop" },
-  { label: "Neem Oil", href: "/shop" },
-  { label: "Caranja Oil", href: "/shop" },
-  { label: "Herbal Oil", href: "/shop" },
-];
+export const essentialOilLinks = oilMenuLinks.filter(({ label }) => ["Castor Oil", "Neem Oil", "Caranja Oil", "Herbal Oil"].includes(label));
 
 export const aboutMenuLinks = [
   { label: "About", href: "/about" },

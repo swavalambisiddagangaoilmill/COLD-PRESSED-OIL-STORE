@@ -8,6 +8,14 @@ const orderItemSchema = new mongoose.Schema(
     image: { type: String },
     quantity: { type: Number, required: true, min: 1 },
     price: { type: Number, required: true, min: 0 },
+    variant: { type: mongoose.Schema.Types.ObjectId },
+    variantLabel: { type: String },
+    basePrice: { type: Number, min: 0 },
+    offerId: { type: mongoose.Schema.Types.ObjectId, ref: "Offer" },
+    offerName: { type: String },
+    offerPercentage: { type: Number, min: 0, max: 100 },
+    offerDiscount: { type: Number, min: 0, default: 0 },
+    lineOfferDiscount: { type: Number, min: 0, default: 0 },
   },
   { _id: false }
 );

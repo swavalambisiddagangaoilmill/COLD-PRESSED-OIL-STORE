@@ -2,6 +2,7 @@
 import User from "../models/User.js";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
+import { priceProducts } from "./offerPricingService.js";
 
 async function populatedCart(userId) {
   const user = await User.findById(userId).select("cart").lean();
@@ -18,7 +19,9 @@ async function populatedCart(userId) {
   // Only clean the snapshot we read. A concurrent cart mutation must win instead
   // of being overwritten by stale-item reconciliation.
   if (changed) await User.updateOne({ _id: userId, cart: user.cart }, { $set: { cart } });
-  return cart.map((item) => ({ product: productMap.get(item.product.toString()), quantity: item.quantity }));
+  const priced = await priceProducts(cart.map((item) => productMap.get(item.product.toString())));
+  const pricedMap = new Map(priced.map((product) => [String(product._id), product]));
+  return cart.map((item) => ({ product: pricedMap.get(item.product.toString()), quantity: item.quantity }));
 }
 
 function requestedQuantity(quantity) {

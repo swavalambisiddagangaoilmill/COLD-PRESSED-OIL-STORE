@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 function installModelValidationMocks() {
-  Category.findById = () => ({ select: () => ({ lean: async () => ({ name: "Oils", slug: "oils" }) }) });
+  Category.findById = () => ({ select: () => ({ lean: async () => ({ name: "Coconut Oil", slug: "coconut-oil" }) }) });
   Product.exists = async () => false;
   Product.create = async (data) => {
     const product = new Product(data);

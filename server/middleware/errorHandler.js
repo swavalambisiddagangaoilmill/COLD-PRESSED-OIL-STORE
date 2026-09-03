@@ -13,8 +13,14 @@ export function errorHandler(error, req, res, next) {
 
   if (error.code === 11000) {
     statusCode = 409;
-    message = "Duplicate resource value.";
-    errors = Object.keys(error.keyValue || {}).map((field) => ({ field, message: `${field} already exists.` }));
+    const fields = Object.keys(error.keyValue || error.keyPattern || {});
+    const duplicateField = fields[0];
+    message = duplicateField === "slug"
+      ? "A product with this title already exists."
+      : duplicateField === "sku" || duplicateField === "variants.sku"
+        ? "A product with this SKU already exists."
+        : "A record with this value already exists.";
+    errors = fields.map((field) => ({ field, message: `${field === "slug" ? "Product title" : field} already exists.` }));
   }
 
   if (error.name === "JsonWebTokenError") {

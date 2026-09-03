@@ -1,10 +1,11 @@
 // Product category model.
 import mongoose from "mongoose";
+import { PRODUCT_CATEGORIES, isCanonicalProductCategory } from "../../shared/productCategories.js";
 
 const categorySchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, trim: true },
-    slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    name: { type: String, required: true, trim: true, enum: PRODUCT_CATEGORIES },
+    slug: { type: String, required: true, unique: true, lowercase: true, trim: true, validate: { validator(value) { return isCanonicalProductCategory(this.name, value); }, message: "Category slug is not canonical for its name." } },
     image: { type: String, trim: true },
     description: { type: String, trim: true },
     isActive: { type: Boolean, default: true },

@@ -6,6 +6,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { withOrderTotals } from "../utils/orderTotals.js";
 import { createAdminNotification, createInventoryNotifications } from "./adminNotificationService.js";
 import { calculateCheckoutTotals, consumeCouponUsageForOrder, normalizeCouponCode, validateCouponForItems } from "./couponService.js";
+import { priceProducts } from "./offerPricingService.js";
 
 const orderTransitions = {
   placed: ["confirmed", "cancelled"],
@@ -35,7 +36,8 @@ export async function createOrder(userId, payload) {
   if (!requestedItems.length) throw new ApiError("At least one product is required.", 400);
   const productIds = requestedItems.map((item) => item.product);
   const products = await Product.find({ _id: { $in: productIds }, isActive: true });
-  const productMap = new Map(products.map((product) => [product._id.toString(), product]));
+  const pricedProducts = await priceProducts(products);
+  const productMap = new Map(pricedProducts.map((product) => [product._id.toString(), product]));
 
   const paymentMethod = payload.paymentMethod || "cod";
 
@@ -45,8 +47,8 @@ export async function createOrder(userId, payload) {
     if (product.stock < item.quantity) throw new ApiError(`${product.title} does not have enough stock.`, 400);
     if (paymentMethod === "cod" && product.codEnabled === false) throw new ApiError(`${product.title} is not eligible for Cash on delivery.`, 400);
     if (paymentMethod !== "cod" && product.onlinePaymentEnabled === false) throw new ApiError(`${product.title} is not eligible for online payment.`, 400);
-    const price = product.discountPrice || product.price;
-    return { product: product._id, category: product.category, title: product.title, image: product.images?.[0]?.url, quantity: item.quantity, price };
+    const price = product.effectivePrice;
+    return { product: product._id, category: product.category, title: product.title, image: product.images?.[0]?.url, quantity: item.quantity, price, basePrice: product.baseSellingPrice, offerId: product.appliedOffer?.id, offerName: product.appliedOffer?.name, offerPercentage: product.appliedOffer?.percentage, offerDiscount: product.discountAmount, lineOfferDiscount: product.discountAmount * item.quantity };
   });
 
   const couponResult = await validateCouponForItems({ code: payload.couponCode, userId, items: orderItems });

@@ -51,12 +51,13 @@ export default function ProductDetails() {
           <div className="grid gap-10 lg:grid-cols-2">
             <ProductGallery product={product} />
             <div className="lg:pl-8">
-              <div className="flex items-start justify-between gap-4"><p className="text-xs font-bold uppercase tracking-[0.22em] text-clay">{product.category} oil</p><WishlistToggle product={product} className="h-12 w-12 shrink-0" size={21} /></div>
+              <div className="flex items-start justify-between gap-4"><p className="text-xs font-bold uppercase tracking-[0.22em] text-clay">{product.category}</p><WishlistToggle product={product} className="h-12 w-12 shrink-0" size={21} /></div>
               <h1 className="mt-4 font-serif text-5xl font-semibold leading-tight lg:text-6xl">{product.name}</h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-ink/65">{product.description}</p>
               <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-ink/60"><Star size={17} className="fill-clay text-clay" /> {product.rating} rating · {product.volume}</div>
               <p className={`mt-3 text-xs font-bold uppercase tracking-[0.16em] ${product.stock <= 8 ? "text-clay" : "text-leaf"}`}>{product.stock <= 8 ? "Low stock" : "In stock"}</p>
               <div className="mt-6 flex items-end gap-3"><span className="text-3xl font-bold">{formatCurrency(product.price)}</span><span className="text-lg text-ink/40 line-through">{formatCurrency(product.mrp)}</span></div>
+              {product.appliedOffer && <div className="mt-3 rounded-xl bg-leaf/10 px-4 py-3 text-sm font-semibold text-leaf"><p>{product.appliedOffer.percentage}% OFF · {product.appliedOffer.name}</p>{product.appliedOffer.description && <p className="mt-1 text-ink/65">{product.appliedOffer.description}</p>}</div>}
               <div className="sticky bottom-0 z-20 -mx-4 mt-8 flex flex-col gap-4 border-t border-ink/10 bg-cream/95 p-4 backdrop-blur sm:static sm:mx-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
                 <QuantitySelector value={quantity} onChange={setQuantity} />
                 <AddToCartButton product={product} quantity={quantity} onAdded={handleAdded} className="min-h-14 flex-1 rounded-2xl px-7 text-base shadow-soft active:scale-[0.98] sm:min-h-[52px]" iconSize={20} />

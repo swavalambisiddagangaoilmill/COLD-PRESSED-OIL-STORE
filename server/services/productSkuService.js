@@ -2,6 +2,7 @@ import Category from "../models/Category.js";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
 import { packageDimensionsForSize, packedWeightForSize } from "../utils/shippingDefaults.js";
+import { isCanonicalProductCategory } from "../../shared/productCategories.js";
 
 function skuPart(value, fallback) {
   const clean = String(value || "")
@@ -12,9 +13,64 @@ function skuPart(value, fallback) {
   return clean || fallback;
 }
 
+function isDuplicateKey(error, field) {
+  return error?.code === 11000 && (
+    Object.hasOwn(error.keyPattern || {}, field) ||
+    Object.hasOwn(error.keyValue || {}, field)
+  );
+}
+
+function comparableImage(image = {}) {
+  return { url: image.url || "", publicId: image.publicId || "" };
+}
+
+function comparableVariant(variant = {}) {
+  return {
+    size: String(variant.size || "").trim(),
+    price: Number(variant.price),
+    mrp: Number(variant.mrp),
+    stock: Number(variant.stock),
+    images: (variant.images || []).map(comparableImage),
+  };
+}
+
+function isSameCreateRequest(existing, payload) {
+  const textArray = (values = []) => values.map((value) => String(value).trim());
+  const booleanFields = ["featured", "bestSeller", "newArrival", "codEnabled", "onlinePaymentEnabled", "returnEligible", "exchangeEligible", "isActive"];
+  const requested = {
+    title: String(payload.title || "").trim(),
+    description: String(payload.description || "").trim(),
+    benefits: textArray(payload.benefits),
+    tags: textArray(payload.tags).map((value) => value.toLowerCase()),
+    category: String(payload.category || ""),
+    price: Number(payload.price),
+    discountPrice: payload.discountPrice == null ? null : Number(payload.discountPrice),
+    stock: Number(payload.stock || 0),
+    size: String(payload.size || "").trim(),
+    images: (payload.images || []).map(comparableImage),
+    variants: (payload.variants || []).map(comparableVariant),
+    ...Object.fromEntries(booleanFields.map((field) => [field, payload[field] === undefined ? undefined : Boolean(payload[field])])),
+  };
+  const stored = {
+    title: existing.title,
+    description: existing.description,
+    benefits: textArray(existing.benefits),
+    tags: textArray(existing.tags).map((value) => value.toLowerCase()),
+    category: String(existing.category || ""),
+    price: Number(existing.price),
+    discountPrice: existing.discountPrice == null ? null : Number(existing.discountPrice),
+    stock: Number(existing.stock || 0),
+    size: existing.size || "",
+    images: (existing.images || []).map(comparableImage),
+    variants: (existing.variants || []).map(comparableVariant),
+    ...Object.fromEntries(booleanFields.map((field) => [field, payload[field] === undefined ? undefined : Boolean(existing[field])])),
+  };
+  return JSON.stringify(requested) === JSON.stringify(stored);
+}
+
 export async function generateProductSku(data) {
   const category = await Category.findById(data.category).select("name slug").lean();
-  if (!category) throw new ApiError("Select a valid product category.", 400);
+  if (!category || !isCanonicalProductCategory(category.name, category.slug)) throw new ApiError("Select one of the 16 valid product categories.", 400, [{ field: "category", message: "Product category is not valid." }]);
 
   const weight = Number(data.weight);
   const base = [
@@ -80,8 +136,17 @@ export async function createProductWithGeneratedSku(payload) {
     try {
       return await Product.create(data);
     } catch (error) {
-      const skuCollision = error?.code === 11000 && (error?.keyPattern?.sku || error?.keyValue?.sku);
-      if (!skuCollision || attempt === 4) throw error;
+      if (isDuplicateKey(error, "slug")) {
+        const existing = await Product.findOne({ slug: data.slug });
+        if (existing && isSameCreateRequest(existing, payload)) return existing;
+        throw new ApiError("A product with this title already exists.", 409, [{ field: "title", message: "Product title already exists." }]);
+      }
+      const skuCollision = isDuplicateKey(error, "sku") || isDuplicateKey(error, "variants.sku");
+      if (!skuCollision) throw error;
+      if (attempt === 4) {
+        const field = isDuplicateKey(error, "variants.sku") ? "variants.sku" : "sku";
+        throw new ApiError("A product with this SKU already exists. Please retry.", 409, [{ field, message: "SKU already exists." }]);
+      }
     }
   }
   throw new ApiError("Unable to generate a unique product SKU.", 409);

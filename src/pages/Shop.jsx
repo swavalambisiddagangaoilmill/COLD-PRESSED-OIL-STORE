@@ -45,9 +45,12 @@ export default function Shop() {
 
   useEffect(() => {
     const nextSearch = searchParams.get("q") || "";
+    const nextCategorySlug = searchParams.get("category");
     setSearch((current) => (current === nextSearch ? current : nextSearch));
     if (nextSearch) setCategory("All");
-  }, [searchParams]);
+    else if (categoriesReady && nextCategorySlug) setCategory(categories.find((item) => item.slug === nextCategorySlug)?.name || "All");
+    else if (categoriesReady) setCategory("All");
+  }, [categories, categoriesReady, searchParams]);
 
   useEffect(() => {
     if (!location.state?.resetShop) return;
@@ -73,6 +76,14 @@ export default function Shop() {
   const visible = useMemo(() => products.filter(() => !invalidSearch), [invalidSearch, products]);
   const changeCategory = (next) => {
     setCategory(next);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("q");
+    nextParams.delete("focus");
+    const selected = categories.find((item) => item.name === next);
+    if (selected?.slug) nextParams.set("category", selected.slug);
+    else nextParams.delete("category");
+    setSearch("");
+    setSearchParams(nextParams, { replace: true });
   };
 
   return (
