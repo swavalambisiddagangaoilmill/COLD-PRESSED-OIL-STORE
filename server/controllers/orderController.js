@@ -3,6 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendSuccess } from "../utils/apiResponse.js";
 import { createOrder, getAllOrders, getMyOrders, getOrderForUser, updateOrderStatus } from "../services/orderService.js";
 import { advanceMockShipment, createReadyToShipShipment, getShipmentTracking, syncShiprocketWebhook } from "../services/shiprocketService.js";
+import { writeAuditLog } from "../admin/utils/audit.js";
 
 export const createOrderHandler = asyncHandler(async (req, res) => {
   const order = await createOrder(req.user._id, req.body);
@@ -36,6 +37,7 @@ export const readyToShipHandler = asyncHandler(async (req, res) => {
 
 export const shiprocketWebhookHandler = asyncHandler(async (req, res) => {
   const order = await syncShiprocketWebhook(req.body, req.headers);
+  if (order.$locals?.webhookStatusChanged) await writeAuditLog(req, { action: order.shippingStatus === "delivered" ? "shipping.delivered" : "shipping.status_received", resourceType: "Order", resourceId: order._id, summary: `Shiprocket status updated to ${order.shippingStatus}`, after: { shippingStatus: order.shippingStatus, shiprocketShipmentId: order.shiprocketShipmentId, awbCode: order.awbCode } }).catch(() => undefined);
   sendSuccess(res, 200, "Shiprocket status synchronized", { orderId: order._id, shippingStatus: order.shippingStatus });
 });
 

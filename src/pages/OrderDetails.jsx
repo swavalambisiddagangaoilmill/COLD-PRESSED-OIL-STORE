@@ -1,5 +1,5 @@
 ﻿// Renders a user-owned order detail view from the backend.
-import { ArrowLeft, ExternalLink, Package } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, Package } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Breadcrumb from "../components/common/Breadcrumb.jsx";
@@ -35,7 +35,55 @@ const statusLabels = {
 };
 
 function formatDate(value) {
-  return value ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "-";
+  if (!value || Number.isNaN(new Date(value).getTime())) return "";
+  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+const timelineDefinitions = [
+  { key: "placed", title: "Order Placed", description: "Your order was received." },
+  { key: "confirmed", title: "Order Confirmed", description: "Your order has been confirmed and is being prepared." },
+  { key: "packed", title: "Order Packed", description: "Your order has been packed and is ready for pickup." },
+  { key: "waiting_for_pickup", title: "Waiting for Pickup", description: "Your package is ready and waiting for the Shiprocket delivery partner to pick it up." },
+  { key: "picked_up", title: "Picked Up", description: "Your package has been picked up and is on its way." },
+  { key: "in_transit", title: "In Transit", description: "Your package is moving through the delivery network." },
+  { key: "out_for_delivery", title: "Out for Delivery", description: "Your package is out for delivery." },
+  { key: "delivered", title: "Delivered", description: "Your order has been delivered." },
+];
+
+function historyDate(order, statuses) {
+  const entries = Array.isArray(order?.statusHistory) ? order.statusHistory : [];
+  return entries.find((entry) => entry && statuses.includes(entry.status))?.createdAt || "";
+}
+
+function buildTimeline(order) {
+  const orderStatus = order?.orderStatus;
+  const shippingStatus = order?.shippingStatus;
+  let currentStage = 1;
+  if (order?.readyToShipAt || ["packed", "shipped", "delivered"].includes(orderStatus)) currentStage = 2;
+  if (["shiprocket_order_created", "awb_assigned", "pickup_generated", "label_generated", "manifest_generated", "ready_for_pickup"].includes(shippingStatus)) currentStage = 3;
+  if (["picked_up", "shipped"].includes(shippingStatus)) currentStage = 4;
+  if (shippingStatus === "in_transit") currentStage = 5;
+  if (shippingStatus === "out_for_delivery") currentStage = 6;
+  if (shippingStatus === "delivered" || orderStatus === "delivered") currentStage = 7;
+  const dates = {
+    placed: historyDate(order, ["placed"]) || order?.createdAt,
+    confirmed: order?.confirmedAt || historyDate(order, ["confirmed"]),
+    packed: historyDate(order, ["packed"]) || order?.readyToShipAt,
+    waiting_for_pickup: historyDate(order, ["ready_for_pickup", "awb_assigned", "shiprocket_order_created"]) || order?.readyToShipAt,
+    picked_up: historyDate(order, ["picked_up", "shipped"]) || order?.handedOverAt,
+    in_transit: historyDate(order, ["in_transit"]),
+    out_for_delivery: historyDate(order, ["out_for_delivery"]),
+    delivered: historyDate(order, ["delivered"]),
+  };
+  return timelineDefinitions.map((step, index) => ({ ...step, complete: index <= currentStage, current: index === currentStage, date: dates[step.key] }));
+}
+
+function safeTrackingUrl(value) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    return url.protocol === "https:" && (host === "shiprocket.co" || host.endsWith(".shiprocket.co") || host === "shiprocket.in" || host.endsWith(".shiprocket.in")) ? url.toString() : "";
+  } catch { return ""; }
 }
 
 export default function OrderDetails() {
@@ -64,6 +112,9 @@ export default function OrderDetails() {
 
   const subtotal = (order?.products || []).reduce((sum, item) => sum + item.price * item.quantity, 0);
   const address = order?.shippingAddress;
+  const products = Array.isArray(order?.products) ? order.products.filter(Boolean) : [];
+  const timeline = order && order.orderStatus !== "placed" ? buildTimeline(order) : [];
+  const trackingUrl = safeTrackingUrl(order?.trackingUrl);
 
   return (
     <>
@@ -85,8 +136,23 @@ export default function OrderDetails() {
                   <div className="rounded-2xl bg-cream p-4"><p className="text-xs font-bold uppercase tracking-[0.14em] text-ink/40">Method</p><p className="mt-2 font-semibold uppercase">{order.paymentMethod}</p></div>
                 </div>
 
+                {order.orderStatus === "placed" ? (
+                  <section className="mt-8 rounded-2xl border border-clay/20 bg-cream p-5 sm:p-6" aria-label="Order confirmation status">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-clay">Waiting for Order Confirmation</p>
+                    <p className="mt-3 max-w-2xl text-sm leading-6 text-ink/60">Your order has been placed and is waiting for store confirmation. We'll notify you when your order is confirmed.</p>
+                    <div className="mt-5 grid gap-3 text-sm font-semibold"><p className="flex items-center gap-3 text-leaf"><span className="grid h-7 w-7 place-items-center rounded-full bg-leaf text-white"><Check size={15} /></span>Order Placed</p><p className="flex items-center gap-3 text-clay"><span className="h-3 w-3 rounded-full bg-clay ring-4 ring-clay/15" />Waiting for Confirmation</p></div>
+                  </section>
+                ) : order.orderStatus !== "cancelled" ? (
+                  <section className="mt-8" aria-label="Order tracking timeline">
+                    <h2 className="font-serif text-3xl font-semibold">Order journey</h2>
+                    <div className="mt-6 grid gap-0">
+                      {timeline.map((step, index) => <div key={step.key} className="relative grid grid-cols-[32px_1fr] gap-3 pb-6 last:pb-0 sm:grid-cols-[38px_1fr] sm:gap-4">{index < timeline.length - 1 && <span className={`absolute left-[15px] top-8 h-[calc(100%-1rem)] w-px sm:left-[18px] ${step.complete ? "bg-leaf/45" : "bg-ink/10"}`} />}<span className={`relative z-10 grid h-8 w-8 place-items-center rounded-full border-2 sm:h-9 sm:w-9 ${step.current ? "border-clay bg-clay text-white ring-4 ring-clay/15" : step.complete ? "border-leaf bg-leaf text-white" : "border-ink/15 bg-white text-transparent"}`}>{step.complete && !step.current && <Check size={16} />}{step.current && <span className="h-2.5 w-2.5 rounded-full bg-white" />}</span><div className="min-w-0 pt-0.5"><div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"><h3 className={`font-bold ${step.complete || step.current ? "text-ink" : "text-ink/40"}`}>{step.title}</h3>{step.date && <time className="text-xs font-semibold text-ink/45">{formatDate(step.date)}</time>}</div><p className={`mt-1 text-sm leading-6 ${step.complete || step.current ? "text-ink/60" : "text-ink/35"}`}>{step.description}</p></div></div>)}
+                    </div>
+                  </section>
+                ) : null}
+
                 <div className="mt-8 grid gap-4">
-                  {(order.products || []).map((item) => <article key={`${order._id}-${item.title}`} className="grid gap-4 rounded-2xl border border-ink/10 p-4 sm:grid-cols-[86px_1fr_auto] sm:items-center">
+                  {products.map((item, index) => <article key={`${order._id}-${item.product || item.title || index}`} className="grid gap-4 rounded-2xl border border-ink/10 p-4 sm:grid-cols-[86px_1fr_auto] sm:items-center">
                     <SafeImage src={item.image} alt={item.title} className="h-24 w-24 rounded-xl object-cover sm:h-20 sm:w-20" />
                     <div><h2 className="font-serif text-2xl font-semibold">{item.title}</h2><p className="mt-1 text-sm font-semibold text-ink/50">Quantity: {item.quantity}</p></div>
                     <div className="text-left sm:text-right"><p className="font-bold">{formatCurrency(item.price)}</p><p className="mt-1 text-sm text-ink/45">Subtotal {formatCurrency(item.price * item.quantity)}</p></div>
@@ -103,7 +169,7 @@ export default function OrderDetails() {
                   {order.courierName && <p className="mt-2 text-sm font-semibold text-ink/60">Courier: {order.courierName}</p>}
                   {order.awbCode && <p className="mt-1 text-sm font-semibold text-ink/60">AWB: {order.awbCode}</p>}
                   {order.estimatedDelivery && <p className="mt-1 text-sm text-ink/55">Estimated delivery: {formatDate(order.estimatedDelivery)}</p>}
-                  {order.trackingUrl ? <a href={order.trackingUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-xs font-bold text-white transition hover:bg-leaf">Track Order <ExternalLink size={14} /></a> : <p className="mt-3 text-xs font-semibold text-ink/45">Tracking appears here after courier assignment.</p>}
+                  {trackingUrl ? <a href={trackingUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-xs font-bold text-white transition hover:bg-leaf">Track Shipment <ExternalLink size={14} /></a> : <p className="mt-3 text-xs font-semibold text-ink/45">Tracking appears here after courier assignment.</p>}
                 </div>
                 {address && <div className="mt-6 rounded-2xl bg-cream p-4"><p className="font-semibold">Delivery Address</p><p className="mt-2 text-sm leading-6 text-ink/60">{address.fullName}, {address.phone}<br />{address.street}, {address.city}, {address.state} {address.postalCode}<br />{address.country || "India"}</p></div>}
                 <p className="mt-5 text-sm leading-6 text-ink/55">Order cancellation is available only when supported by the backend order workflow. This order is currently managed by the store team.</p>

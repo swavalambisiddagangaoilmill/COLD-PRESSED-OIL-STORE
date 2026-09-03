@@ -7,11 +7,24 @@ import { sendSuccess } from "../../utils/apiResponse.js";
 import { clearReadNotifications, createAdminNotification, deleteNotification, getNotificationPreferences, listAdminNotifications, markAllNotificationsRead, markNotification, saveNotificationPreferences } from "../../services/adminNotificationService.js";
 import { listAdminSessions, revokeAdminSessions } from "../../services/adminSessionService.js";
 import { addRestrictionNote, extendRestriction, getRestriction, listRestrictions, removeRestriction } from "../services/restrictionAdminService.js";
+import { createManualAttentionWorkbook, listFulfillmentOrders, submitFulfillmentBatch } from "../../services/fulfillmentService.js";
 
 export const dashboard = asyncHandler(async (_req, res) => sendSuccess(res, 200, "Dashboard fetched", await admin.dashboardData()));
 export const orders = asyncHandler(async (req, res) => sendSuccess(res, 200, "Orders fetched", await admin.listOrders(req.query)));
 export const orderStatus = asyncHandler(async (req, res) => { const order = await admin.updateOrderStatus(req.params.id, req.body.status); await writeAuditLog(req, { action: "order.status", resourceType: "Order", resourceId: order._id, summary: `Order moved to ${order.orderStatus}` }); sendSuccess(res, 200, "Order updated", { order }); });
 export const orderReadyToShip = asyncHandler(async (req, res) => { const order = await admin.readyToShip(req.params.id); await writeAuditLog(req, { action: "order.ready_to_ship", resourceType: "Order", resourceId: order._id, summary: "Order marked ready to ship" }); sendSuccess(res, 200, "Ready to ship", { order }); });
+export const fulfillmentOrders = asyncHandler(async (req, res) => sendSuccess(res, 200, "Fulfillment orders fetched", await listFulfillmentOrders(req.query)));
+export const bulkReadyToShip = asyncHandler(async (req, res) => {
+  const result = await submitFulfillmentBatch(req.body.orderIds);
+  await Promise.allSettled(result.results.map((item) => writeAuditLog(req, { action: item.success ? "shipping.submission_succeeded" : "shipping.submission_failed", resourceType: "Order", resourceId: item.orderId, summary: item.success ? `Shipment submitted${item.order?.awbCode ? ` with AWB ${item.order.awbCode}` : ""}` : item.reason })));
+  sendSuccess(res, 200, "Fulfillment batch processed", result);
+});
+export const fulfillmentExport = asyncHandler(async (_req, res) => {
+  const buffer = await createManualAttentionWorkbook();
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="shipment-attention-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  res.send(Buffer.from(buffer));
+});
 export const orderHandover = asyncHandler(async (req, res) => { const order = await admin.handoverShipment(req.params.id); await writeAuditLog(req, { action: "order.handed_over", resourceType: "Order", resourceId: order._id, summary: "Order handed over to Shiprocket" }); sendSuccess(res, 200, "Shipment handed over", { order }); });
 export const mockShippingNext = asyncHandler(async (req, res) => { const order = await admin.nextMockShipping(req.params.id); await writeAuditLog(req, { action: "shipping.mock_next", resourceType: "Order", resourceId: order._id, summary: `Mock shipment moved to ${order.shippingStatus}` }); sendSuccess(res, 200, "Mock shipment advanced", { order }); });
 export const products = asyncHandler(async (req, res) => sendSuccess(res, 200, "Products fetched", await admin.listProducts(req.query)));

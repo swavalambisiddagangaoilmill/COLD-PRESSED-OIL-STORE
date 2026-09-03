@@ -17,6 +17,7 @@ import { ApiError } from "../../utils/ApiError.js";
 import { slugify } from "../../utils/slugify.js";
 import { withOrderTotals } from "../../utils/orderTotals.js";
 import { createProductWithGeneratedSku, prepareProductVariants } from "../../services/productSkuService.js";
+import { sendOrderConfirmationEmail } from "../../services/emailService.js";
 
 const orderTransitions = {
   placed: ["confirmed", "cancelled"],
@@ -72,14 +73,22 @@ export async function listOrders(query) {
 export async function updateOrderStatus(id, nextStatus) {
   const order = await Order.findById(id);
   if (!order) throw new ApiError("Order not found.", 404);
+  if (order.orderStatus === nextStatus) {
+    if (nextStatus === "confirmed" && !order.confirmationEmailSentAt) await sendConfirmationOnce(order);
+    return order;
+  }
   if (!orderTransitions[order.orderStatus]?.includes(nextStatus)) throw new ApiError("Invalid order status transition.", 400);
   const previousStatus = order.orderStatus;
   const previousShippingStatus = order.shippingStatus;
   order.orderStatus = nextStatus;
+  const changedAt = new Date();
+  order.statusHistory = [...(order.statusHistory || []), { status: nextStatus, source: "admin", createdAt: changedAt }];
+  if (nextStatus === "confirmed") order.confirmedAt = order.confirmedAt || changedAt;
   if (nextStatus === "cancelled") order.shippingStatus = "cancelled";
   if (nextStatus === "shipped" && !["picked_up", "in_transit", "out_for_delivery"].includes(order.shippingStatus)) order.shippingStatus = "shipped";
   if (nextStatus === "delivered") order.shippingStatus = "delivered";
   await order.save();
+  if (nextStatus === "confirmed") await sendConfirmationOnce(order);
   if (nextStatus === "cancelled" && !order.inventoryRestoredAt) {
     try {
       await Product.bulkWrite(order.products.map((item) => ({ updateOne: { filter: { _id: item.product }, update: { $inc: { stock: item.quantity } } } })));
@@ -97,6 +106,15 @@ export async function updateOrderStatus(id, nextStatus) {
   const notification = nextStatus === "cancelled" ? { type: "order_cancelled", title: "Order Cancelled", description: `Order ${order._id} was cancelled.` } : nextStatus === "delivered" ? { type: "order_delivered", title: "Order Delivered", description: `Order ${order._id} was delivered.` } : null;
   if (notification) await Promise.allSettled([createAdminNotification({ category: "orders", ...notification, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } })]);
   return order;
+}
+
+async function sendConfirmationOnce(order) {
+  if (order.confirmationEmailSentAt) return;
+  await order.populate?.("user", "name email");
+  const result = await sendOrderConfirmationEmail(order);
+  if (result?.skipped) return;
+  order.confirmationEmailSentAt = new Date();
+  await order.save({ validateBeforeSave: false });
 }
 
 export async function readyToShip(id) { return createReadyToShipShipment(id); }

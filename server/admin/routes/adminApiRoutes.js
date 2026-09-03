@@ -28,6 +28,9 @@ router.put("/notification-preferences", requireAdminPermission("settings.manage"
 router.get("/sessions", requireAdminPermission("sessions.read"), controller.sessions);
 router.post("/sessions/revoke", requireAdminPermission("sessions.manage"), controller.revokeSessions);
 router.get("/orders", requireAdminPermission("orders.read"), controller.orders);
+router.get("/fulfillment", requireAdminPermission("shipping.read"), controller.fulfillmentOrders);
+router.post("/fulfillment/ready", requireAdminPermission("orders.ship"), [body("orderIds").isArray({ min: 1, max: 50 }).withMessage("Select between 1 and 50 orders."), body("orderIds.*").isMongoId().withMessage("Every order id must be valid.")], validate, controller.bulkReadyToShip);
+router.get("/fulfillment/export", requireAdminPermission("shipping.read"), controller.fulfillmentExport);
 router.put("/orders/:id/status", requireAdminPermission("orders.update"), controller.orderStatus);
 router.post("/orders/:id/ready-to-ship", requireAdminPermission("orders.ship"), controller.orderReadyToShip);
 router.post("/orders/:id/handover", requireAdminPermission("shipping.manage"), controller.orderHandover);

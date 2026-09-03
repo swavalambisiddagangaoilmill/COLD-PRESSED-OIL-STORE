@@ -32,7 +32,7 @@ function htmlLayout(title, body, preheader = "") {
 async function sendWithResend(message) {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: { Authorization: `Bearer ${env.email.resendApiKey}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${env.email.resendApiKey}`, "Content-Type": "application/json", ...(message.idempotencyKey ? { "Idempotency-Key": message.idempotencyKey } : {}) },
     body: JSON.stringify({ from: env.email.from, to: message.to, reply_to: message.replyTo || env.email.replyTo || undefined, subject: message.subject, text: message.text, html: message.html || htmlLayout(message.subject, paragraph(escapeHtml(message.text))) }),
   });
   const data = await response.json().catch(() => ({}));
@@ -78,6 +78,7 @@ export function sendCustomerAuthOtpEmail(email, code) {
 }
 
 export function sendNewDeviceEmail(user, details) {
+  if (user?.role !== "admin") return Promise.resolve({ skipped: true, reason: "ADMIN_ONLY_LOGIN_ALERT" });
   const browser = details.browser || "Unknown browser";
   const os = details.os || "Unknown OS";
   return sendMail({ to: user.email, subject: "New Swavalambi Siddaganga Oil Mill login detected", text: `New login detected from ${browser} on ${os}.`, html: htmlLayout("New login detected", `${paragraph("A new login to your account was detected.")}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;padding:12px 16px;background:#faf6ef">${detailRow("Browser", browser)}${detailRow("Device", os)}</table>${paragraph("If this was not you, secure your account immediately.", "color:#76685c;font-size:13px")}`, "A new login to your account was detected.") });
@@ -89,5 +90,40 @@ export function sendContactFormEmail(message) {
   const text = `${message.name} <${message.email}>\n${message.phone || ""}\n\n${message.message}`;
   const details = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;padding:12px 16px;background:#faf6ef">${detailRow("Name", message.name)}${detailRow("Email", message.email)}${detailRow("Phone", message.phone)}${detailRow("Subject", subject)}</table>`;
   return sendMail({ to: env.email.contactTo, replyTo: message.email, subject: `Swavalambi Siddaganga Oil Mill contact: ${subject}`, text, html: htmlLayout("New contact message", `${details}${paragraph(escapeHtml(message.message).replace(/\n/g, "<br>"))}`, `New website message from ${message.name}.`) });
+}
+
+export function sendOrderConfirmationEmail(order) {
+  if (!order?.user?.email) return Promise.resolve({ skipped: true, reason: "CUSTOMER_EMAIL_MISSING" });
+  const orderId = String(order._id);
+  const allProducts = (Array.isArray(order.products) ? order.products : []).filter(Boolean);
+  const products = allProducts.slice(0, 5);
+  const productRows = products.map((item) => `<tr><td style="padding:9px 12px 9px 0;border-bottom:1px solid #eee6da;color:#2f241d;font-size:14px">${escapeHtml(item.title || "Product")}</td><td align="center" style="padding:9px 8px;border-bottom:1px solid #eee6da;color:#76685c;font-size:14px">${escapeHtml(item.quantity || 1)}</td></tr>`).join("");
+  const remainingProducts = Math.max(0, allProducts.length - products.length);
+  const productText = `${products.map((item) => `${item.title || "Product"} x ${item.quantity || 1}`).join("\n")}${remainingProducts ? `\n+ ${remainingProducts} more item${remainingProducts === 1 ? "" : "s"}` : ""}`;
+  const trackUrl = `${env.clientUrl}/account/orders/${encodeURIComponent(orderId)}`;
+  const paymentStatus = String(order.paymentStatus || "pending").replaceAll("_", " ");
+  const amount = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(order.totalAmount) || 0);
+  const details = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;background:#faf6ef"><tr><td style="padding:12px 16px;color:#76685c;font-size:13px">Order ID</td><td align="right" style="padding:12px 16px;color:#2f241d;font-size:14px;font-weight:700;word-break:break-all">${escapeHtml(orderId)}</td></tr><tr><td style="padding:0 16px 12px;color:#76685c;font-size:13px">Payment</td><td align="right" style="padding:0 16px 12px;color:#2f241d;font-size:14px;text-transform:capitalize">${escapeHtml(paymentStatus)}</td></tr><tr><td style="padding:0 16px 12px;color:#76685c;font-size:13px">Total</td><td align="right" style="padding:0 16px 12px;color:#214f3b;font-size:15px;font-weight:700">${escapeHtml(amount)}</td></tr></table>`;
+  const items = productRows ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px"><tr><th align="left" style="padding:8px 12px 8px 0;color:#76685c;font-size:12px;text-transform:uppercase">Products</th><th align="center" style="padding:8px;color:#76685c;font-size:12px;text-transform:uppercase">Qty</th></tr>${productRows}${remainingProducts ? `<tr><td colspan="2" style="padding:10px 0;color:#76685c;font-size:13px">+ ${remainingProducts} more item${remainingProducts === 1 ? "" : "s"}</td></tr>` : ""}</table>` : "";
+  return sendMail({
+    to: order.user.email,
+    subject: `Order ${orderId} confirmed`,
+    text: `Your order #${orderId} has been confirmed and is now being prepared.\n\n${productText}\n\nTotal: ${amount}\nPayment: ${paymentStatus}\nTrack your order: ${trackUrl}`,
+    html: htmlLayout("Order confirmed", `${paragraph(`Your order <strong>#${escapeHtml(orderId)}</strong> has been confirmed and is now being prepared.`)}${details}${items}${actionButton("Track Your Order", trackUrl)}`, "Your order has been confirmed."),
+    idempotencyKey: `order-confirmed/${orderId}`,
+  });
+}
+
+export function sendShipmentReadyEmail(order) {
+  if (!order?.user?.email || !order.awbCode) return Promise.resolve({ skipped: true, reason: "TRACKING_DETAILS_MISSING" });
+  const orderId = String(order._id);
+  const trackUrl = `${env.clientUrl}/account/orders/${encodeURIComponent(orderId)}`;
+  const products = (Array.isArray(order.products) ? order.products : []).filter(Boolean).slice(0, 5);
+  const summary = products.map((item) => `${item.title || "Product"} x ${item.quantity || 1}`).join("\n");
+  const rows = products.map((item) => `<tr><td style="padding:8px 12px 8px 0;border-bottom:1px solid #eee6da;font-size:14px">${escapeHtml(item.title || "Product")}</td><td align="center" style="padding:8px;border-bottom:1px solid #eee6da;font-size:14px">${escapeHtml(item.quantity || 1)}</td></tr>`).join("");
+  const payment = String(order.paymentStatus || "pending").replaceAll("_", " ");
+  const details = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0;background:#faf6ef"><tr><td style="padding:12px 16px;color:#76685c;font-size:13px">Order ID</td><td align="right" style="padding:12px 16px;font-size:14px;font-weight:700;word-break:break-all">${escapeHtml(orderId)}</td></tr><tr><td style="padding:0 16px 12px;color:#76685c;font-size:13px">AWB</td><td align="right" style="padding:0 16px 12px;font-size:14px;font-weight:700">${escapeHtml(order.awbCode)}</td></tr><tr><td style="padding:0 16px 12px;color:#76685c;font-size:13px">Payment</td><td align="right" style="padding:0 16px 12px;font-size:14px;text-transform:capitalize">${escapeHtml(payment)}</td></tr></table>`;
+  const items = rows ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px">${rows}</table>` : "";
+  return sendMail({ to: order.user.email, subject: `Order ${orderId} is ready for shipment`, text: `Your order #${orderId} is ready for shipment.\n${summary}\nPayment: ${payment}\nAWB: ${order.awbCode}\nTrack your order: ${trackUrl}`, html: htmlLayout("Your order is ready for shipment", `${paragraph("Your order has been prepared and tracking information is now available.")}${details}${items}${actionButton("Track Your Order", trackUrl)}`, "Tracking is now available for your order."), idempotencyKey: `order-shipment-ready/${orderId}` });
 }
 

@@ -9,7 +9,7 @@ import AdminNotificationBell from "../components/AdminNotificationBell.jsx";
 
 const roleModules = {
   OWNER: ["*"],
-  ORDER_MANAGER: ["Dashboard", "Orders", "Shipping", "Customers", "Payments", "Reports", "Notifications"],
+  ORDER_MANAGER: ["Dashboard", "Orders", "Fulfillment", "Shipping", "Customers", "Payments", "Reports", "Notifications"],
   PRODUCT_MANAGER: ["Dashboard", "Products", "Inventory", "Categories", "Reports", "Notifications"],
   CONTENT_MANAGER: ["Dashboard", "Homepage Carousel", "Gallery", "Messages", "Notifications"],
 };
@@ -19,6 +19,7 @@ const BellIcon = Bell;
 const navItems = [
   { label: "Dashboard", to: "/admin", icon: LayoutDashboard, end: true },
   { label: "Orders", to: "/admin/orders", icon: ClipboardList },
+  { label: "Fulfillment", to: "/admin/fulfillment", icon: Package },
   { label: "Products", to: "/admin/products", icon: Package },
   { label: "Inventory", to: "/admin/inventory", icon: Boxes },
   { label: "Categories", to: "/admin/categories", icon: Home },

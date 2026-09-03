@@ -1,8 +1,21 @@
 // Admin API service layer using the existing shared API client.
-import { apiRequest } from "../../api/apiClient.js";
+import { apiRequest, getAuthToken } from "../../api/apiClient.js";
+import { API_BASE_URL } from "../../constants/apiConfig.js";
 
 const base = "/admin-panel";
 const promotionChanged = (request) => request.then((result) => { window.dispatchEvent(new Event("ss-oil-mill-promotions-changed")); return result; });
+async function downloadFulfillmentExport() {
+  const token = getAuthToken();
+  const response = await fetch(`${API_BASE_URL}${base}/fulfillment/export`, { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!response.ok) { const payload = await response.json().catch(() => ({})); throw new Error(payload.message || "Unable to download the order list."); }
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || "shipment-attention.xlsx";
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove();
+  URL.revokeObjectURL(url);
+}
 
 export const adminApi = {
   search: (q) => apiRequest(`${base}/search?q=${encodeURIComponent(q)}`),
@@ -11,6 +24,9 @@ export const adminApi = {
   orders: (query = "") => apiRequest(`${base}/orders${query}`),
   orderStatus: (id, status) => apiRequest(`${base}/orders/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
   readyToShip: (id) => apiRequest(`${base}/orders/${id}/ready-to-ship`, { method: "POST" }),
+  fulfillment: (query = "") => apiRequest(`${base}/fulfillment${query}`),
+  bulkReadyToShip: (orderIds) => apiRequest(`${base}/fulfillment/ready`, { method: "POST", body: JSON.stringify({ orderIds }) }),
+  downloadFulfillmentExport,
   handoverShipment: (id) => apiRequest(`${base}/orders/${id}/handover`, { method: "POST" }),
   mockNext: (id) => apiRequest(`${base}/orders/${id}/mock-shipment/next`, { method: "POST" }),
   products: (query = "") => apiRequest(`${base}/products${query}`),

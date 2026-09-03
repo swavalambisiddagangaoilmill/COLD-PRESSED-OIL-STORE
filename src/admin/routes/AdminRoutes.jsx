@@ -4,6 +4,7 @@ import AdminLayout from "../layouts/AdminLayout.jsx";
 import AdminNotificationsPage from "../pages/AdminNotificationsPage.jsx";
 import RestrictionManagementPage from "../pages/RestrictionManagementPage.jsx";
 import CarouselPage from "../pages/CarouselPage.jsx";
+import FulfillmentPage from "../pages/FulfillmentPage.jsx";
 import { AuditLogsPage, CategoriesPage, CouponsPage, CustomersPage, DashboardPage, GalleryPage, InventoryPage, MessagesPage, OffersPage, OrdersPage, PaymentsPage, ProductFormPage, ProductsPage, ReportsPage, SettingsPage, ShippingPage, UsersPage } from "../pages/AdminPages.jsx";
 
 export default function AdminRoutes() {
@@ -11,6 +12,7 @@ export default function AdminRoutes() {
     <Route element={<AdminLayout />}>
       <Route index element={<DashboardPage />} />
       <Route path="orders" element={<OrdersPage />} />
+      <Route path="fulfillment" element={<FulfillmentPage />} />
       <Route path="products" element={<ProductsPage />} />
       <Route path="products/new" element={<ProductFormPage />} />
       <Route path="inventory" element={<InventoryPage />} />
