@@ -88,6 +88,7 @@ const orderSchema = new mongoose.Schema(
     shipmentCreationStartedAt: { type: Date },
     shipmentAttemptCount: { type: Number, default: 0, min: 0 },
     shipmentLastAttemptAt: { type: Date },
+    cartCleanupCompletedAt: { type: Date },
     inventoryRestoredAt: { type: Date },
   },
   { timestamps: true }

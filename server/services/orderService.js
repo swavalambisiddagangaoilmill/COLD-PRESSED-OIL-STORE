@@ -60,23 +60,26 @@ export async function createOrder(userId, payload) {
     successfulUpdates.push({ product: item.product, quantity: item.quantity });
   }
 
+  let persistedOrder = null;
   try {
     const totals = calculateCheckoutTotals(orderItems, couponResult.discountAmount);
     const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: payload.paymentStatus || "pending", razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature, cashfreeOrderId: payload.cashfreeOrderId, cashfreeCfOrderId: payload.cashfreeCfOrderId, cashfreePaymentId: payload.cashfreePaymentId, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount, statusHistory: [{ status: "placed", source: "order", createdAt: new Date() }] });
+    persistedOrder = order;
     try {
       await consumeCouponUsageForOrder(order);
     } catch (error) {
       await Order.findByIdAndDelete(order._id);
+      persistedOrder = null;
       throw error;
     }
-    await clearPurchasedCart(userId, productIds);
+    await ensureOrderCartCleanup(order);
     await Promise.allSettled([
       createAdminNotification({ category: "orders", type: "new_order", title: "New Order", description: `Order ${order._id} was placed for Rs. ${totals.totalAmount}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } }),
       ...productIds.map((id) => Product.findById(id).then((product) => product && createInventoryNotifications(product))),
     ]);
     return order;
   } catch (error) {
-    await rollbackStock(successfulUpdates);
+    if (!persistedOrder) await rollbackStock(successfulUpdates);
     throw error;
   }
 }
@@ -115,5 +118,16 @@ export async function updateOrderStatus(orderId, payload) {
 
 export async function clearPurchasedCart(userId, productIds) {
   if (!productIds.length) return;
-  await User.updateOne({ _id: userId }, { $pull: { cart: { product: { $in: productIds } } } });
+  const result = await User.updateOne({ _id: userId }, { $pull: { cart: { product: { $in: productIds } } } });
+  if (result.matchedCount !== undefined && result.matchedCount !== 1) throw new ApiError("Customer cart could not be reconciled.", 409);
+}
+
+export async function ensureOrderCartCleanup(order) {
+  if (!order || order.cartCleanupCompletedAt) return order;
+  const productIds = (Array.isArray(order.products) ? order.products : []).map((item) => item?.product).filter(Boolean);
+  await clearPurchasedCart(order.user, productIds);
+  const completedAt = new Date();
+  await Order.updateOne({ _id: order._id, cartCleanupCompletedAt: null }, { $set: { cartCleanupCompletedAt: completedAt } });
+  order.cartCleanupCompletedAt = completedAt;
+  return order;
 }

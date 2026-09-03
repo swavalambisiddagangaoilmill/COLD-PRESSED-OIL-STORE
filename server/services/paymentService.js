@@ -7,7 +7,7 @@ import User from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { createAdminNotification } from "./adminNotificationService.js";
 import { calculateCheckoutTotals, validateCouponForItems } from "./couponService.js";
-import { createOrder as createStoreOrder } from "./orderService.js";
+import { createOrder as createStoreOrder, ensureOrderCartCleanup } from "./orderService.js";
 
 const UNAVAILABLE = "Online payments are temporarily unavailable.";
 const CURRENCY = "INR";
@@ -76,6 +76,7 @@ async function finalize(checkout) {
   const paymentId = String(verified.payment.cf_payment_id);
   const duplicate = await Order.findOne({ $or: [{ cashfreePaymentId: paymentId }, { cashfreeOrderId: checkout.cashfreeOrderId }] });
   if (duplicate) {
+    await ensureOrderCartCleanup(duplicate);
     await PaymentCheckout.updateOne({ _id: checkout._id }, { status: "paid", cashfreePaymentId: paymentId, order: duplicate._id });
     return duplicate;
   }

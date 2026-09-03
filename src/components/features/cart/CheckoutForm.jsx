@@ -10,7 +10,7 @@ import { useCart } from "../../../hooks/useCart.jsx";
 import { useServiceStatus } from "../../../hooks/useServiceStatus.js";
 import { formatCurrency } from "../../../utils/formatCurrency.js";
 import { writeGuestSession } from "../../../utils/guestSession.js";
-import { customerMessage } from "../../../utils/customerMessage.js";
+import { checkoutMessage } from "../../../utils/customerMessage.js";
 import { useToast } from "../feedback/ToastProvider.jsx";
 import Button from "../../ui/Button.jsx";
 import Input from "../../ui/Input.jsx";
@@ -177,7 +177,7 @@ export default function CheckoutForm() {
       if (paymentMethod === "cod") await submitCodOrder(orderPayload, validated.items);
       else await submitCashfreeOrder(orderPayload, validated.items);
     } catch (err) {
-      showCritical("Checkout could not be completed", customerMessage(err, "Please review your cart and try again. Your cart has not been changed."), { action: { label: "Review Cart", to: "/cart" } });
+      showCritical("Checkout could not be completed", checkoutMessage(err), { action: { label: "Review Cart", to: "/cart" } });
     } finally {
       submissionInFlightRef.current = false;
       setProcessingStep("");

@@ -2,17 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import User from "../models/User.js";
 import Product from "../models/Product.js";
-import { clearPurchasedCart } from "../services/orderService.js";
+import Order from "../models/Order.js";
+import { clearPurchasedCart, createOrder } from "../services/orderService.js";
 import { getCart } from "../services/cartService.js";
 import { getWishlist } from "../services/wishlistService.js";
 import { normalizeCartItem } from "../../src/services/cartService.js";
-import { customerMessage } from "../../src/utils/customerMessage.js";
+import { checkoutMessage, customerMessage } from "../../src/utils/customerMessage.js";
 import { reconcileCartWithCatalog, reconcileWishlistWithCatalog, removePurchasedItems } from "../../src/utils/reconcileGuestCommerce.js";
 
 const originalUpdateOne = User.updateOne;
 const originalFindById = User.findById;
 const originalProductFind = Product.find;
-test.afterEach(() => { User.updateOne = originalUpdateOne; User.findById = originalFindById; Product.find = originalProductFind; });
+const originalProductUpdate = Product.updateOne;
+const originalOrderCreate = Order.create;
+test.afterEach(() => { User.updateOne = originalUpdateOne; User.findById = originalFindById; Product.find = originalProductFind; Product.updateOne = originalProductUpdate; Order.create = originalOrderCreate; });
 
 function mockUserSelection(value) {
   User.findById = () => ({ select: () => ({ lean: async () => value }) });
@@ -41,12 +44,28 @@ test("wishlist read removes only missing or inactive product references", async 
 
 test("successful purchase removes only purchased persisted cart references", async () => {
   let operation;
-  User.updateOne = async (...args) => { operation = args; };
+  User.updateOne = async (...args) => { operation = args; return { matchedCount: 1 }; };
   await clearPurchasedCart("user-1", ["product-1", "product-2"]);
   assert.deepEqual(operation, [
     { _id: "user-1" },
     { $pull: { cart: { product: { $in: ["product-1", "product-2"] } } } },
   ]);
+});
+
+test("cart cleanup failure after order persistence never rolls inventory back or creates another order", async () => {
+  const product = { _id: { toString: () => "product-1" }, title: "Oil", stock: 5, price: 500, category: "category-1", codEnabled: true, images: [] };
+  Product.find = async () => [product];
+  const stockWrites = [];
+  Product.updateOne = async (...args) => { stockWrites.push(args); return { modifiedCount: 1 }; };
+  let createCalls = 0;
+  Order.create = async (value) => { createCalls += 1; return { ...value, _id: "order-1" }; };
+  User.updateOne = async () => { throw new Error("cart persistence unavailable"); };
+
+  await assert.rejects(createOrder("user-1", { products: [{ product: "product-1", quantity: 1 }], shippingAddress: {}, paymentMethod: "cod" }), /cart persistence unavailable/);
+
+  assert.equal(createCalls, 1);
+  assert.equal(stockWrites.length, 1);
+  assert.deepEqual(stockWrites[0][1], { $inc: { stock: -1 } });
 });
 
 test("cart normalization keeps authoritative stock, active state, and current price", () => {
@@ -76,4 +95,11 @@ test("customer messages do not expose raw database errors", () => {
   const message = customerMessage({ status: 409, message: "E11000 duplicate key collection users index cart.product_1" });
   assert.equal(message, "This request has already been processed. Refresh and try again.");
   assert.doesNotMatch(message, /E11000|index|collection/i);
+});
+
+test("checkout errors distinguish transport, stock, and post-payment cart reconciliation", () => {
+  assert.match(checkoutMessage({ status: 0 }), /could not connect/i);
+  assert.match(checkoutMessage({ status: 400, message: "One or more products do not have enough stock." }), /requested quantity/i);
+  assert.match(checkoutMessage({ status: 409, message: "Customer cart could not be reconciled." }), /order was created/i);
+  assert.doesNotMatch(checkoutMessage({ status: 500, message: "MongoServerError E11000" }), /Mongo|E11000/i);
 });
