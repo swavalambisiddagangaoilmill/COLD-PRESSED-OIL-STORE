@@ -29,11 +29,31 @@ function htmlLayout(title, body, preheader = "") {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title></head><body style="margin:0;padding:0;background:#f5f0e8;font-family:Arial,Helvetica,sans-serif;color:#2f241d"><span style="display:none!important;max-height:0;max-width:0;overflow:hidden;opacity:0">${escapeHtml(preheader || title)}</span><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background:#f5f0e8"><tr><td align="center" style="padding:28px 14px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #e6ddd0"><tr><td style="padding:22px 26px;border-bottom:3px solid #214f3b"><p style="margin:0;color:#214f3b;font-family:Georgia,'Times New Roman',serif;font-size:20px;font-weight:700">Swavalambi Siddaganga Oil Mill</p><p style="margin:5px 0 0;color:#8a5f3d;font-size:11px;letter-spacing:1.4px;text-transform:uppercase">Traditional cold pressed oils</p></td></tr><tr><td style="padding:30px 26px 24px"><h1 style="margin:0 0 18px;color:#214f3b;font-family:Georgia,'Times New Roman',serif;font-size:28px;line-height:1.2;font-weight:700">${safeTitle}</h1><div style="font-size:15px;line-height:1.65;color:#44372e">${body}</div></td></tr><tr><td style="padding:18px 26px;background:#214f3b;color:#ffffff"><p style="margin:0;font-size:12px;line-height:1.6">Swavalambi Siddaganga Oil Mill · Tumakuru, Karnataka</p><p style="margin:3px 0 0;font-size:11px;line-height:1.5;color:#d7e1db">This is an automated transactional email from our website.</p></td></tr></table></td></tr></table></body></html>`;
 }
 
+const emailThemeColors = new Map([
+  ["#214f3b", "#1F3A24"],
+  ["#2f241d", "#1F1F1F"],
+  ["#44372e", "#1F1F1F"],
+  ["#8a5f3d", "#2F5D3A"],
+  ["#76685c", "#66745F"],
+  ["#f5f0e8", "#F7F7F5"],
+  ["#faf6ef", "#F7F7F5"],
+  ["#e3d8c8", "#E4E7E2"],
+  ["#e6ddd0", "#E4E7E2"],
+  ["#eee6da", "#E4E7E2"],
+  ["#d7e1db", "#DCE5DE"],
+]);
+
+function applyCurrentWebsiteTheme(html = "") {
+  let themedHtml = html;
+  for (const [previousColor, currentColor] of emailThemeColors) themedHtml = themedHtml.replaceAll(previousColor, currentColor);
+  return themedHtml;
+}
+
 async function sendWithResend(message) {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${env.email.resendApiKey}`, "Content-Type": "application/json", ...(message.idempotencyKey ? { "Idempotency-Key": message.idempotencyKey } : {}) },
-    body: JSON.stringify({ from: env.email.from, to: message.to, reply_to: message.replyTo || env.email.replyTo || undefined, subject: message.subject, text: message.text, html: message.html || htmlLayout(message.subject, paragraph(escapeHtml(message.text))) }),
+    body: JSON.stringify({ from: env.email.from, to: message.to, reply_to: message.replyTo || env.email.replyTo || undefined, subject: message.subject, text: message.text, html: applyCurrentWebsiteTheme(message.html || htmlLayout(message.subject, paragraph(escapeHtml(message.text)))) }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new ApiError(data.message || "Email delivery failed.", 502);
