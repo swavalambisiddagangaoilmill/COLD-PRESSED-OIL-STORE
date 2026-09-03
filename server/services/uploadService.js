@@ -38,6 +38,40 @@ export async function uploadImage(file, folder = "products") {
   }
 }
 
+export async function uploadCarouselImage(file, orientation) {
+  if (!["desktop", "mobile"].includes(orientation)) throw new ApiError("Carousel image format is invalid.", 400);
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file?.mimetype)) throw new ApiError("Carousel images must be JPEG, PNG, or WebP.", 400);
+  if (!hasValidImageSignature(file)) throw new ApiError("Uploaded file is not a valid image.", 400);
+  if (!isServiceAvailable("cloudinary")) throw new ApiError("Image upload failed. Please try again.", 503);
+  const dataUri = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+  try {
+    const result = await cloudinary.uploader.upload(dataUri, {
+      folder: "ss-oil-mill/carousel",
+      resource_type: "image",
+      format: "webp",
+      transformation: [{ width: orientation === "desktop" ? 1920 : 1080, height: orientation === "desktop" ? 1080 : 1440, crop: "limit", quality: "auto:good" }],
+    });
+    const dimensionError = validateCarouselDimensions(result.width, result.height, orientation);
+    if (dimensionError) {
+      await cloudinary.uploader.destroy(result.public_id);
+      throw new ApiError(dimensionError, 400);
+    }
+    return { url: result.secure_url, publicId: result.public_id, width: result.width, height: result.height };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    logExternalFailure("cloudinary", error, { action: "upload_carousel_image", orientation });
+    throw new ApiError("Image upload failed. Please try again.", 503);
+  }
+}
+
+export function validateCarouselDimensions(width, height, orientation) {
+  const ratio = width / height;
+  if (orientation === "desktop" && ratio < 1.25) return "Please upload a horizontal desktop banner.";
+  if (orientation === "mobile" && ratio > 0.9) return "Please upload a vertical mobile banner.";
+  if (width < (orientation === "desktop" ? 800 : 480) || height < (orientation === "desktop" ? 300 : 640)) return `${orientation === "desktop" ? "Desktop" : "Mobile"} banner dimensions are too small.`;
+  return "";
+}
+
 export async function deleteImage(publicId) {
   if (!publicId) return { deleted: false };
   if (!isServiceAvailable("cloudinary")) return { deleted: false, provider: "cloudinary", reason: "CLOUDINARY_UNAVAILABLE" };

@@ -39,10 +39,15 @@ export const adminApi = {
     return apiRequest("/upload/image", { method: "POST", body: form });
   },
   carousel: () => apiRequest("/admin/carousel"),
-  createCarousel: (file) => {
+  saveCarousel: ({ id, desktopFile, mobileFile, removeDesktop = false, removeMobile = false, isActive = true, requestKey }) => {
     const form = new FormData();
-    form.append("image", file);
-    return promotionChanged(apiRequest("/admin/carousel", { method: "POST", body: form }));
+    if (desktopFile) form.append("desktopImage", desktopFile);
+    if (mobileFile) form.append("mobileImage", mobileFile);
+    form.append("removeDesktop", String(removeDesktop));
+    form.append("removeMobile", String(removeMobile));
+    form.append("isActive", String(isActive));
+    if (requestKey) form.append("requestKey", requestKey);
+    return promotionChanged(apiRequest(id ? `/admin/carousel/${id}` : "/admin/carousel", { method: id ? "PUT" : "POST", body: form }));
   },
   carouselStatus: (id, isActive) => promotionChanged(apiRequest(`/admin/carousel/${id}/status`, { method: "PATCH", body: JSON.stringify({ isActive }) })),
   deleteCarousel: (id) => promotionChanged(apiRequest(`/admin/carousel/${id}`, { method: "DELETE" })),

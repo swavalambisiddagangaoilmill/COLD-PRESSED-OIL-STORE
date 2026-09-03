@@ -1,20 +1,50 @@
-import { AdminPageHeader } from "../components/AdminUi.jsx";
+import { ArrowDown, ArrowUp, ImagePlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useToast } from "../../components/features/feedback/ToastProvider.jsx";
+import { AdminBadge, AdminButton, AdminModal, AdminPageHeader } from "../components/AdminUi.jsx";
+import { adminApi } from "../services/adminApi.js";
+
+const MAX_BYTES = 8 * 1024 * 1024;
+
+async function validateImage(file, orientation) {
+  if (!file) return;
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("Use a JPG, PNG, or WebP image.");
+  if (file.size > MAX_BYTES) throw new Error("Carousel images must be 8 MB or smaller.");
+  const url = URL.createObjectURL(file);
+  try {
+    const dimensions = await new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight }); image.onerror = reject; image.src = url; });
+    const ratio = dimensions.width / dimensions.height;
+    if (orientation === "desktop" && ratio < 1.25) throw new Error("Please upload a horizontal desktop banner.");
+    if (orientation === "mobile" && ratio > 0.9) throw new Error("Please upload a vertical mobile banner.");
+    if (dimensions.width < (orientation === "desktop" ? 800 : 480) || dimensions.height < (orientation === "desktop" ? 300 : 640)) throw new Error(`${orientation === "desktop" ? "Desktop" : "Mobile"} banner dimensions are too small.`);
+  } finally { URL.revokeObjectURL(url); }
+}
+
+function UploadArtboard({ kind, file, existing, removed, onFile, onRemove }) {
+  const input = useRef(null);
+  const portrait = kind === "mobile";
+  const preview = useMemo(() => file ? URL.createObjectURL(file) : removed ? "" : existing?.url, [existing?.url, file, removed]);
+  useEffect(() => () => { if (file && preview) URL.revokeObjectURL(preview); }, [file, preview]);
+  const select = async (next) => { await validateImage(next, kind); onFile(next); };
+  return <section className="grid gap-3"><div><p className="text-sm font-extrabold uppercase tracking-[0.12em] text-ink">{portrait ? "Mobile banner" : "Desktop banner"}</p><p className="mt-1 text-xs font-semibold text-ink/50">{portrait ? "Vertical / Portrait image · recommended 1080 × 1440 (3:4)" : "Horizontal / Landscape image · recommended 1920 × 1080 (16:9)"}</p></div><div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); select(event.dataTransfer.files?.[0]).catch((error) => onFile(null, error.message)); }} className={`relative grid place-items-center overflow-hidden border-2 border-dashed border-[var(--admin-border)] bg-linen/50 ${portrait ? "mx-auto aspect-[3/4] w-full max-w-[230px]" : "aspect-video w-full"}`}>{preview ? <img src={preview} alt={`${kind} preview`} className="h-full w-full object-cover" /> : <div className="p-6 text-center"><ImagePlus className="mx-auto text-[var(--admin-primary)]" /><p className="mt-3 text-sm font-bold">Drag and drop or Browse</p></div>}<input ref={input} type="file" className="hidden" accept="image/jpeg,image/png,image/webp" onChange={(event) => select(event.target.files?.[0]).catch((error) => onFile(null, error.message))} /></div><div className="flex justify-center gap-2"><AdminButton type="button" variant="secondary" onClick={() => input.current?.click()}>{preview ? "Replace" : "Browse"}</AdminButton>{preview && <AdminButton type="button" variant="danger" onClick={onRemove}>Remove</AdminButton>}</div></section>;
+}
+
+function SlideEditor({ item, onClose, onSaved }) {
+  const { showToast } = useToast();
+  const [desktopFile, setDesktopFile] = useState(null); const [mobileFile, setMobileFile] = useState(null);
+  const [removeDesktop, setRemoveDesktop] = useState(false); const [removeMobile, setRemoveMobile] = useState(false); const [saving, setSaving] = useState(false);
+  const requestKey = useRef(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
+  const [error, setError] = useState("");
+  const setFile = (kind, file, message) => { if (message) return setError(message); setError(""); if (kind === "desktop") { setDesktopFile(file); setRemoveDesktop(false); } else { setMobileFile(file); setRemoveMobile(false); } };
+  const save = async () => { if (saving) return; if (!desktopFile && !mobileFile && (removeDesktop || !item?.desktopImage?.url) && (removeMobile || !item?.mobileImage?.url)) return setError("Keep at least one image, or delete the slide."); setSaving(true); setError(""); try { const data = await adminApi.saveCarousel({ id: item?._id, desktopFile, mobileFile, removeDesktop, removeMobile, isActive: item?.isActive ?? true, requestKey: requestKey.current }); onSaved(data.item); showToast(item?._id ? "Carousel slide updated successfully." : "Carousel slide created successfully.", "success"); onClose(); } catch (err) { setError(err.message || "Carousel slide could not be saved."); } finally { setSaving(false); } };
+  return <AdminModal title={item?._id ? "Edit carousel slide" : "Create carousel slide"} open onClose={onClose} footer={<AdminButton loading={saving} disabled={saving} onClick={save}>Save slide</AdminButton>}><p className="mb-5 text-sm text-ink/55">Upload a dedicated composition for each screen shape. Images are resized, compressed, and stored as WebP automatically.</p>{error && <p role="alert" className="mb-4 border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}<div className="grid items-start gap-8 lg:grid-cols-[1fr_260px]"><UploadArtboard kind="desktop" file={desktopFile} existing={item?.desktopImage} removed={removeDesktop} onFile={(file, message) => setFile("desktop", file, message)} onRemove={() => { setDesktopFile(null); setRemoveDesktop(true); }} /><UploadArtboard kind="mobile" file={mobileFile} existing={item?.mobileImage} removed={removeMobile} onFile={(file, message) => setFile("mobile", file, message)} onRemove={() => { setMobileFile(null); setRemoveMobile(true); }} /></div></AdminModal>;
+}
 
 export default function CarouselPage() {
-  return (
-    <>
-      <AdminPageHeader
-        title="Homepage Carousel"
-        description="Carousel management is temporarily quarantined."
-      />
-      <section className="border border-[var(--admin-border)] bg-white p-6">
-        <p className="text-sm font-bold text-ink">Admin carousel uploads are paused.</p>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/60">
-          The homepage is currently using four static banner images deployed with the website.
-          Uploading, reordering, enabling, and deleting carousel images are unavailable until the
-          admin carousel system is restored.
-        </p>
-      </section>
-    </>
-  );
+  const { showToast } = useToast(); const [items, setItems] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [editing, setEditing] = useState(null); const [busy, setBusy] = useState("");
+  const load = () => { setLoading(true); adminApi.carousel().then((data) => setItems(data.items || [])).catch((err) => setError(err.message || "Carousel could not be loaded.")).finally(() => setLoading(false)); };
+  useEffect(load, []);
+  const saveRow = (item) => setItems((current) => current.some((value) => value._id === item._id) ? current.map((value) => value._id === item._id ? item : value) : [...current, item]);
+  const reorder = async (index, amount) => { const nextIndex = index + amount; if (nextIndex < 0 || nextIndex >= items.length || busy) return; const next = [...items]; [next[index], next[nextIndex]] = [next[nextIndex], next[index]]; setItems(next); setBusy("reorder"); try { const data = await adminApi.reorderCarousel(next.map((item) => item._id)); setItems(data.items); } catch (err) { load(); showToast(err.message || "Carousel order could not be saved.", "error"); } finally { setBusy(""); } };
+  return <><AdminPageHeader title="Homepage Carousel" description="Manage responsive homepage banners and their display order." action={<AdminButton onClick={() => setEditing({})}><Plus size={16} />Create slide</AdminButton>} />{error && <p className="border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">{error}</p>}{loading ? <p className="bg-white p-6 text-sm font-semibold">Loading carousel…</p> : <div className="grid gap-4">{items.map((item, index) => <article key={item._id} className="grid gap-4 border border-[var(--admin-border)] bg-white p-4 lg:grid-cols-[220px_90px_1fr_auto] lg:items-center"><img src={item.desktopImage?.url} alt="Desktop banner" className="aspect-video w-full object-cover" /><div className="mx-auto w-16">{item.mobileImage?.url ? <img src={item.mobileImage.url} alt="Mobile banner" className="aspect-[3/4] w-full object-cover" /> : <div className="grid aspect-[3/4] place-items-center bg-linen text-center text-[10px] font-bold text-ink/40">Desktop fallback</div>}</div><div><p className="font-bold">Slide {index + 1}</p><div className="mt-2 flex gap-2"><AdminBadge>{item.isActive ? "Active" : "Inactive"}</AdminBadge><span className="text-xs text-ink/45">Desktop + {item.mobileImage?.url ? "mobile" : "fallback"}</span></div></div><div className="flex flex-wrap gap-2"><AdminButton variant="secondary" disabled={index === 0 || busy} onClick={() => reorder(index, -1)}><ArrowUp size={15} /></AdminButton><AdminButton variant="secondary" disabled={index === items.length - 1 || busy} onClick={() => reorder(index, 1)}><ArrowDown size={15} /></AdminButton><AdminButton variant="secondary" onClick={() => setEditing(item)}><Pencil size={15} />Edit</AdminButton><AdminButton variant="secondary" onClick={async () => { setBusy(item._id); try { const data = await adminApi.carouselStatus(item._id, !item.isActive); saveRow(data.item); } finally { setBusy(""); } }}>{item.isActive ? "Disable" : "Activate"}</AdminButton><AdminButton variant="danger" onClick={async () => { if (!window.confirm("Delete this carousel slide?")) return; setBusy(item._id); try { await adminApi.deleteCarousel(item._id); setItems((current) => current.filter((value) => value._id !== item._id)); showToast("Slide deleted successfully.", "success"); } catch (err) { showToast(err.message || "Carousel slide could not be deleted.", "error"); } finally { setBusy(""); } }}><Trash2 size={15} /></AdminButton></div></article>)}{!items.length && <div className="border border-dashed border-[var(--admin-border)] bg-white p-10 text-center"><p className="font-bold">No carousel slides</p><p className="mt-2 text-sm text-ink/50">Create a responsive banner to restore the homepage carousel.</p></div>}</div>}{editing && <SlideEditor item={editing._id ? editing : null} onClose={() => setEditing(null)} onSaved={saveRow} />}</>;
 }

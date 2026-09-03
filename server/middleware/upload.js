@@ -20,3 +20,13 @@ export const upload = multer({
   fileFilter,
   limits: { fileSize: 3 * 1024 * 1024, files: 1 },
 });
+
+export const carouselUpload = multer({
+  storage,
+  fileFilter(req, file, cb) {
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype) || ![".jpg", ".jpeg", ".png", ".webp"].includes(extension)) return cb(new ApiError("Carousel images must be JPEG, PNG, or WebP.", 400));
+    cb(null, true);
+  },
+  limits: { fileSize: 8 * 1024 * 1024, files: 2 },
+});
