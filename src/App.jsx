@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import CookieConsentBanner from "./components/features/feedback/CookieConsentBanner.jsx";
 import ErrorBoundary from "./components/features/feedback/ErrorBoundary.jsx";
+import DevelopmentRenderError from "./components/features/feedback/DevelopmentRenderError.jsx";
 import GuestSessionNotice from "./components/features/feedback/GuestSessionNotice.jsx";
 import NetworkStatusBanner from "./components/features/feedback/NetworkStatusBanner.jsx";
 import RouteTransitionLoader from "./components/features/feedback/RouteTransitionLoader.jsx";
@@ -28,7 +29,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-cream text-ink">
-      <ErrorBoundary>
+      <ErrorBoundary key={pathname}>
+        <DevelopmentRenderError />
         <ScrollToTop />
         <RouteTransitionLoader />
         <SecurityAwareness />

@@ -436,8 +436,13 @@ export function SettingsPage() {
 
 function SimpleList({ title, description, loader, columns, row, action }) {
   const { data, loading, error } = useAdminData(loader);
-  const items = data?.items || [];
-  return <><AdminPageHeader title={title} description={description} action={action} /><State loading={loading} error={error} empty={!items.length} title={`No ${title.toLowerCase()} found.`} />{items.length ? <AdminTable columns={columns} rows={items.map((item, index) => <tr key={item._id || item.id || index}>{row(item).map((value, i) => <Cell key={i}>{i === row(item).length - 1 && ["Active", "Paid", "Failed", "Disabled", "NEW", "READ", "RESOLVED"].includes(String(value)) ? <AdminBadge>{statusText(value)}</AdminBadge> : value}</Cell>)}</tr>)} /> : null}</>;
+  const items = Array.isArray(data?.items) ? data.items.filter(Boolean) : [];
+  const renderRow = (item, index) => {
+    const values = row(item);
+    if (!Array.isArray(values)) return null;
+    return <tr key={item._id || item.id || index}>{values.map((value, i) => <Cell key={i}>{i === values.length - 1 && ["Active", "Paid", "Failed", "Disabled", "NEW", "READ", "RESOLVED"].includes(String(value)) ? <AdminBadge>{statusText(value)}</AdminBadge> : value}</Cell>)}</tr>;
+  };
+  return <><AdminPageHeader title={title} description={description} action={action} /><State loading={loading} error={error} empty={!items.length} title={`No ${title.toLowerCase()} found.`} />{items.length ? <AdminTable columns={columns} rows={items.map(renderRow)} /> : null}</>;
 }
 
 

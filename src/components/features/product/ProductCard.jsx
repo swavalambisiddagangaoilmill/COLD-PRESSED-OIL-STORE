@@ -37,6 +37,7 @@ function PremiumProductCard({ product }) {
 }
 
 function CatalogProductCard({ product }) {
+  const tags = Array.isArray(product.tags) ? product.tags : [];
   return (
     <motion.article initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-60px" }} transition={{ duration: 0.35 }} className="group overflow-hidden rounded-md border border-ink/10 bg-white transition duration-300 hover:border-leaf/35">
       <div className="relative overflow-hidden bg-linen">
@@ -44,7 +45,7 @@ function CatalogProductCard({ product }) {
         <WishlistToggle product={product} className="absolute right-3 top-3 h-10 w-10" />
       </div>
       <div className="p-5">
-        <div className="mb-3 flex flex-wrap gap-2">{product.tags.slice(0, 2).map((tag) => <span key={tag} className="border border-ink/10 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-ink/60">{tag}</span>)}</div>
+        {tags.length > 0 && <div className="mb-3 flex flex-wrap gap-2">{tags.slice(0, 2).map((tag) => <span key={tag} className="border border-ink/10 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-ink/60">{tag}</span>)}</div>}
         <Link to={`/product/${product.slug}`} className="font-serif text-2xl font-semibold leading-tight hover:text-leaf">{product.name}</Link>
         <div className="mt-3 flex items-center gap-2 text-sm text-ink/60"><Star size={16} className="fill-clay text-clay" /> {product.rating} / {product.volume}</div>
         <div className="mt-4 flex items-end gap-3"><span className="text-xl font-bold">{formatCurrency(product.price)}</span><span className="text-sm text-ink/40 line-through">{formatCurrency(product.mrp)}</span></div>
@@ -56,6 +57,7 @@ function CatalogProductCard({ product }) {
 }
 
 export default function ProductCard({ product, variant = "catalog" }) {
+  if (!product || typeof product !== "object" || !product.slug) return null;
   if (variant === "premium") return <PremiumProductCard product={product} />;
   return <CatalogProductCard product={product} />;
 }

@@ -21,7 +21,7 @@ export default function AdminNotificationBell() {
   const [data, setData] = useState({ items: [], unread: 0 });
   const [pending, setPending] = useState({});
   const ref = useRef(null);
-  const load = () => adminApi.notifications("?limit=8").then(setData).catch(() => {});
+  const load = () => adminApi.notifications("?limit=8").then((result) => setData({ ...result, items: Array.isArray(result?.items) ? result.items.filter(Boolean) : [], unread: Number(result?.unread) || 0 })).catch(() => {});
 
   useEffect(() => {
     load();
@@ -47,7 +47,7 @@ export default function AdminNotificationBell() {
     setPending((current) => ({ ...current, markAll: true }));
     try {
       await adminApi.markAllNotificationsRead();
-      setData((current) => ({ ...current, unread: 0, items: current.items.map((item) => ({ ...item, read: true })) }));
+      setData((current) => ({ ...current, unread: 0, items: (current?.items || []).filter(Boolean).map((item) => ({ ...item, read: true })) }));
     } finally {
       setPending((current) => ({ ...current, markAll: false }));
     }
@@ -56,7 +56,7 @@ export default function AdminNotificationBell() {
   const markRead = async (item) => {
     if (item.read || pending[item._id]) return;
     setPending((current) => ({ ...current, [item._id]: true }));
-    setData((current) => ({ ...current, unread: Math.max(0, (current.unread || 0) - 1), items: current.items.map((entry) => entry._id === item._id ? { ...entry, read: true } : entry) }));
+    setData((current) => ({ ...current, unread: Math.max(0, (current?.unread || 0) - 1), items: (current?.items || []).filter(Boolean).map((entry) => entry._id === item._id ? { ...entry, read: true } : entry) }));
     try {
       await adminApi.markNotification(item._id, true);
     } catch {

@@ -5,6 +5,9 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
 import AppProviders from "./providers/AppProviders.jsx";
 import "./styles/index.css";
+import { installGlobalErrorReporting } from "./utils/errorReporting.js";
+
+installGlobalErrorReporting();
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
