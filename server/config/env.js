@@ -67,7 +67,7 @@ export const env = {
     email: process.env.SHIPROCKET_EMAIL || "",
     password: process.env.SHIPROCKET_PASSWORD || "",
     pickupLocation: process.env.SHIPROCKET_PICKUP_LOCATION || "",
-    pickupPostcode: process.env.SHIPROCKET_PICKUP_POSTCODE || "",
+    pickupPostcode: "572106",
     webhookSecret: process.env.SHIPROCKET_WEBHOOK_SECRET || "",
     defaultWeightKg: Number(process.env.SHIPROCKET_DEFAULT_WEIGHT_KG) || 0,
     defaultLengthCm: Number(process.env.SHIPROCKET_DEFAULT_LENGTH_CM) || 0,

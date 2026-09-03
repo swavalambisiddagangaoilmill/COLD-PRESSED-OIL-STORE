@@ -6,7 +6,6 @@ import FAQ from "../components/features/home/FAQ.jsx";
 import FeaturedProducts from "../components/features/home/FeaturedProducts.jsx";
 import Gallery from "../components/features/home/Gallery.jsx";
 import Hero from "../components/features/home/Hero.jsx";
-import OfferBanner from "../components/features/feedback/OfferBanner.jsx";
 import InstagramGallery from "../components/features/home/InstagramGallery.jsx";
 import StorySection from "../components/features/home/StorySection.jsx";
 import Testimonials from "../components/features/home/Testimonials.jsx";
@@ -20,7 +19,6 @@ export default function Home() {
       <Hero />
       <EverydayEssentials />
       <FeaturedProducts />
-      <Container className="pt-6"><OfferBanner /></Container>
       <BrandStrip />
       <StorySection />
       <ExtractionProcess />

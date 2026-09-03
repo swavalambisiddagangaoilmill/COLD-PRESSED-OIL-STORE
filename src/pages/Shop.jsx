@@ -6,7 +6,6 @@ import ProductCard from "../components/features/product/ProductCard.jsx";
 import Container from "../components/ui/Container.jsx";
 import Input from "../components/ui/Input.jsx";
 import SectionHeading from "../components/ui/SectionHeading.jsx";
-import OfferBanner from "../components/features/feedback/OfferBanner.jsx";
 import { getCategories, getProducts } from "../services/catalogService.js";
 
 export default function Shop() {
@@ -93,7 +92,6 @@ export default function Shop() {
       <section className="section-padding">
         <Container>
           <SectionHeading eyebrow="Shop oils" title="Cold pressed staples for every kitchen" text="Filter by seed, compare flavor styles, and add your pantry favourites in a few calm clicks." />
-          <OfferBanner />
           <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_180px_180px] lg:gap-4">
             <Input inputRef={searchInputRef} placeholder="Search oils" value={search} onChange={(event) => updateSearch(event.target.value)} aria-label="Search products" className="h-11 text-xs sm:h-[52px] sm:text-sm" />
             <select value={category} onChange={(event) => changeCategory(event.target.value)} className="h-11 min-w-0 rounded-xl border border-ink/10 bg-white px-3 text-sm font-semibold outline-none sm:h-[52px] sm:px-4">

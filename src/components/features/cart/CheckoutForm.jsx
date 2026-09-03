@@ -4,7 +4,7 @@ import { CreditCard, Home, Truck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getAuthToken } from "../../../api/apiClient.js";
-import { createOrder, createPaymentIntent, verifyPayment } from "../../../services/checkoutService.js";
+import { createOrder, createPaymentIntent, getShippingQuote, verifyPayment } from "../../../services/checkoutService.js";
 import { fetchAccountProfile } from "../../../services/accountService.js";
 import { useCart } from "../../../hooks/useCart.jsx";
 import { formatCurrency } from "../../../utils/formatCurrency.js";
@@ -43,18 +43,20 @@ function formatOrderForSuccess(order, shippingAddress, items, total, profile) {
     billingAddress: shippingAddress,
     items,
     products: order?.products || items,
-    subtotal: items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0),
+    productSubtotal: Number(order?.productSubtotal ?? items.reduce((sum, item) => sum + Number(item.basePrice ?? item.price ?? 0) * Number(item.quantity || 1), 0)),
+    offerDiscount: Number(order?.offerDiscount ?? 0),
+    subtotal: Number(order?.subtotal ?? items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0)),
     shippingAmount: Number(order?.shippingAmount || 0),
     couponDiscount: Number(order?.couponDiscount || 0),
-    total: order?.totalAmount || total,
-    totalAmount: order?.totalAmount || total,
+    total: order?.totalAmount ?? total,
+    totalAmount: order?.totalAmount ?? total,
     estimatedDelivery: "2-5 business days",
   };
 }
 
 export default function CheckoutForm() {
   const navigate = useNavigate();
-  const { items, totals, completePurchase, revalidateCart, appliedCoupon } = useCart();
+  const { items, totals, completePurchase, revalidateCart, appliedCoupon, setShippingQuote } = useCart();
   const { showToast, showCritical } = useToast();
   const formRef = useRef(null);
   const submissionInFlightRef = useRef(false);
@@ -63,6 +65,8 @@ export default function CheckoutForm() {
   const [paymentMethod, setPaymentMethod] = useState("online");
   const [processingStep, setProcessingStep] = useState("");
   const [error, setError] = useState("");
+  const [pin, setPin] = useState("");
+  const [shippingLoading, setShippingLoading] = useState(false);
 
   const processing = Boolean(processingStep);
   const codAvailable = items.every((item) => item.codEnabled !== false);
@@ -84,6 +88,13 @@ export default function CheckoutForm() {
   useEffect(() => {
     if (!onlineAvailable && paymentMethod !== "cod") setPaymentMethod(codAvailable ? "cod" : "online");
   }, [codAvailable, onlineAvailable, paymentMethod]);
+  useEffect(() => {
+    if (!/^\d{6}$/.test(pin) || !items.length || !getAuthToken()) { setShippingQuote(null); return undefined; }
+    let active = true;
+    setShippingLoading(true);
+    const timer = window.setTimeout(() => getShippingQuote({ products: items.map((item) => ({ product: item._id || item.id, variant: item.variantId || undefined, quantity: item.quantity })), deliveryPincode: pin, paymentMethod: paymentMethod === "cod" ? "cod" : "cashfree", couponCode: appliedCoupon?.code }).then((data) => active && setShippingQuote(data.quote)).catch((err) => { if (active) { setShippingQuote(null); setError(err.message || "Shipping is unavailable for this PIN code."); } }).finally(() => active && setShippingLoading(false)), 400);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [appliedCoupon?.code, items, paymentMethod, pin, setShippingQuote]);
   const applyAddress = (address) => {
     const form = formRef.current;
     if (!form) return;
@@ -95,6 +106,7 @@ export default function CheckoutForm() {
     form.elements.city.value = address.city || "";
     form.elements.state.value = address.state || "";
     form.elements.pin.value = address.postalCode || "";
+    setPin(address.postalCode || "");
   };
 
   const getOrderPayload = (formElement, checkoutItems = items) => {
@@ -234,13 +246,13 @@ export default function CheckoutForm() {
           <div className="grid gap-5 sm:grid-cols-3">
             <Input label="City" name="city" required />
             <Input label="State" name="state" required />
-            <Input label="PIN code" name="pin" required />
+            <Input label="PIN code" name="pin" inputMode="numeric" maxLength="6" value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))} required />
           </div>
         </div>
       </div>
       <div className="mt-8">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold"><Truck size={20} /> Shipping</h2>
-        <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-leaf bg-leaf/5 p-4"><span><span className="block font-semibold">Fresh batch delivery</span><span className="text-sm text-ink/55">2-5 business days</span></span><input type="radio" name="shipping" value="fresh" defaultChecked /></label>
+        <div className="flex items-center justify-between rounded-2xl border border-leaf/30 bg-leaf/5 p-4"><span className="font-semibold">Shipping</span><span className="font-bold">{shippingLoading ? "Calculating…" : totals.shippingPending ? "Enter PIN code" : formatCurrency(totals.shipping)}</span></div>
       </div>
       <div className="mt-8">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold"><CreditCard size={20} /> Payment</h2>

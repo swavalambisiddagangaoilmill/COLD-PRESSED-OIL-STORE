@@ -13,8 +13,17 @@ export const createOrderValidator = [
   body("shippingAddress.street").trim().notEmpty().withMessage("Street is required."),
   body("shippingAddress.city").trim().notEmpty().withMessage("City is required."),
   body("shippingAddress.state").trim().notEmpty().withMessage("State is required."),
-  body("shippingAddress.postalCode").trim().notEmpty().withMessage("Postal code is required."),
+  body("shippingAddress.postalCode").trim().matches(/^\d{6}$/).withMessage("Valid 6-digit postal code is required."),
   body("paymentMethod").optional().isIn(["cod"]).withMessage("Online orders must be created through the payment endpoint."),
+];
+
+export const shippingQuoteValidator = [
+  body("products").isArray({ min: 1 }).withMessage("At least one product is required."),
+  body("products.*.product").isMongoId().withMessage("Valid product id is required."),
+  body("products.*.quantity").isInt({ min: 1 }).withMessage("Quantity must be at least 1."),
+  body("products.*.variant").optional({ nullable: true }).isMongoId().withMessage("Valid variant id is required."),
+  body("deliveryPincode").trim().matches(/^\d{6}$/).withMessage("Valid 6-digit delivery PIN code is required."),
+  body("paymentMethod").optional().isIn(["cod", "cashfree"]).withMessage("Valid payment method is required."),
 ];
 
 export const updateOrderStatusValidator = [

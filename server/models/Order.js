@@ -70,8 +70,15 @@ const orderSchema = new mongoose.Schema(
     cashfreeCfOrderId: { type: String },
     cashfreePaymentId: { type: String },
     orderStatus: { type: String, enum: ["placed", "confirmed", "packed", "shipped", "delivered", "cancelled"], default: "placed" },
+    productSubtotal: { type: Number, min: 0 },
+    offerDiscount: { type: Number, default: 0, min: 0 },
     subtotal: { type: Number, min: 0 },
     shippingAmount: { type: Number, default: 0, min: 0 },
+    shiprocketShippingCost: { type: Number, default: 0, min: 0 },
+    selectedCourierId: { type: Number },
+    selectedCourierService: { type: String },
+    deliveryPincode: { type: String },
+    shipmentWeight: { type: Number, min: 0 },
     taxAmount: { type: Number, default: 0, min: 0 },
     totalAmount: { type: Number, required: true, min: 0 },
     couponCode: { type: String, trim: true, uppercase: true },
@@ -103,7 +110,7 @@ const orderSchema = new mongoose.Schema(
     cartCleanupCompletedAt: { type: Date },
     inventoryRestoredAt: { type: Date },
   },
-  { timestamps: true }
+  { timestamps: true, toJSON: { transform(_doc, value) { delete value.shiprocketShippingCost; delete value.selectedCourierId; delete value.selectedCourierService; return value; } } }
 );
 
 orderSchema.index({ shiprocketShipmentId: 1 });

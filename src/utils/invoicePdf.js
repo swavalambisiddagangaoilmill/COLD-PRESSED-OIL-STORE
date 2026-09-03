@@ -78,13 +78,14 @@ function normalizeItems(order) {
   });
 }
 
-function totals(order, items) {
-  const subtotal = Number(order.subtotal ?? items.reduce((sum, item) => sum + item.total, 0));
+export function invoiceTotals(order, items = normalizeItems(order)) {
+  const effectiveSubtotal = Number(order.subtotal ?? items.reduce((sum, item) => sum + item.total, 0));
+  const productSubtotal = Number(order.productSubtotal ?? items.reduce((sum, item) => sum + item.listPrice * item.quantity, 0));
+  const offerDiscount = Number(order.offerDiscount ?? Math.max(0, productSubtotal - effectiveSubtotal));
   const shipping = Number(order.shippingAmount || order.shippingFee || order.deliveryCharge || 0);
-  const discount = Number(order.discountAmount || order.couponDiscount || 0);
-  const tax = Number(order.taxAmount || order.gstAmount || 0);
-  const grandTotal = Number(order.total ?? order.totalAmount ?? Math.max(0, subtotal + shipping + tax - discount));
-  return { subtotal, shipping, discount, tax, grandTotal };
+  const couponDiscount = Number(order.couponDiscount ?? order.discountAmount ?? 0);
+  const grandTotal = Number(order.totalAmount ?? order.total ?? Math.max(0, effectiveSubtotal + shipping - couponDiscount));
+  return { productSubtotal, offerDiscount, couponDiscount, shipping, grandTotal };
 }
 
 function wrapText(value, maxChars) {
@@ -110,7 +111,7 @@ function buildContent(order, hasLogo, pageInfo = { page: 1, pages: 1, last: true
   const invoiceNumber = getInvoiceNumber(order, orderNumber);
   const customer = getCustomer(order);
   const items = normalizeItems(order);
-  const total = totals(order, items);
+  const total = invoiceTotals(order, items);
   const rowHeight = items.length > 7 ? 18 : 22;
   const bodyFont = items.length > 7 ? 7.5 : 8.5;
 
@@ -214,19 +215,20 @@ function buildContent(order, hasLogo, pageInfo = { page: 1, pages: 1, last: true
     const totalsX = 360;
     const totalsY = Math.max(122, y - 8);
     const rows = [
-      ["Subtotal", money(total.subtotal)],
-      ["Discount", `- ${money(total.discount)}`],
+      ["Subtotal", money(total.productSubtotal)],
+      ["Offer Discount", `- ${money(total.offerDiscount)}`],
+      ...(total.couponDiscount > 0 ? [["Coupon", `- ${money(total.couponDiscount)}`]] : []),
       ["Shipping", money(total.shipping)],
-      ["Tax", money(total.tax)],
     ];
     rows.forEach(([label, value], index) => {
       const rowY = totalsY - index * 16;
       text(label, totalsX, rowY, 8.5, "F1");
       rightText(value, PAGE_WIDTH - MARGIN - 8, rowY, 8.5, "F1");
     });
-    line(totalsX, totalsY - 54, PAGE_WIDTH - MARGIN, totalsY - 54, 0.8);
-    text("Grand Total", totalsX, totalsY - 72, 11, "F2");
-    rightText(money(total.grandTotal), PAGE_WIDTH - MARGIN - 8, totalsY - 72, 11, "F2");
+    const dividerY = totalsY - rows.length * 16 + 10;
+    line(totalsX, dividerY, PAGE_WIDTH - MARGIN, dividerY, 0.8);
+    text("Final Total", totalsX, dividerY - 18, 11, "F2");
+    rightText(money(total.grandTotal), PAGE_WIDTH - MARGIN - 8, dividerY - 18, 11, "F2");
   } else {
     text("Items continue on the next page.", MARGIN + 8, Math.max(118, y - 4), 8.5, "F2");
   }
@@ -341,7 +343,7 @@ export function createInvoicePdfBlob(order, logo = null) {
   const chunkSize = Math.max(1, Math.ceil(sourceItems.length / pageCount));
   for (let index = 0; index < sourceItems.length; index += chunkSize) chunks.push(sourceItems.slice(index, index + chunkSize));
   if (!chunks.length) chunks.push([]);
-  const completeTotals = totals(order, normalizeItems(order));
-  const contents = chunks.map((items, index) => buildContent({ ...order, items, products: undefined, subtotal: completeTotals.subtotal, shippingAmount: completeTotals.shipping, discountAmount: completeTotals.discount, taxAmount: completeTotals.tax, totalAmount: completeTotals.grandTotal }, Boolean(logo), { page: index + 1, pages: chunks.length, last: index === chunks.length - 1 }));
+  const completeTotals = invoiceTotals(order, normalizeItems(order));
+  const contents = chunks.map((items, index) => buildContent({ ...order, items, products: undefined, productSubtotal: completeTotals.productSubtotal, offerDiscount: completeTotals.offerDiscount, couponDiscount: completeTotals.couponDiscount, shippingAmount: completeTotals.shipping, totalAmount: completeTotals.grandTotal }, Boolean(logo), { page: index + 1, pages: chunks.length, last: index === chunks.length - 1 }));
   return buildPdf(contents, logo);
 }

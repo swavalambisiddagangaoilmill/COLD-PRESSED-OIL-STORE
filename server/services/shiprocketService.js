@@ -153,19 +153,25 @@ function buildOrderPayload(order, packageDetails) {
   };
 }
 
-function selectCourier(serviceability) {
+export function selectCourier(serviceability) {
   const companies = serviceability?.data?.available_courier_companies || serviceability?.available_courier_companies || [];
   if (!Array.isArray(companies) || companies.length === 0) throw new ApiError("No Shiprocket courier is serviceable for this order.", 400);
-  const sorted = [...companies].sort((a, b) => {
-    const aSurface = /surface/i.test(`${a.mode || a.courier_name || ""}`) || a.is_surface === true;
-    const bSurface = /surface/i.test(`${b.mode || b.courier_name || ""}`) || b.is_surface === true;
-    if (aSurface !== bSurface) return aSurface ? -1 : 1;
-    return asNumber(a.freight_charge || a.rate) - asNumber(b.freight_charge || b.rate);
-  });
-  const selected = sorted[0];
+  const cost = (item) => asNumber(item.freight_charge || item.rate);
+  const days = (item) => asNumber(item.estimated_delivery_days || item.etd_hours) || 999;
+  const priced = companies.filter((item) => cost(item) > 0);
+  if (!priced.length) throw new ApiError("Shiprocket did not return a valid shipping rate.", 502);
+  const minimumCost = Math.min(...priced.map(cost));
+  const selected = priced.filter((item) => cost(item) <= minimumCost + 10).sort((a, b) => days(a) - days(b) || cost(a) - cost(b))[0];
   const courierId = selected.courier_company_id || selected.courier_id;
   if (!courierId) throw new ApiError("Shiprocket did not return a courier id.", 502);
-  return { courierId, courierName: selected.courier_name || selected.name || "Shiprocket courier", estimatedDelivery: selected.etd || selected.estimated_delivery_days };
+  return { courierId, courierName: selected.courier_name || selected.name || "Shiprocket courier", estimatedDelivery: selected.etd || selected.estimated_delivery_days, shippingCost: cost(selected) };
+}
+
+export async function getShippingRate({ deliveryPincode, weight, paymentMethod = "prepaid", declaredValue = 0 }) {
+  if (!/^\d{6}$/.test(String(deliveryPincode || ""))) throw new ApiError("Enter a valid 6-digit delivery PIN code.", 400);
+  if (!(Number(weight) > 0)) throw new ApiError("Shipment weight is required.", 400);
+  const data = await shiprocketRequest(`/courier/serviceability/?pickup_postcode=572106&delivery_postcode=${encodeURIComponent(deliveryPincode)}&weight=${Number(weight).toFixed(2)}&cod=${paymentMethod === "cod" ? 1 : 0}&declared_value=${Math.max(1, Math.round(declaredValue))}`);
+  return selectCourier(data);
 }
 
 function getTrackingUrl(awbCode) {

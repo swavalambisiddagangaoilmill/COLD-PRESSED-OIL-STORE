@@ -10,6 +10,7 @@ import { calculateCheckoutTotals, validateCouponForItems } from "./couponService
 import { createOrder as createStoreOrder, ensureOrderCartCleanup } from "./orderService.js";
 import { priceProducts } from "./offerPricingService.js";
 import { requiredStockLitres } from "./variantInventoryService.js";
+import { calculateShippingQuote } from "./shippingQuoteService.js";
 
 const UNAVAILABLE = "Online payments are temporarily unavailable.";
 const CURRENCY = "INR";
@@ -30,7 +31,7 @@ async function request(path, options = {}) {
   return data;
 }
 
-async function calculateAmount(productsPayload, userId, couponCode) {
+async function calculateAmount(productsPayload, userId, couponCode, paymentMethod = "cashfree") {
   const products = await Product.find({ _id: { $in: productsPayload.map((item) => item.product) }, isActive: true });
   const pricedProducts = await priceProducts(products);
   const byId = new Map(pricedProducts.map((product) => [product._id.toString(), product]));
@@ -42,17 +43,27 @@ async function calculateAmount(productsPayload, userId, couponCode) {
     if (item.variant && !variant) throw new ApiError("Selected variant does not belong to this product.", 400);
     if (variant?.isActive === false) throw new ApiError(`${product.title} (${variant.size}) is unavailable.`, 400);
     if ((variant ? variant.stock : product.stock) < (variant ? requiredStockLitres(variant, quantity) : quantity)) throw new ApiError(`${product.title}${variant ? ` · ${variant.size}` : ""} is no longer available in the requested quantity.`, 400);
-    if (product.onlinePaymentEnabled === false) throw new ApiError(`${product.title} is not eligible for online payment.`, 400);
-    return { product, variant: variant?._id, quantity, price: (variant || product).effectivePrice };
+    if (paymentMethod === "cod" && product.codEnabled === false) throw new ApiError(`${product.title} is not eligible for Cash on delivery.`, 400);
+    if (paymentMethod !== "cod" && product.onlinePaymentEnabled === false) throw new ApiError(`${product.title} is not eligible for online payment.`, 400);
+    return { product, variant: variant?._id, quantity, price: (variant || product).effectivePrice, litreSize: variant ? Number(variant.litres) : 1 };
   });
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const coupon = await validateCouponForItems({ code: couponCode, userId, items, subtotal });
-  return Number(calculateCheckoutTotals(items, coupon.discountAmount).totalAmount.toFixed(2));
+  return { items, couponDiscount: coupon.discountAmount, subtotal, };
+}
+
+export async function getCheckoutShippingQuote(userId, payload) {
+  const priced = await calculateAmount(payload.products || [], userId, payload.couponCode, payload.paymentMethod);
+  const quote = await calculateShippingQuote({ items: priced.items, deliveryPincode: payload.deliveryPincode, paymentMethod: payload.paymentMethod, declaredValue: Math.max(0, priced.subtotal - priced.couponDiscount) });
+  const totals = calculateCheckoutTotals(priced.items, priced.couponDiscount, quote.customerShippingCharge);
+  return { shippingAmount: quote.customerShippingCharge, subtotal: totals.subtotal, couponDiscount: totals.discountAmount, totalAmount: totals.totalAmount };
 }
 
 export async function createPaymentOrder(userId, payload) {
   const orderPayload = payload.order || {};
-  const amount = await calculateAmount(orderPayload.products || [], userId, orderPayload.couponCode);
+  const priced = await calculateAmount(orderPayload.products || [], userId, orderPayload.couponCode);
+  const shippingQuote = await calculateShippingQuote({ items: priced.items, deliveryPincode: orderPayload.shippingAddress?.postalCode, paymentMethod: "cashfree", declaredValue: Math.max(0, priced.subtotal - priced.couponDiscount) });
+  const amount = Number(calculateCheckoutTotals(priced.items, priced.couponDiscount, shippingQuote.customerShippingCharge).totalAmount.toFixed(2));
   if (amount < 1) throw new ApiError("Valid order products are required.", 400);
   const user = await User.findById(userId);
   if (!user) throw new ApiError("Customer account not found.", 404);
@@ -62,7 +73,7 @@ export async function createPaymentOrder(userId, payload) {
   const idempotencyKey = crypto.randomUUID();
   const provider = await request("/orders", { method: "POST", headers: { "x-idempotency-key": idempotencyKey, "x-request-id": idempotencyKey }, body: JSON.stringify({ order_id: orderId, order_amount: amount, order_currency: CURRENCY, customer_details: { customer_id: String(user._id), customer_name: String(payload.customer?.name || user.name || "Customer").slice(0, 100), customer_email: String(payload.customer?.email || user.email || "").slice(0, 100), customer_phone: phone }, order_meta: { return_url: `${env.clientUrl}/checkout?cashfree_order_id=${encodeURIComponent(orderId)}`, notify_url: `${env.backendPublicUrl}/api/payments/webhook` }, order_note: "Swavalambi Siddaganga Oil Mill order" }) });
   if (provider.order_id !== orderId || Number(provider.order_amount) !== amount || provider.order_currency !== CURRENCY || !provider.payment_session_id) throw new ApiError("Payment provider returned an invalid order.", 502);
-  await PaymentCheckout.create({ user: userId, amount, currency: CURRENCY, cashfreeOrderId: orderId, cashfreeCfOrderId: provider.cf_order_id, paymentSessionId: provider.payment_session_id, razorpayQrId: orderId, idempotencyKey, orderPayload, expiresAt: provider.order_expiry_time ? new Date(provider.order_expiry_time) : undefined });
+  await PaymentCheckout.create({ user: userId, amount, currency: CURRENCY, cashfreeOrderId: orderId, cashfreeCfOrderId: provider.cf_order_id, paymentSessionId: provider.payment_session_id, razorpayQrId: orderId, idempotencyKey, orderPayload: { ...orderPayload, _shippingQuote: shippingQuote }, expiresAt: provider.order_expiry_time ? new Date(provider.order_expiry_time) : undefined });
   return { orderId, paymentSessionId: provider.payment_session_id, environment: env.cashfree.environment === "production" ? "production" : "sandbox" };
 }
 
@@ -93,7 +104,8 @@ async function finalize(checkout) {
     throw new ApiError("Payment is already being processed.", 409);
   }
   try {
-    const order = await createStoreOrder(checkout.user, { ...checkout.orderPayload, paymentMethod: "cashfree", paymentStatus: "paid", cashfreeOrderId: checkout.cashfreeOrderId, cashfreeCfOrderId: verified.order.cf_order_id, cashfreePaymentId: paymentId });
+    const { _shippingQuote, ...orderPayload } = checkout.orderPayload;
+    const order = await createStoreOrder(checkout.user, { ...orderPayload, paymentMethod: "cashfree", paymentStatus: "paid", cashfreeOrderId: checkout.cashfreeOrderId, cashfreeCfOrderId: verified.order.cf_order_id, cashfreePaymentId: paymentId }, { trustedShippingQuote: _shippingQuote });
     await PaymentCheckout.updateOne({ _id: claimed._id }, { status: "paid", cashfreePaymentId: paymentId, order: order._id });
     await Promise.allSettled([createAdminNotification({ category: "payments", type: "payment_successful", title: "Payment Successful", description: `Payment received for order ${order._id}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/payments" } })]);
     return order;

@@ -65,7 +65,8 @@ test("cart cleanup failure after order persistence never rolls inventory back or
   Order.create = async (value) => { createCalls += 1; return { ...value, _id: "order-1" }; };
   User.updateOne = async () => { throw new Error("cart persistence unavailable"); };
 
-  await assert.rejects(createOrder("user-1", { products: [{ product: "product-1", quantity: 1 }], shippingAddress: {}, paymentMethod: "cod" }), /cart persistence unavailable/);
+  const trustedShippingQuote = { shiprocketShippingCost: 98, customerShippingCharge: 100, courierId: 1, courierName: "Test courier", deliveryPincode: "560001", shipmentWeight: 1 };
+  await assert.rejects(createOrder("user-1", { products: [{ product: "product-1", quantity: 1 }], shippingAddress: { postalCode: "560001" }, paymentMethod: "cod" }, { trustedShippingQuote }), /cart persistence unavailable/);
 
   assert.equal(createCalls, 1);
   assert.equal(stockWrites.length, 1);

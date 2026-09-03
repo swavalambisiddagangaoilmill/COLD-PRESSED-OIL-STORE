@@ -4,6 +4,9 @@ import { sendSuccess } from "../utils/apiResponse.js";
 import { createOrder, getAllOrders, getMyOrders, getOrderForUser, updateOrderStatus } from "../services/orderService.js";
 import { advanceMockShipment, createReadyToShipShipment, getShipmentTracking, syncShiprocketWebhook } from "../services/shiprocketService.js";
 import { writeAuditLog } from "../admin/utils/audit.js";
+import { getCheckoutShippingQuote } from "../services/paymentService.js";
+
+export const getShippingQuoteHandler = asyncHandler(async (req, res) => sendSuccess(res, 200, "Shipping calculated successfully", { quote: await getCheckoutShippingQuote(req.user._id, req.body) }));
 
 export const createOrderHandler = asyncHandler(async (req, res) => {
   const order = await createOrder(req.user._id, req.body);

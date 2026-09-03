@@ -74,7 +74,7 @@ export default function TrackOrder() {
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.22em] text-clay">Order {order._id}</p>
                 <h1 className="mt-3 font-serif text-4xl font-semibold sm:text-5xl">Track Order</h1>
-                <p className="mt-3 text-sm font-semibold text-ink/55">{order.courierName || "Courier assignment pending"}</p>
+                <p className="mt-3 text-sm font-semibold text-ink/55">{order.awbCode ? "Shipment tracking active" : "Courier assignment pending"}</p>
               </div>
               <div className="rounded-2xl bg-cream p-4 text-sm">
                 <p className="font-bold text-ink">AWB {order.awbCode || "Pending"}</p>

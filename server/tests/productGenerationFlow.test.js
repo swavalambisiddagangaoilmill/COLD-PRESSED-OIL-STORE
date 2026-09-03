@@ -38,9 +38,9 @@ function payload(size, variants = []) {
 }
 
 for (const [size, weight, dimensions] of [
-  ["1L", 1.05, { length: 10, width: 10, height: 30 }],
-  ["5L", 5.2, { length: 20, width: 15, height: 30 }],
-  ["16.5L", 17.2, { length: 30, width: 25, height: 30 }],
+  ["1L", 1, { length: 10, width: 10, height: 30 }],
+  ["5L", 5, { length: 20, width: 15, height: 30 }],
+  ["16.5L", 16.5, { length: 30, width: 25, height: 30 }],
 ]) {
   test(`product creation generates and validates automatic values for ${size}`, async () => {
     installModelValidationMocks();
@@ -60,7 +60,7 @@ test("product creation validates several fully generated variants", async () => 
   ]));
   assert.equal(product.variants.length, 3);
   assert.equal(new Set(product.variants.map((variant) => variant.sku)).size, 3);
-  assert.deepEqual(product.variants.map((variant) => variant.shippingWeight), [1.05, 5.2, 17.2]);
+  assert.deepEqual(product.variants.map((variant) => variant.shippingWeight), [1, 5, 16.5]);
   assert.ok(product.variants.every((variant) => variant.dimensions.length > 0 && variant.dimensions.width > 0 && variant.dimensions.height > 0));
 });
 

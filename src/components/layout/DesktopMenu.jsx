@@ -12,7 +12,7 @@ const desktopItems = [
   { label: "Contact", href: "/contact" },
 ];
 
-export default function DesktopMenu() {
+export default function DesktopMenu({ products = [] }) {
   const [active, setActive] = useState(null);
   const itemRefs = useRef([]);
 
@@ -55,6 +55,9 @@ export default function DesktopMenu() {
     active === "coldPressed" ||
     active === "essential" ||
     active === "about";
+  const productLinks = products.slice(0, 5).map((product) => ({ label: product.name, href: `/product/${product.slug}` }));
+  const activeData = megaMenus[active];
+  const menuData = activeData && active !== "about" && productLinks.length ? { ...activeData, links: productLinks } : activeData;
 
   return (
     <div
@@ -93,7 +96,7 @@ export default function DesktopMenu() {
         <MegaMenu
           menu={
             activeMega
-              ? { label: activeItem?.label, data: megaMenus[active] }
+              ? { label: activeItem?.label, data: menuData }
               : null
           }
           open={activeMega}

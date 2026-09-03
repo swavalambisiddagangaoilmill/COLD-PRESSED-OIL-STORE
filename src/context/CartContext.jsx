@@ -25,6 +25,7 @@ function readAppliedCoupon() {
 export function CartProvider({ children }) {
   const [items, setItems] = useState(() => readGuestSession().data.cart.filter(Boolean));
   const [appliedCoupon, setAppliedCoupon] = useState(readAppliedCoupon);
+  const [shippingQuote, setShippingQuote] = useState(null);
   const { authenticated } = useAuth();
   const { showToast } = useToast();
   const cartLoadRef = useRef(null);
@@ -188,6 +189,7 @@ export function CartProvider({ children }) {
   const completePurchase = useCallback(async (productIds = []) => {
     const remaining = removePurchasedItems(itemsRef.current, productIds);
     setAppliedCoupon(null);
+    setShippingQuote(null);
     window.sessionStorage.removeItem(COUPON_SESSION_KEY);
     setItems(remaining);
     if (!getAuthToken()) {
@@ -208,16 +210,16 @@ export function CartProvider({ children }) {
     const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const mrpTotal = items.reduce((sum, item) => sum + (item.mrp || item.price) * item.quantity, 0);
     const discount = mrpTotal - subtotal;
-    const shipping = subtotal > 999 || subtotal === 0 ? 0 : 80;
-    const tax = Math.round(subtotal * 0.05);
+    const shipping = Number(shippingQuote?.shippingAmount || 0);
+    const tax = 0;
     const couponDiscount = Math.min(appliedCoupon?.discountAmount || 0, subtotal);
-    return { subtotal, mrpTotal, discount, couponDiscount, shipping, tax, total: Math.max(0, subtotal + shipping + tax - couponDiscount) };
-  }, [appliedCoupon?.discountAmount, items]);
+    return { subtotal, mrpTotal, discount, couponDiscount, shipping, shippingPending: !shippingQuote, tax, total: Math.max(0, subtotal + shipping - couponDiscount) };
+  }, [appliedCoupon?.discountAmount, items, shippingQuote]);
 
   const isInCart = (id, variantId) => items.some((item) => cartKey(item) === cartKey(id, variantId));
   const getItemQuantity = (id, variantId) => items.find((item) => cartKey(item) === cartKey(id, variantId))?.quantity || 0;
 
-  return <CartContext.Provider value={{ items, addItem, updateQuantity, removeItem, clearCart, completePurchase, revalidateCart, totals, isInCart, getItemQuantity, appliedCoupon, validateCoupon, clearCoupon }}>{children}</CartContext.Provider>;
+  return <CartContext.Provider value={{ items, addItem, updateQuantity, removeItem, clearCart, completePurchase, revalidateCart, totals, shippingQuote, setShippingQuote, isInCart, getItemQuantity, appliedCoupon, validateCoupon, clearCoupon }}>{children}</CartContext.Provider>;
 }
 
 export function useCartContext() {

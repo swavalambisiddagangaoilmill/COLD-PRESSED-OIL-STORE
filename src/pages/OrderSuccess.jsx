@@ -12,11 +12,12 @@ export default function OrderSuccess() {
 
   const orderId = order._id || order.id;
   const items = order.items || order.products || [];
-  const total = order.total ?? order.totalAmount ?? items.reduce((sum, item) => sum + Number(item.total ?? (Number(item.price || 0) * Number(item.quantity || 1))), 0);
-  const subtotal = order.subtotal || items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
+  const total = order.totalAmount ?? order.total ?? items.reduce((sum, item) => sum + Number(item.total ?? (Number(item.price || 0) * Number(item.quantity || 1))), 0);
+  const effectiveSubtotal = Number(order.subtotal ?? items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0));
+  const productSubtotal = Number(order.productSubtotal ?? items.reduce((sum, item) => sum + Number(item.basePrice ?? item.originalPrice ?? item.price ?? 0) * Number(item.quantity || 1), 0));
+  const offerDiscount = Number(order.offerDiscount ?? Math.max(0, productSubtotal - effectiveSubtotal));
   const shipping = order.shippingAmount || order.shippingFee || order.deliveryCharge || 0;
-  const discount = order.discountAmount || order.couponDiscount || 0;
-  const tax = order.taxAmount || order.gstAmount || 0;
+  const couponDiscount = Number(order.couponDiscount ?? order.discountAmount ?? 0);
   const invoiceNumber = order.invoiceNumber || `INV-${String(orderId).slice(-8).toUpperCase()}`;
   const invoiceDate = order.date || new Date(order.createdAt || Date.now()).toLocaleString("en-IN");
   const estimatedDelivery = order.estimatedDelivery || "After courier assignment";
@@ -61,7 +62,6 @@ export default function OrderSuccess() {
                 <h2 className="font-serif text-3xl font-semibold">Delivery Address</h2>
                 <p className="mt-4 whitespace-pre-line leading-7 text-white/70">{order.address || formatAddress(order.shippingAddress)}</p>
                 {(order.courierName || order.awbCode) && <div className="mt-6 border-t border-white/10 pt-5 text-sm text-white/65">
-                  {order.courierName && <p>Courier: {order.courierName}</p>}
                   {order.awbCode && <p className="mt-1">AWB: {order.awbCode}</p>}
                 </div>}
                 <div className="mt-6 border-t border-white/10 pt-5">
@@ -122,7 +122,7 @@ export default function OrderSuccess() {
                   const id = item.id || item.product || name;
                   const quantity = Number(item.quantity || 1);
                   const price = Number(item.price || 0);
-                  const listPrice = Number(item.originalPrice || item.listPrice || price);
+                  const listPrice = Number(item.basePrice || item.originalPrice || item.listPrice || price);
                   const itemDiscount = Math.max(0, listPrice - price);
                   return (
                     <tr key={id} className="border-b border-ink/10">
@@ -138,12 +138,12 @@ export default function OrderSuccess() {
               </tbody>
             </table>
             <div className="ml-auto mt-6 max-w-sm space-y-2 text-sm">
-              <InvoiceRow label="Subtotal" value={subtotal} />
+              <InvoiceRow label="Subtotal" value={productSubtotal} />
+              <InvoiceRow label="Offer Discount" value={-offerDiscount} />
+              {couponDiscount > 0 && <InvoiceRow label="Coupon" value={-couponDiscount} />}
               <InvoiceRow label="Shipping" value={shipping} />
-              {tax > 0 && <InvoiceRow label="Taxes" value={tax} />}
-              {discount > 0 && <InvoiceRow label="Discount" value={-discount} />}
               <div className="flex justify-between border-t border-ink/15 pt-3 text-lg font-bold">
-                <span>Total</span>
+                <span>Final Total</span>
                 <span>{formatCurrency(total)}</span>
               </div>
             </div>

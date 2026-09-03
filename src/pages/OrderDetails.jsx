@@ -110,7 +110,11 @@ export default function OrderDetails() {
     return () => { active = false; };
   }, [id]);
 
-  const subtotal = (order?.products || []).reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const effectiveSubtotal = Number(order?.subtotal ?? (order?.products || []).reduce((sum, item) => sum + item.price * item.quantity, 0));
+  const productSubtotal = Number(order?.productSubtotal ?? (order?.products || []).reduce((sum, item) => sum + Number(item.basePrice ?? item.price ?? 0) * Number(item.quantity || 1), 0));
+  const offerDiscount = Number(order?.offerDiscount ?? Math.max(0, productSubtotal - effectiveSubtotal));
+  const couponDiscount = Number(order?.couponDiscount ?? order?.discountAmount ?? 0);
+  const shipping = Number(order?.shippingAmount ?? 0);
   const address = order?.shippingAddress;
   const products = Array.isArray(order?.products) ? order.products.filter(Boolean) : [];
   const timeline = order && order.orderStatus !== "placed" ? buildTimeline(order) : [];
@@ -162,11 +166,10 @@ export default function OrderDetails() {
 
               <aside className="h-max rounded-[2rem] border border-ink/10 bg-white p-5 shadow-sm sm:p-6">
                 <h2 className="font-serif text-3xl font-semibold">Summary</h2>
-                <div className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><span className="text-ink/55">Subtotal</span><span className="font-semibold">{formatCurrency(subtotal)}</span></div><div className="flex justify-between border-t border-ink/10 pt-3 text-lg font-bold"><span>Total</span><span>{formatCurrency(order.totalAmount || subtotal)}</span></div></div>
+                <div className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><span className="text-ink/55">Subtotal</span><span className="font-semibold">{formatCurrency(productSubtotal)}</span></div><div className="flex justify-between"><span className="text-ink/55">Offer Discount</span><span className="font-semibold">{formatCurrency(-offerDiscount)}</span></div>{couponDiscount > 0 && <div className="flex justify-between"><span className="text-ink/55">Coupon</span><span className="font-semibold">{formatCurrency(-couponDiscount)}</span></div>}<div className="flex justify-between"><span className="text-ink/55">Shipping</span><span className="font-semibold">{formatCurrency(shipping)}</span></div><div className="flex justify-between border-t border-ink/10 pt-3 text-lg font-bold"><span>Final Total</span><span>{formatCurrency(order.totalAmount ?? Math.max(0, effectiveSubtotal + shipping - couponDiscount))}</span></div></div>
                 <div className="mt-6 rounded-2xl bg-cream p-4">
                   <p className="font-semibold">Delivery</p>
                   <p className="mt-2 text-sm leading-6 text-ink/60">{statusLabels[order.shippingStatus] || "Preparing Shipment"}</p>
-                  {order.courierName && <p className="mt-2 text-sm font-semibold text-ink/60">Courier: {order.courierName}</p>}
                   {order.awbCode && <p className="mt-1 text-sm font-semibold text-ink/60">AWB: {order.awbCode}</p>}
                   {order.estimatedDelivery && <p className="mt-1 text-sm text-ink/55">Estimated delivery: {formatDate(order.estimatedDelivery)}</p>}
                   {trackingUrl ? <a href={trackingUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-xs font-bold text-white transition hover:bg-leaf">Track Shipment <ExternalLink size={14} /></a> : <p className="mt-3 text-xs font-semibold text-ink/45">Tracking appears here after courier assignment.</p>}

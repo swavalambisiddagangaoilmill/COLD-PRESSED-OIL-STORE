@@ -40,12 +40,12 @@ export function couponDateBounds(coupon) {
   };
 }
 
-export function calculateCheckoutTotals(items = [], couponDiscount = 0) {
+export function calculateCheckoutTotals(items = [], couponDiscount = 0, shippingAmount = 0) {
   const subtotal = items.reduce((sum, item) => sum + lineTotal(item), 0);
-  const shippingAmount = subtotal > 999 || subtotal === 0 ? 0 : 80;
-  const taxAmount = Math.round(subtotal * 0.05);
+  const safeShippingAmount = Math.max(0, Number(shippingAmount) || 0);
+  const taxAmount = 0;
   const discountAmount = Math.max(0, Math.min(subtotal, Math.round(Number(couponDiscount) || 0)));
-  return { subtotal, shippingAmount, taxAmount, discountAmount, totalAmount: Math.max(0, subtotal + shippingAmount + taxAmount - discountAmount) };
+  return { subtotal, shippingAmount: safeShippingAmount, taxAmount, discountAmount, totalAmount: Math.max(0, subtotal + safeShippingAmount - discountAmount) };
 }
 
 export function assertCouponEligibility(coupon, now = new Date()) {

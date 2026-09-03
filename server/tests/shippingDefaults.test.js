@@ -6,11 +6,11 @@ test("common product sizes receive deterministic packed weights in kg", () => {
   assert.equal(packedWeightForSize("250ml"), 0.3);
   assert.equal(packedWeightForSize("500 ml"), 0.55);
   assert.equal(packedWeightForSize("750ML"), 0.8);
-  assert.equal(packedWeightForSize("1L"), 1.05);
+  assert.equal(packedWeightForSize("1L"), 1);
   assert.equal(packedWeightForSize("2 litres"), 2.1);
-  assert.equal(packedWeightForSize("5L"), 5.2);
+  assert.equal(packedWeightForSize("5L"), 5);
   assert.equal(packedWeightForSize("10L"), 10.5);
-  assert.equal(packedWeightForSize("16.5L"), 17.2);
+  assert.equal(packedWeightForSize("16.5L"), 16.5);
 });
 
 test("other valid ml and litre sizes use the deterministic fallback", () => {

@@ -7,6 +7,7 @@ import { usePopup } from "../../context/PopupContext.jsx";
 import { useCart } from "../../hooks/useCart.jsx";
 import { useWishlist } from "../../context/WishlistContext.jsx";
 import useTypewriterPlaceholder from "../../hooks/useTypewriterPlaceholder.js";
+import { getNavbarProducts } from "../../services/catalogService.js";
 import DesktopMenu from "./DesktopMenu.jsx";
 import MobileDrawer from "./MobileDrawer.jsx";
 import MobileSearchPanel from "./MobileSearchPanel.jsx";
@@ -56,6 +57,7 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [navbarProducts, setNavbarProducts] = useState([]);
   const mobileSearchInputRef = useRef(null);
   const desktopSearchInputRef = useRef(null);
   const location = useLocation();
@@ -74,6 +76,12 @@ export default function Navbar() {
     await logout();
     navigate("/login", { replace: true });
   };
+
+  useEffect(() => {
+    let active = true;
+    getNavbarProducts().then((products) => active && setNavbarProducts(products)).catch(() => active && setNavbarProducts([]));
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -264,7 +272,7 @@ export default function Navbar() {
             {mobileSearchOpen && <button type="button" aria-label={searchValue ? "Clear search" : "Close search"} onClick={() => searchValue ? setSearchValue("") : closeMobileSearch()} className="grid h-8 w-8 place-items-center text-ink/55 hover:text-leaf"><X size={17} /></button>}
           </form>
         </div>
-        <DesktopMenu />
+        <DesktopMenu products={navbarProducts} />
       </header>
       <MobileSearchPanel open={mobileSearchOpen} query={searchValue} onQueryChange={(value) => { setSearchValue(value); window.setTimeout(focusActiveSearchInput, 0); }} onClose={finishMobileSearchNavigation} />
       <MobileDrawer
@@ -275,6 +283,7 @@ export default function Navbar() {
         authenticated={authenticated}
         isAdmin={isAdmin}
         onLogout={handleLogout}
+        products={navbarProducts}
       />
     </>
   );

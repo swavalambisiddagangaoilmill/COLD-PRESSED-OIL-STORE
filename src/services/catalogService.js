@@ -78,6 +78,13 @@ export async function getEverydayEssentials() {
   return productListFrom(data).slice(0, 5);
 }
 
+export async function getNavbarProducts() {
+  const featured = await getProducts({ limit: 5, featured: true, sort: "featured" });
+  if (featured.products.length >= 4) return featured.products.slice(0, 5);
+  const catalog = await getProducts({ limit: 5, sort: "featured" });
+  return [...featured.products, ...catalog.products.filter((product) => !featured.products.some((item) => item.id === product.id))].slice(0, 5);
+}
+
 export async function getEssentialOilProducts() {
   const categories = await getCategories().catch(() => []);
   const essential = categories.find((item) => item.name?.toLowerCase() === "essential oils" || item.slug === "essential-oils");

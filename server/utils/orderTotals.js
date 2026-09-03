@@ -8,6 +8,10 @@ export function withOrderTotals(order) {
   const source = order.toObject ? order.toObject() : { ...order };
   source.products = (source.products || []).map((item) => ({ ...item, total: orderItemTotal(item) }));
   const calculatedSubtotal = source.products.reduce((sum, item) => sum + item.total, 0);
+  const calculatedProductSubtotal = source.products.reduce((sum, item) => sum + Number(item.basePrice ?? item.price ?? 0) * Number(item.quantity || 1), 0);
+  const calculatedOfferDiscount = source.products.reduce((sum, item) => sum + Number(item.lineOfferDiscount ?? Math.max(0, Number(item.basePrice ?? item.price ?? 0) - Number(item.price || 0)) * Number(item.quantity || 1)), 0);
+  source.productSubtotal = source.productSubtotal ?? calculatedProductSubtotal;
+  source.offerDiscount = source.offerDiscount ?? calculatedOfferDiscount;
   source.subtotal = source.subtotal ?? calculatedSubtotal;
   source.shippingAmount = source.shippingAmount ?? 0;
   source.couponDiscount = source.couponDiscount ?? source.discountAmount ?? 0;

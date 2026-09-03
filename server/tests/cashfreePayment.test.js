@@ -17,16 +17,24 @@ test.afterEach(() => { global.fetch = original.fetch; Product.find = original.pr
 
 test("Cashfree session is created server-side and response exposes no secret", async () => {
   Object.assign(env.cashfree, { environment: "sandbox", clientId: "client-id", clientSecret: "client-secret", apiVersion: "2025-01-01" });
+  Object.assign(env.shiprocket, { email: "shiprocket@example.com", password: "secret", pickupLocation: "Primary", pickupPostcode: "572106" });
   Product.find = async () => [{ _id: { toString: () => "64b000000000000000000001" }, title: "Oil", stock: 10, price: 650, onlinePaymentEnabled: true }];
   User.findById = async () => ({ _id: "user-id", name: "Customer", email: "customer@example.com", phone: "9876543210" });
   let stored, sent;
   PaymentCheckout.create = async (value) => { stored = value; return value; };
-  global.fetch = async (_url, options) => { sent = { headers: options.headers, body: JSON.parse(options.body) }; return { ok: true, json: async () => ({ order_id: sent.body.order_id, order_amount: sent.body.order_amount, order_currency: "INR", cf_order_id: "123", payment_session_id: "safe-session" }) }; };
-  const result = await createPaymentOrder("user-id", { order: { products: [{ product: "64b000000000000000000001", quantity: 1 }], shippingAddress: { phone: "9876543210" } }, customer: {} });
+  global.fetch = async (url, options) => {
+    if (url.includes("shiprocket.in/v1/external/auth/login")) return { ok: true, text: async () => JSON.stringify({ token: "token" }) };
+    if (url.includes("courier/serviceability")) return { ok: true, text: async () => JSON.stringify({ data: { available_courier_companies: [{ courier_company_id: 9, courier_name: "Fast", freight_charge: 98, estimated_delivery_days: 2 }] } }) };
+    sent = { headers: options.headers, body: JSON.parse(options.body) };
+    return { ok: true, json: async () => ({ order_id: sent.body.order_id, order_amount: sent.body.order_amount, order_currency: "INR", cf_order_id: "123", payment_session_id: "safe-session" }) };
+  };
+  const result = await createPaymentOrder("user-id", { order: { products: [{ product: "64b000000000000000000001", quantity: 1 }], shippingAddress: { phone: "9876543210", postalCode: "560001" } }, customer: {} });
   assert.equal(sent.headers["x-client-secret"], "client-secret");
   assert.equal(result.paymentSessionId, "safe-session");
   assert.equal(JSON.stringify(result).includes("client-secret"), false);
   assert.equal(stored.amount, sent.body.order_amount);
+  assert.equal(stored.amount, 750);
+  assert.equal(stored.orderPayload._shippingQuote.customerShippingCharge, 100);
   assert.equal(stored.razorpayQrId, sent.body.order_id);
   assert.equal(stored.idempotencyKey, sent.headers["x-idempotency-key"]);
 });

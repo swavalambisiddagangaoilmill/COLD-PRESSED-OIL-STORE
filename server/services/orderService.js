@@ -8,6 +8,7 @@ import { createAdminNotification, createInventoryNotifications } from "./adminNo
 import { calculateCheckoutTotals, consumeCouponUsageForOrder, normalizeCouponCode, validateCouponForItems } from "./couponService.js";
 import { priceProducts } from "./offerPricingService.js";
 import { requiredStockLitres as calculateRequiredLitres, variantLitres } from "./variantInventoryService.js";
+import { calculateShippingQuote } from "./shippingQuoteService.js";
 
 const orderTransitions = {
   placed: ["confirmed", "cancelled"],
@@ -38,7 +39,7 @@ async function rollbackStock(updates) {
     : Product.updateOne({ _id: item.product }, { $inc: { stock: item.quantity } })));
 }
 
-export async function createOrder(userId, payload) {
+export async function createOrder(userId, payload, options = {}) {
   const requestedItems = normalizeOrderProducts(payload.products);
   if (!requestedItems.length) throw new ApiError("At least one product is required.", 400);
   const productIds = requestedItems.map((item) => item.product);
@@ -66,6 +67,10 @@ export async function createOrder(userId, payload) {
   });
 
   const couponResult = await validateCouponForItems({ code: payload.couponCode, userId, items: orderItems });
+  const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
+  const productSubtotal = orderItems.reduce((sum, item) => sum + item.basePrice * item.quantity, 0);
+  const offerDiscount = orderItems.reduce((sum, item) => sum + item.lineOfferDiscount, 0);
+  const shippingQuote = options.trustedShippingQuote || await calculateShippingQuote({ items: orderItems, deliveryPincode: payload.shippingAddress?.postalCode, paymentMethod, declaredValue: Math.max(0, subtotal - couponResult.discountAmount) });
   const successfulUpdates = [];
   for (const item of orderItems) {
     const result = item.variant
@@ -80,8 +85,8 @@ export async function createOrder(userId, payload) {
 
   let persistedOrder = null;
   try {
-    const totals = calculateCheckoutTotals(orderItems, couponResult.discountAmount);
-    const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: payload.paymentStatus || "pending", razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature, cashfreeOrderId: payload.cashfreeOrderId, cashfreeCfOrderId: payload.cashfreeCfOrderId, cashfreePaymentId: payload.cashfreePaymentId, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount, statusHistory: [{ status: "placed", source: "order", createdAt: new Date() }] });
+    const totals = calculateCheckoutTotals(orderItems, couponResult.discountAmount, shippingQuote.customerShippingCharge);
+    const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: payload.paymentStatus || "pending", razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature, cashfreeOrderId: payload.cashfreeOrderId, cashfreeCfOrderId: payload.cashfreeCfOrderId, cashfreePaymentId: payload.cashfreePaymentId, productSubtotal, offerDiscount, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, shiprocketShippingCost: shippingQuote.shiprocketShippingCost, selectedCourierId: shippingQuote.courierId, selectedCourierService: shippingQuote.courierName, deliveryPincode: shippingQuote.deliveryPincode, shipmentWeight: shippingQuote.shipmentWeight, estimatedDelivery: shippingQuote.estimatedDelivery, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount, statusHistory: [{ status: "placed", source: "order", createdAt: new Date() }] });
     persistedOrder = order;
     try {
       await consumeCouponUsageForOrder(order);

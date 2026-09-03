@@ -65,7 +65,7 @@ test("active percentage coupon applies immediately without consuming usage", asy
   const result = await validate(coupon());
   assert.equal(result.discountAmount, 200);
   assert.equal(usageWrites, 0);
-  assert.equal(calculateCheckoutTotals(items, result.discountAmount).totalAmount, 300);
+  assert.equal(calculateCheckoutTotals(items, result.discountAmount).totalAmount, 200);
 });
 
 test("fixed coupon respects its maximum discount", async () => {

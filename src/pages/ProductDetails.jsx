@@ -7,11 +7,11 @@ import Breadcrumb from "../components/common/Breadcrumb.jsx";
 import QuantitySelector from "../components/common/QuantitySelector.jsx";
 import AddToCartButton from "../components/features/product/AddToCartButton.jsx";
 import ProductGallery from "../components/features/product/ProductGallery.jsx";
+import ProductPrice from "../components/features/product/ProductPrice.jsx";
 import RelatedProducts from "../components/features/product/RelatedProducts.jsx";
 import WishlistToggle from "../components/features/product/WishlistToggle.jsx";
 import Container from "../components/ui/Container.jsx";
 import { getProductBySlug } from "../services/catalogService.js";
-import { formatCurrency } from "../utils/formatCurrency.js";
 import { readGuestSession, writeGuestSession } from "../utils/guestSession.js";
 
 export default function ProductDetails() {
@@ -76,9 +76,8 @@ export default function ProductDetails() {
               <p className="mt-5 max-w-2xl text-lg leading-8 text-ink/65">{product.description}</p>
               <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-ink/60"><Star size={17} className="fill-clay text-clay" /> {product.rating} rating · {selectedProduct.volume}</div>
               {product.variants?.length > 0 && <fieldset className="mt-6"><legend className="text-xs font-bold uppercase tracking-[0.2em] text-ink/65">Select size</legend><div className="mt-3 flex flex-wrap gap-3">{product.variants.filter((variant) => variant.isActive !== false).map((variant) => <button key={variant._id || variant.id} type="button" disabled={variant.stock < 1} onClick={() => { setSelectedVariantId(String(variant._id || variant.id)); setQuantity(1); }} className={`min-w-20 rounded-xl border px-4 py-3 text-sm font-bold transition ${selectedVariantId === String(variant._id || variant.id) ? "border-leaf bg-leaf text-white" : "border-ink/15 bg-white text-ink hover:border-leaf"} disabled:cursor-not-allowed disabled:opacity-40`}>{variant.size}{variant.stock < 1 ? " · Out" : ""}</button>)}</div></fieldset>}
-              <p className={`mt-3 text-xs font-bold uppercase tracking-[0.16em] ${selectedProduct.stock <= 8 ? "text-clay" : "text-leaf"}`}>{selectedProduct.stock === 0 ? "Out of stock" : selectedProduct.stock <= 8 ? `Low stock · ${selectedProduct.stock}L available` : `${selectedProduct.stock}L available`}{selectedProduct.sku ? ` · SKU ${selectedProduct.sku}` : ""}</p>
-              <div className="mt-6 flex flex-wrap items-end gap-x-3 gap-y-2"><span className="text-3xl font-bold">{formatCurrency(selectedProduct.price)}</span>{selectedProduct.mrp > selectedProduct.price && <><span className="text-lg text-ink/40 line-through">{formatCurrency(selectedProduct.mrp)}</span><span className="text-sm font-bold text-leaf">{selectedProduct.appliedOffer?.percentage || Math.round((selectedProduct.mrp - selectedProduct.price) / selectedProduct.mrp * 100)}% OFF</span></>}</div>
-              {selectedProduct.mrp > selectedProduct.price && <p className="mt-2 text-sm font-bold text-leaf">Save {formatCurrency(selectedProduct.mrp - selectedProduct.price)}</p>}
+              <p className={`mt-3 text-xs font-bold uppercase tracking-[0.16em] ${selectedProduct.stock === 0 ? "text-clay" : "text-leaf"}`}>{selectedProduct.stock === 0 ? "Out of stock" : selectedProduct.stock <= 8 ? "Low stock" : "In stock"}</p>
+              <ProductPrice product={selectedProduct} className="mt-6" />
               <div className="sticky bottom-0 z-20 -mx-4 mt-8 flex flex-col gap-4 border-t border-ink/10 bg-cream/95 p-4 backdrop-blur sm:static sm:mx-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">
                 <QuantitySelector value={quantity} onChange={setQuantity} />
                 <AddToCartButton product={selectedProduct} quantity={quantity} onAdded={handleAdded} className="min-h-14 flex-1 rounded-2xl px-7 text-base shadow-soft active:scale-[0.98] sm:min-h-[52px]" iconSize={20} />

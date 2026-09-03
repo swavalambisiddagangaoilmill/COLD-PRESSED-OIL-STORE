@@ -9,6 +9,10 @@ export async function createOrder(payload) {
   });
 }
 
+export function getShippingQuote(payload) {
+  return apiRequest(API_ENDPOINTS.shippingQuote, { method: "POST", body: JSON.stringify(payload) });
+}
+
 export async function createPaymentIntent(payload) {
   return apiRequest(API_ENDPOINTS.paymentIntent, {
     method: "POST",
