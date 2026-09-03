@@ -7,7 +7,6 @@ import { getAuthToken } from "../../../api/apiClient.js";
 import { createOrder, createPaymentIntent, verifyPayment } from "../../../services/checkoutService.js";
 import { fetchAccountProfile } from "../../../services/accountService.js";
 import { useCart } from "../../../hooks/useCart.jsx";
-import { useServiceStatus } from "../../../hooks/useServiceStatus.js";
 import { formatCurrency } from "../../../utils/formatCurrency.js";
 import { writeGuestSession } from "../../../utils/guestSession.js";
 import { checkoutMessage } from "../../../utils/customerMessage.js";
@@ -57,7 +56,6 @@ export default function CheckoutForm() {
   const navigate = useNavigate();
   const { items, totals, completePurchase, revalidateCart, appliedCoupon } = useCart();
   const { showToast, showCritical } = useToast();
-  const serviceStatus = useServiceStatus();
   const formRef = useRef(null);
   const submissionInFlightRef = useRef(false);
   const [savedAddresses, setSavedAddresses] = useState([]);
@@ -68,10 +66,7 @@ export default function CheckoutForm() {
 
   const processing = Boolean(processingStep);
   const codAvailable = items.every((item) => item.codEnabled !== false);
-  const paymentService = serviceStatus.services?.cashfree;
-  const onlineServiceAvailable = paymentService?.available !== false;
-  const onlineUnavailableMessage = paymentService?.message || "Online payments are temporarily unavailable.";
-  const onlineAvailable = onlineServiceAvailable && items.every((item) => item.onlinePaymentEnabled !== false);
+  const onlineAvailable = items.every((item) => item.onlinePaymentEnabled !== false);
 
   useEffect(() => {
     let active = true;
@@ -182,9 +177,9 @@ export default function CheckoutForm() {
       if (!validated.items.length) { showToast("Your cart has no available products.", "warning", null, { id: "checkout-empty" }); return; }
       if (validated.changed) return;
       const codAllowed = validated.items.every((item) => item.codEnabled !== false);
-      const onlineAllowed = onlineServiceAvailable && validated.items.every((item) => item.onlinePaymentEnabled !== false);
+      const onlineAllowed = validated.items.every((item) => item.onlinePaymentEnabled !== false);
       if (paymentMethod === "cod" && !codAllowed) { setError("Cash on delivery is not available for one or more products in your cart."); return; }
-      if (paymentMethod !== "cod" && !onlineAllowed) { setError(onlineServiceAvailable ? "Online payment is not available for one or more products in your cart." : onlineUnavailableMessage); return; }
+      if (paymentMethod !== "cod" && !onlineAllowed) { setError("Online payment is not available for one or more products in your cart."); return; }
       const orderPayload = getOrderPayload(event.currentTarget, validated.items);
       if (paymentMethod === "cod") await submitCodOrder(orderPayload, validated.items, setCheckoutStage);
       else await submitCashfreeOrder(orderPayload, validated.items, setCheckoutStage);
@@ -212,7 +207,6 @@ export default function CheckoutForm() {
       <h1 className="font-serif text-4xl font-semibold">Checkout</h1>
       <p className="mt-3 text-sm font-semibold text-ink/55">Order total: {formatCurrency(totals.total)}</p>
       {error && <p className="mt-5 rounded-2xl bg-linen p-4 text-sm font-semibold text-danger">{error}</p>}
-      {!onlineServiceAvailable && <p className="mt-5 rounded-2xl bg-linen p-4 text-sm font-semibold text-ink/65">{onlineUnavailableMessage} Cash on delivery continues to work normally.</p>}
       {savedAddresses.length > 0 && (
         <div className="mt-6 rounded-2xl bg-linen p-4">
           <p className="text-sm font-bold text-ink/65">Use a saved address</p>
