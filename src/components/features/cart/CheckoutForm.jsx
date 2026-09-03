@@ -128,32 +128,41 @@ export default function CheckoutForm() {
     };
   };
 
-  const finishOrder = async (order, shippingAddress, purchasedItems) => {
+  const finishOrder = async (order, shippingAddress, purchasedItems, setCheckoutStage) => {
     writeGuestSession({ checkoutDraft: {} });
+    setCheckoutStage("cart_cleanup");
     await completePurchase(purchasedItems.map((item) => item._id || item.id));
     showToast("Order placed successfully.", "success", null, { id: `order-${order?._id || "complete"}` });
     navigate("/order/success", { state: { order: formatOrderForSuccess(order, shippingAddress, purchasedItems, totals.total, profile) } });
   };
 
-  const submitCodOrder = async (orderPayload, purchasedItems) => {
+  const submitCodOrder = async (orderPayload, purchasedItems, setCheckoutStage) => {
     setProcessingStep("cod");
+    setCheckoutStage("order_creation");
     const response = await createOrder({ ...orderPayload.order, paymentMethod: "cod" });
-    await finishOrder(response.order, orderPayload.order.shippingAddress, purchasedItems);
+    await finishOrder(response.order, orderPayload.order.shippingAddress, purchasedItems, setCheckoutStage);
   };
 
 
-  const submitCashfreeOrder = async (orderPayload, purchasedItems) => {
+  const submitCashfreeOrder = async (orderPayload, purchasedItems, setCheckoutStage) => {
     setProcessingStep("preparing");
+    setCheckoutStage("payment_intent");
     const { payment } = await createPaymentIntent({ order: orderPayload.order });
     if (!payment?.paymentSessionId || !payment?.orderId) throw new Error("Cashfree is not configured. Please choose Cash on delivery or try again later.");
     const mode = payment.environment === "production" ? "production" : "sandbox";
+    setCheckoutStage("cashfree_initialization");
     const cashfree = await loadCashfreeCheckout(mode);
     if (!cashfree) throw new Error("Unable to load Cashfree Checkout. Please try again.");
+    setCheckoutStage("cashfree_checkout");
     const result = await cashfree.checkout({ paymentSessionId: payment.paymentSessionId, redirectTarget: "_modal" });
-    if (result?.error) throw new Error("Payment was not completed. Your cart is unchanged.");
+    if (result?.error) {
+      setCheckoutStage("payment_cancelled");
+      throw new Error("Payment was not completed. Your cart is unchanged.");
+    }
     setProcessingStep("verifying");
+    setCheckoutStage("payment_verification");
     const verified = await verifyPayment({ cashfreeOrderId: payment.orderId });
-    await finishOrder(verified.order, orderPayload.order.shippingAddress, purchasedItems);
+    await finishOrder(verified.order, orderPayload.order.shippingAddress, purchasedItems, setCheckoutStage);
   };
 
   const handleSubmit = async (event) => {
@@ -165,7 +174,10 @@ export default function CheckoutForm() {
     }
     submissionInFlightRef.current = true;
     setError("");
+    let checkoutStage = "checkout_processing";
+    const setCheckoutStage = (stage) => { checkoutStage = stage; };
     try {
+      setCheckoutStage("cart_preflight");
       const validated = await revalidateCart({ notify: true });
       if (!validated.items.length) { showToast("Your cart has no available products.", "warning", null, { id: "checkout-empty" }); return; }
       if (validated.changed) return;
@@ -174,10 +186,18 @@ export default function CheckoutForm() {
       if (paymentMethod === "cod" && !codAllowed) { setError("Cash on delivery is not available for one or more products in your cart."); return; }
       if (paymentMethod !== "cod" && !onlineAllowed) { setError(onlineServiceAvailable ? "Online payment is not available for one or more products in your cart." : onlineUnavailableMessage); return; }
       const orderPayload = getOrderPayload(event.currentTarget, validated.items);
-      if (paymentMethod === "cod") await submitCodOrder(orderPayload, validated.items);
-      else await submitCashfreeOrder(orderPayload, validated.items);
+      if (paymentMethod === "cod") await submitCodOrder(orderPayload, validated.items, setCheckoutStage);
+      else await submitCashfreeOrder(orderPayload, validated.items, setCheckoutStage);
     } catch (err) {
-      showCritical("Checkout could not be completed", checkoutMessage(err), { action: { label: "Review Cart", to: "/cart" } });
+      const sourceError = err instanceof Error ? err : new Error("Checkout processing failed.");
+      const contextualError = Object.assign(new Error(sourceError.message, { cause: sourceError }), {
+        status: sourceError.status,
+        statusCode: sourceError.statusCode,
+        code: sourceError.code,
+        isNetworkError: sourceError.isNetworkError,
+        checkoutStage,
+      });
+      showCritical("Checkout could not be completed", checkoutMessage(contextualError), { action: { label: "Review Cart", to: "/cart" } });
     } finally {
       submissionInFlightRef.current = false;
       setProcessingStep("");

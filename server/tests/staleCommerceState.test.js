@@ -98,7 +98,14 @@ test("customer messages do not expose raw database errors", () => {
 });
 
 test("checkout errors distinguish transport, stock, and post-payment cart reconciliation", () => {
-  assert.match(checkoutMessage({ status: 0 }), /could not connect/i);
+  assert.match(checkoutMessage({ status: 0, isNetworkError: true }), /couldn't connect/i);
+  assert.doesNotMatch(checkoutMessage({ status: 0 }), /connect|internet/i);
+  assert.doesNotMatch(checkoutMessage(new Error("Unexpected frontend exception")), /connect|internet/i);
+  assert.match(checkoutMessage({ status: 500, checkoutStage: "cart_preflight" }), /verify your cart/i);
+  assert.match(checkoutMessage({ status: 400, checkoutStage: "payment_intent" }), /start the payment/i);
+  assert.match(checkoutMessage({ checkoutStage: "payment_cancelled" }), /cancelled/i);
+  assert.match(checkoutMessage({ status: 409, checkoutStage: "payment_verification" }), /confirm your payment/i);
+  assert.match(checkoutMessage({ checkoutStage: "cart_cleanup" }), /order was created/i);
   assert.match(checkoutMessage({ status: 400, message: "One or more products do not have enough stock." }), /requested quantity/i);
   assert.match(checkoutMessage({ status: 409, message: "Customer cart could not be reconciled." }), /order was created/i);
   assert.doesNotMatch(checkoutMessage({ status: 500, message: "MongoServerError E11000" }), /Mongo|E11000/i);

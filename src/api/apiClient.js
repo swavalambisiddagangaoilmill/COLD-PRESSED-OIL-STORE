@@ -45,6 +45,8 @@ export async function apiRequest(endpoint, options = {}) {
   } catch (error) {
     const networkError = new Error("Service is temporarily unavailable. Please try again shortly.");
     networkError.status = 0;
+    networkError.code = "NETWORK_ERROR";
+    networkError.isNetworkError = true;
     networkError.cause = error;
     throw networkError;
   }
