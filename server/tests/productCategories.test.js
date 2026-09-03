@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import Category from "../models/Category.js";
+import { updateCategory } from "../services/categoryService.js";
 import { PRODUCT_CATEGORIES, PRODUCT_CATEGORY_SLUGS, isCanonicalProductCategory } from "../../shared/productCategories.js";
 
 const expected = [
@@ -23,4 +24,20 @@ test("canonical category names and matching slugs validate", async () => {
 test("obsolete and mismatched categories are rejected", async () => {
   await assert.rejects(() => new Category({ name: "Groundnut Oils", slug: "groundnut-oils" }).validate(), /not a valid enum value/);
   await assert.rejects(() => new Category({ name: "Groundnut Oil", slug: "coconut-oil" }).validate(), /canonical/);
+});
+
+test("canonical categories can update editable fields in document validation context", async (t) => {
+  const originalFindById = Category.findById;
+  t.after(() => { Category.findById = originalFindById; });
+  const category = new Category({ name: "Groundnut Oil", slug: "groundnut-oil", description: "Old", isActive: true });
+  category.save = async function saveForTest() { await this.validate(); return this; };
+  Category.findById = async () => category;
+
+  const updated = await updateCategory(category._id, { ...category.toObject(), description: "Updated", image: "", isActive: false, productCount: 4 });
+  assert.equal(updated.name, "Groundnut Oil");
+  assert.equal(updated.slug, "groundnut-oil");
+  assert.equal(updated.description, "Updated");
+  assert.equal(updated.image, "");
+  assert.equal(updated.isActive, false);
+  assert.equal(updated.productCount, undefined);
 });

@@ -49,7 +49,7 @@ export async function uploadCarouselImage(file, orientation) {
       folder: "ss-oil-mill/carousel",
       resource_type: "image",
       format: "webp",
-      transformation: [{ width: orientation === "desktop" ? 1920 : 1080, height: orientation === "desktop" ? 1080 : 1440, crop: "limit", quality: "auto:good" }],
+      transformation: [{ width: orientation === "desktop" ? 1920 : 1080, height: orientation === "desktop" ? 1080 : 1440, crop: "fill", gravity: "auto", quality: "auto:good" }],
     });
     const dimensionError = validateCarouselDimensions(result.width, result.height, orientation);
     if (dimensionError) {
@@ -65,11 +65,8 @@ export async function uploadCarouselImage(file, orientation) {
 }
 
 export function validateCarouselDimensions(width, height, orientation) {
-  const ratio = width / height;
-  if (orientation === "desktop" && ratio < 1.25) return "Please upload a horizontal desktop banner.";
-  if (orientation === "mobile" && ratio > 0.9) return "Please upload a vertical mobile banner.";
-  if (width < (orientation === "desktop" ? 800 : 480) || height < (orientation === "desktop" ? 300 : 640)) return `${orientation === "desktop" ? "Desktop" : "Mobile"} banner dimensions are too small.`;
-  return "";
+  const expected = orientation === "desktop" ? { width: 1920, height: 1080 } : { width: 1080, height: 1440 };
+  return width === expected.width && height === expected.height ? "" : "Carousel image could not be prepared at the required dimensions.";
 }
 
 export async function deleteImage(publicId) {

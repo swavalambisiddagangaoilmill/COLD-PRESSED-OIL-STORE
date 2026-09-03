@@ -37,9 +37,12 @@ export async function updateCategory(id, payload) {
   const canonical = PRODUCT_CATEGORY_SLUGS.find((item) => item.name === name);
   if (!canonical) throw new ApiError("Category name must be one of the 16 canonical categories.", 400, [{ field: "name", message: "Category name is not valid." }]);
   if (payload.slug && payload.slug !== canonical.slug) throw new ApiError("Category slug must match its canonical name.", 400, [{ field: "slug", message: `Use ${canonical.slug}.` }]);
-  const updates = { ...payload, name: canonical.name, slug: canonical.slug };
-  const category = await Category.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
-  return category;
+  current.name = canonical.name;
+  current.slug = canonical.slug;
+  if (payload.description !== undefined) current.description = payload.description;
+  if (payload.image !== undefined) current.image = payload.image;
+  if (payload.isActive !== undefined) current.isActive = Boolean(payload.isActive);
+  return current.save();
 }
 
 export async function deleteCategory(id) {

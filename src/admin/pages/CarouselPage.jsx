@@ -6,17 +6,13 @@ import { adminApi } from "../services/adminApi.js";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
-async function validateImage(file, orientation) {
+async function validateImage(file) {
   if (!file) return;
   if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("Use a JPG, PNG, or WebP image.");
   if (file.size > MAX_BYTES) throw new Error("Carousel images must be 8 MB or smaller.");
   const url = URL.createObjectURL(file);
   try {
-    const dimensions = await new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight }); image.onerror = reject; image.src = url; });
-    const ratio = dimensions.width / dimensions.height;
-    if (orientation === "desktop" && ratio < 1.25) throw new Error("Please upload a horizontal desktop banner.");
-    if (orientation === "mobile" && ratio > 0.9) throw new Error("Please upload a vertical mobile banner.");
-    if (dimensions.width < (orientation === "desktop" ? 800 : 480) || dimensions.height < (orientation === "desktop" ? 300 : 640)) throw new Error(`${orientation === "desktop" ? "Desktop" : "Mobile"} banner dimensions are too small.`);
+    await new Promise((resolve, reject) => { const image = new Image(); image.onload = resolve; image.onerror = () => reject(new Error("The selected file could not be read as an image.")); image.src = url; });
   } finally { URL.revokeObjectURL(url); }
 }
 
@@ -25,8 +21,8 @@ function UploadArtboard({ kind, file, existing, removed, onFile, onRemove }) {
   const portrait = kind === "mobile";
   const preview = useMemo(() => file ? URL.createObjectURL(file) : removed ? "" : existing?.url, [existing?.url, file, removed]);
   useEffect(() => () => { if (file && preview) URL.revokeObjectURL(preview); }, [file, preview]);
-  const select = async (next) => { await validateImage(next, kind); onFile(next); };
-  return <section className="grid gap-3"><div><p className="text-sm font-extrabold uppercase tracking-[0.12em] text-ink">{portrait ? "Mobile banner" : "Desktop banner"}</p><p className="mt-1 text-xs font-semibold text-ink/50">{portrait ? "Vertical / Portrait image · recommended 1080 × 1440 (3:4)" : "Horizontal / Landscape image · recommended 1920 × 1080 (16:9)"}</p></div><div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); select(event.dataTransfer.files?.[0]).catch((error) => onFile(null, error.message)); }} className={`relative grid place-items-center overflow-hidden border-2 border-dashed border-[var(--admin-border)] bg-linen/50 ${portrait ? "mx-auto aspect-[3/4] w-full max-w-[230px]" : "aspect-video w-full"}`}>{preview ? <img src={preview} alt={`${kind} preview`} className="h-full w-full object-cover" /> : <div className="p-6 text-center"><ImagePlus className="mx-auto text-[var(--admin-primary)]" /><p className="mt-3 text-sm font-bold">Drag and drop or Browse</p></div>}<input ref={input} type="file" className="hidden" accept="image/jpeg,image/png,image/webp" onChange={(event) => select(event.target.files?.[0]).catch((error) => onFile(null, error.message))} /></div><div className="flex justify-center gap-2"><AdminButton type="button" variant="secondary" onClick={() => input.current?.click()}>{preview ? "Replace" : "Browse"}</AdminButton>{preview && <AdminButton type="button" variant="danger" onClick={onRemove}>Remove</AdminButton>}</div></section>;
+  const select = async (next) => { await validateImage(next); onFile(next); };
+  return <section className="grid gap-3"><div><p className="text-sm font-extrabold uppercase tracking-[0.12em] text-ink">{portrait ? "Mobile banner" : "Desktop banner"}</p><p className="mt-1 text-xs font-semibold text-ink/50">{portrait ? "Automatically cropped to 1080 × 1440 (3:4)" : "Automatically cropped to 1920 × 1080 (16:9)"}</p></div><div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); select(event.dataTransfer.files?.[0]).catch((error) => onFile(null, error.message)); }} className={`relative grid place-items-center overflow-hidden border-2 border-dashed border-[var(--admin-border)] bg-linen/50 ${portrait ? "mx-auto aspect-[3/4] w-full max-w-[230px]" : "aspect-video w-full"}`}>{preview ? <img src={preview} alt={`${kind} preview`} className="h-full w-full object-cover" /> : <div className="p-6 text-center"><ImagePlus className="mx-auto text-[var(--admin-primary)]" /><p className="mt-3 text-sm font-bold">Drag and drop or Browse</p></div>}<input ref={input} type="file" className="hidden" accept="image/jpeg,image/png,image/webp" onChange={(event) => select(event.target.files?.[0]).catch((error) => onFile(null, error.message))} /></div><div className="flex justify-center gap-2"><AdminButton type="button" variant="secondary" onClick={() => input.current?.click()}>{preview ? "Replace" : "Browse"}</AdminButton>{preview && <AdminButton type="button" variant="danger" onClick={onRemove}>Remove</AdminButton>}</div></section>;
 }
 
 function SlideEditor({ item, onClose, onSaved }) {

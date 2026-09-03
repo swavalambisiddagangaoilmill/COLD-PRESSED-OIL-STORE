@@ -10,12 +10,11 @@ test("carousel model accepts responsive and legacy records but rejects empty rec
   await assert.rejects(new CarouselImage({ order: 1 }).validate(), /At least one carousel image is required/);
 });
 
-test("carousel orientation and minimum dimensions are enforced", () => {
+test("carousel uploads must finish at the exact responsive dimensions", () => {
   assert.equal(validateCarouselDimensions(1920, 1080, "desktop"), "");
   assert.equal(validateCarouselDimensions(1080, 1440, "mobile"), "");
-  assert.match(validateCarouselDimensions(800, 1200, "desktop"), /horizontal/);
-  assert.match(validateCarouselDimensions(1200, 800, "mobile"), /vertical/);
-  assert.match(validateCarouselDimensions(700, 400, "desktop"), /too small/);
+  assert.match(validateCarouselDimensions(800, 1200, "desktop"), /could not be prepared/);
+  assert.match(validateCarouselDimensions(1200, 800, "mobile"), /could not be prepared/);
 });
 
 test("homepage carousel is database-backed and uses responsive picture sources", async () => {
@@ -27,11 +26,13 @@ test("homepage carousel is database-backed and uses responsive picture sources",
 });
 
 test("admin carousel mutations are mounted behind authentication and role checks", async () => {
-  const [app, routes] = await Promise.all([
+  const [app, routes, uploads] = await Promise.all([
     readFile(new URL("../app.js", import.meta.url), "utf8"),
     readFile(new URL("../routes/adminCarouselRoutes.js", import.meta.url), "utf8"),
+    readFile(new URL("../services/uploadService.js", import.meta.url), "utf8"),
   ]);
   assert.match(app, /app\.use\("\/api\/admin\/carousel", adminCarouselRoutes\)/);
   assert.match(routes, /router\.use\(protect, adminOnly/);
   assert.match(routes, /carouselUpload\.fields/);
+  assert.match(uploads, /crop: "fill", gravity: "auto"/);
 });
