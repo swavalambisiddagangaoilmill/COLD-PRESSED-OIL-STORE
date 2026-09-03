@@ -17,7 +17,7 @@ export default function Cart() {
 
   const changeQuantity = async (item, quantity) => {
     try {
-      await updateQuantity(item.id, quantity);
+      await updateQuantity(item.id, quantity, item.variantId);
       showToast("Cart updated.", "success", null, { id: `cart-quantity-${item.id}` });
     } catch (error) {
       showToast(customerMessage(error, "Unable to update this item. Please try again."), "error", { label: "Retry", onClick: () => changeQuantity(item, quantity) }, { id: `cart-quantity-error-${item.id}` });
@@ -26,7 +26,7 @@ export default function Cart() {
 
   const remove = async (item) => {
     try {
-      await removeItem(item.id);
+      await removeItem(item.id, item.variantId);
       showToast("Removed from cart.", "success", null, { id: `cart-remove-${item.id}` });
     } catch (error) {
       showToast(customerMessage(error, "Unable to remove this item. Please try again."), "error", { label: "Retry", onClick: () => remove(item) }, { id: `cart-remove-error-${item.id}` });
@@ -47,12 +47,12 @@ export default function Cart() {
             <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_380px]">
               <div className="space-y-4">
                 {safeItems.map((item) => (
-                  <article key={item.id || item._id} className="grid gap-4 rounded-3xl border border-ink/10 bg-white p-4 shadow-sm sm:grid-cols-[128px_1fr_auto]">
+                  <article key={item.cartKey || `${item.id || item._id}:${item.variantId || ""}`} className="grid gap-4 rounded-3xl border border-ink/10 bg-white p-4 shadow-sm sm:grid-cols-[128px_1fr_auto]">
                     <img src={item.image} alt={item.name} className="h-32 w-full rounded-2xl object-cover sm:w-32" />
                     <div className="min-w-0">
                       <h2 className="font-serif text-2xl font-semibold">{item.name}</h2>
                       <p className="mt-2 text-sm text-ink/55">{item.volume} Â· {item.category}</p>
-                      <p className="mt-3 font-bold">{formatCurrency(item.price)}</p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2"><span className="font-bold">{formatCurrency(item.price)}</span>{item.mrp > item.price && <><span className="text-sm text-ink/40 line-through">{formatCurrency(item.mrp)}</span><span className="text-xs font-bold text-leaf">{item.appliedOffer?.percentage || Math.round((item.mrp - item.price) / item.mrp * 100)}% OFF</span></>}</div><p className="mt-1 text-sm font-semibold text-ink/60">Line total: {formatCurrency(item.price * item.quantity)}</p>
                     </div>
                     <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
                       <QuantitySelector value={item.quantity} onChange={(value) => changeQuantity(item, value)} />

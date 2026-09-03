@@ -139,8 +139,8 @@ function buildOrderPayload(order, packageDetails) {
     billing_phone: address.phone || order.user?.phone || "9999999999",
     shipping_is_billing: true,
     order_items: order.products.map((item) => ({
-      name: item.title,
-      sku: item.product?._id?.toString?.() || item.product?.toString?.() || item.title,
+      name: `${item.title}${item.variantLabel ? ` - ${item.variantLabel}` : ""}`,
+      sku: item.variantSku || item.product?._id?.toString?.() || item.product?.toString?.() || item.title,
       units: item.quantity,
       selling_price: item.price,
     })),

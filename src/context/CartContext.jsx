@@ -12,8 +12,10 @@ const CartContext = createContext(null);
 const COUPON_SESSION_KEY = "ss_oil_mill_applied_coupon";
 const CART_SYNC_KEY = "ss_oil_mill_cart_sync";
 
+const cartKey = (itemOrId, variantId) => typeof itemOrId === "object" ? `${itemOrId._id || itemOrId.id}:${itemOrId.variantId || ""}` : `${itemOrId}:${variantId || ""}`;
+
 function cartSignature(cart) {
-  return cart.map((item) => `${item._id || item.id}:${item.quantity}:${item.price}:${item.stock}`).sort().join("|");
+  return cart.map((item) => `${cartKey(item)}:${item.quantity}:${item.price}:${item.stock}`).sort().join("|");
 }
 
 function readAppliedCoupon() {
@@ -84,7 +86,7 @@ export function CartProvider({ children }) {
     if (!items.length) clearCoupon();
   }, [items.length]);
 
-  const couponProducts = useMemo(() => items.map((item) => ({ product: item._id || item.id, quantity: item.quantity })), [items]);
+  const couponProducts = useMemo(() => items.map((item) => ({ product: item._id || item.id, variant: item.variantId, quantity: item.quantity })), [items]);
 
   const validateCoupon = async (code) => {
     const normalizedCode = String(code || "").trim().toUpperCase();
@@ -125,13 +127,14 @@ export function CartProvider({ children }) {
     const safeQuantity = Math.max(1, Number(quantity) || 1);
     const previousItems = items;
     const nextItems = (() => {
-      const existing = items.find((item) => item.id === product.id);
-      return existing ? items.map((item) => (item.id === product.id ? { ...item, quantity: item.quantity + safeQuantity } : item)) : [...items, { ...product, quantity: safeQuantity }];
+      const key = cartKey(product);
+      const existing = items.find((item) => cartKey(item) === key);
+      return existing ? items.map((item) => (cartKey(item) === key ? { ...item, quantity: item.quantity + safeQuantity } : item)) : [...items, { ...product, quantity: safeQuantity }];
     })();
     setItems(nextItems);
     if (!getAuthToken()) return nextItems;
     try {
-      const synced = await addCartItem(product._id || product.id, safeQuantity);
+      const synced = await addCartItem(product._id || product.id, safeQuantity, product.variantId);
       setItems(synced);
       signalCartChange();
       return synced;
@@ -141,14 +144,14 @@ export function CartProvider({ children }) {
     }
   };
 
-  const updateQuantity = async (id, quantity) => {
+  const updateQuantity = async (id, quantity, variantId) => {
     const safeQuantity = Math.max(1, Number(quantity) || 1);
     const previousItems = items;
-    const nextItems = items.map((item) => (item.id === id ? { ...item, quantity: safeQuantity } : item));
+    const nextItems = items.map((item) => (cartKey(item) === cartKey(id, variantId) ? { ...item, quantity: safeQuantity } : item));
     setItems(nextItems);
     if (!getAuthToken()) return nextItems;
     try {
-      const synced = await updateCartItem(id, safeQuantity);
+      const synced = await updateCartItem(id, safeQuantity, variantId);
       setItems(synced);
       signalCartChange();
       return synced;
@@ -158,15 +161,15 @@ export function CartProvider({ children }) {
     }
   };
 
-  const removeItem = async (id) => {
+  const removeItem = async (id, variantId) => {
     let previousItems = [];
     setItems((current) => {
       previousItems = current;
-      return current.filter((item) => item.id !== id);
+      return current.filter((item) => cartKey(item) !== cartKey(id, variantId));
     });
     if (!getAuthToken()) return;
     try {
-      const cart = await removeCartItem(id);
+      const cart = await removeCartItem(id, variantId);
       setItems(cart);
       signalCartChange();
     } catch (error) {
@@ -211,8 +214,8 @@ export function CartProvider({ children }) {
     return { subtotal, mrpTotal, discount, couponDiscount, shipping, tax, total: Math.max(0, subtotal + shipping + tax - couponDiscount) };
   }, [appliedCoupon?.discountAmount, items]);
 
-  const isInCart = (id) => items.some((item) => item.id === id);
-  const getItemQuantity = (id) => items.find((item) => item.id === id)?.quantity || 0;
+  const isInCart = (id, variantId) => items.some((item) => cartKey(item) === cartKey(id, variantId));
+  const getItemQuantity = (id, variantId) => items.find((item) => cartKey(item) === cartKey(id, variantId))?.quantity || 0;
 
   return <CartContext.Provider value={{ items, addItem, updateQuantity, removeItem, clearCart, completePurchase, revalidateCart, totals, isInCart, getItemQuantity, appliedCoupon, validateCoupon, clearCoupon }}>{children}</CartContext.Provider>;
 }

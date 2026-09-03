@@ -6,12 +6,14 @@ import Order from "../models/Order.js";
 import PaymentCheckout from "../models/PaymentCheckout.js";
 import Product from "../models/Product.js";
 import User from "../models/User.js";
+import Offer from "../models/Offer.js";
 import { createPaymentOrder, processCashfreeWebhook, verifyPaymentAndCreateOrder } from "../services/paymentService.js";
 
-const original = { fetch: global.fetch, productFind: Product.find, userFind: User.findById, userUpdate: User.updateOne, checkoutCreate: PaymentCheckout.create, checkoutFind: PaymentCheckout.findOne, checkoutUpdate: PaymentCheckout.updateOne, orderFind: Order.findOne, orderUpdate: Order.updateOne };
+const original = { fetch: global.fetch, productFind: Product.find, offerFind: Offer.find, userFind: User.findById, userUpdate: User.updateOne, checkoutCreate: PaymentCheckout.create, checkoutFind: PaymentCheckout.findOne, checkoutUpdate: PaymentCheckout.updateOne, orderFind: Order.findOne, orderUpdate: Order.updateOne };
 const checkout = { _id: "checkout-id", user: "user-id", status: "created", amount: 650, currency: "INR", cashfreeOrderId: "cf_11111111-1111-4111-8111-111111111111", orderPayload: { products: [], shippingAddress: {} } };
 
-test.afterEach(() => { global.fetch = original.fetch; Product.find = original.productFind; User.findById = original.userFind; User.updateOne = original.userUpdate; PaymentCheckout.create = original.checkoutCreate; PaymentCheckout.findOne = original.checkoutFind; PaymentCheckout.updateOne = original.checkoutUpdate; Order.findOne = original.orderFind; Order.updateOne = original.orderUpdate; });
+test.beforeEach(() => { Offer.find = () => ({ lean: async () => [] }); });
+test.afterEach(() => { global.fetch = original.fetch; Product.find = original.productFind; Offer.find = original.offerFind; User.findById = original.userFind; User.updateOne = original.userUpdate; PaymentCheckout.create = original.checkoutCreate; PaymentCheckout.findOne = original.checkoutFind; PaymentCheckout.updateOne = original.checkoutUpdate; Order.findOne = original.orderFind; Order.updateOne = original.orderUpdate; });
 
 test("Cashfree session is created server-side and response exposes no secret", async () => {
   Object.assign(env.cashfree, { environment: "sandbox", clientId: "client-id", clientSecret: "client-secret", apiVersion: "2025-01-01" });

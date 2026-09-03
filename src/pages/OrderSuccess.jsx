@@ -50,7 +50,7 @@ export default function OrderSuccess() {
                       <img src={image} alt={name} className="h-20 w-20 rounded-xl object-cover" />
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold">{name}</p>
-                        <p className="text-sm text-ink/55">Qty {item.quantity}{item.volume ? ` - ${item.volume}` : ""}</p>
+                        <p className="text-sm text-ink/55">Qty {item.quantity}{item.variantLabel || item.volume ? ` - ${item.variantLabel || item.volume}` : ""}</p>
                         <p className="mt-1 font-bold">{formatCurrency(Number(item.price || 0) * Number(item.quantity || 1))}</p>
                       </div>
                     </div>;

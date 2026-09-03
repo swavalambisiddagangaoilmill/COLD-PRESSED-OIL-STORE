@@ -9,6 +9,7 @@ import { createAdminNotification } from "./adminNotificationService.js";
 import { calculateCheckoutTotals, validateCouponForItems } from "./couponService.js";
 import { createOrder as createStoreOrder, ensureOrderCartCleanup } from "./orderService.js";
 import { priceProducts } from "./offerPricingService.js";
+import { requiredStockLitres } from "./variantInventoryService.js";
 
 const UNAVAILABLE = "Online payments are temporarily unavailable.";
 const CURRENCY = "INR";
@@ -37,9 +38,12 @@ async function calculateAmount(productsPayload, userId, couponCode) {
     const product = byId.get(item.product.toString());
     if (!product) throw new ApiError("One or more products are unavailable.", 400);
     const quantity = Math.max(1, Number(item.quantity) || 1);
-    if (product.stock < quantity) throw new ApiError(`${product.title} does not have enough stock.`, 400);
+    const variant = item.variant ? product.variants?.find((value) => String(value._id) === String(item.variant)) : null;
+    if (item.variant && !variant) throw new ApiError("Selected variant does not belong to this product.", 400);
+    if (variant?.isActive === false) throw new ApiError(`${product.title} (${variant.size}) is unavailable.`, 400);
+    if ((variant ? variant.stock : product.stock) < (variant ? requiredStockLitres(variant, quantity) : quantity)) throw new ApiError(`${product.title}${variant ? ` · ${variant.size}` : ""} is no longer available in the requested quantity.`, 400);
     if (product.onlinePaymentEnabled === false) throw new ApiError(`${product.title} is not eligible for online payment.`, 400);
-    return { product, quantity, price: product.effectivePrice };
+    return { product, variant: variant?._id, quantity, price: (variant || product).effectivePrice };
   });
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const coupon = await validateCouponForItems({ code: couponCode, userId, items, subtotal });

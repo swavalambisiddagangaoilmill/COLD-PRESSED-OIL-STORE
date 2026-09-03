@@ -1,7 +1,7 @@
 import Category from "../models/Category.js";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
-import { packageDimensionsForSize, packedWeightForSize } from "../utils/shippingDefaults.js";
+import { packageDimensionsForSize, packedWeightForSize, sizeInLitres } from "../utils/shippingDefaults.js";
 import { isCanonicalProductCategory } from "../../shared/productCategories.js";
 
 function skuPart(value, fallback) {
@@ -27,9 +27,11 @@ function comparableImage(image = {}) {
 function comparableVariant(variant = {}) {
   return {
     size: String(variant.size || "").trim(),
+    litres: Number(variant.litres || sizeInLitres(variant.size)),
     price: Number(variant.price),
     mrp: Number(variant.mrp),
     stock: Number(variant.stock),
+    isActive: variant.isActive !== false,
     images: (variant.images || []).map(comparableImage),
   };
 }
@@ -112,6 +114,7 @@ export async function prepareProductVariants(variants, productSku, existingVaria
     delete variant.shippingWeight;
     delete variant.dimensions;
     variant.sku = existing?.sku || await generateVariantSku(productSku, variant.size, reserved);
+    variant.litres = sizeInLitres(variant.size);
     variant.shippingWeight = existing?.shippingWeight || packedWeightForSize(variant.size);
     variant.dimensions = existing?.dimensions || packageDimensionsForSize(variant.size);
     reserved.add(variant.sku);

@@ -10,12 +10,16 @@ const orderItemSchema = new mongoose.Schema(
     price: { type: Number, required: true, min: 0 },
     variant: { type: mongoose.Schema.Types.ObjectId },
     variantLabel: { type: String },
+    variantSku: { type: String },
+    litreSize: { type: Number, min: 0 },
+    requiredStockLitres: { type: Number, min: 0 },
     basePrice: { type: Number, min: 0 },
     offerId: { type: mongoose.Schema.Types.ObjectId, ref: "Offer" },
     offerName: { type: String },
     offerPercentage: { type: Number, min: 0, max: 100 },
     offerDiscount: { type: Number, min: 0, default: 0 },
     lineOfferDiscount: { type: Number, min: 0, default: 0 },
+    lineTotal: { type: Number, min: 0 },
   },
   { _id: false }
 );

@@ -14,17 +14,17 @@ export const syncCartHandler = asyncHandler(async (req, res) => {
 });
 
 export const addCartItemHandler = asyncHandler(async (req, res) => {
-  const cart = await addCartItem(req.user._id, req.body.productId, req.body.quantity);
+  const cart = await addCartItem(req.user._id, req.body.productId, req.body.quantity, req.body.variantId);
   sendSuccess(res, 200, "Cart updated successfully", { cart });
 });
 
 export const updateCartItemHandler = asyncHandler(async (req, res) => {
-  const cart = await updateCartItem(req.user._id, req.params.productId, req.body.quantity);
+  const cart = await updateCartItem(req.user._id, req.params.productId, req.body.quantity, req.query.variantId);
   sendSuccess(res, 200, "Cart item updated successfully", { cart });
 });
 
 export const removeCartItemHandler = asyncHandler(async (req, res) => {
-  const cart = await removeCartItem(req.user._id, req.params.productId);
+  const cart = await removeCartItem(req.user._id, req.params.productId, req.query.variantId);
   sendSuccess(res, 200, "Cart item removed successfully", { cart });
 });
 

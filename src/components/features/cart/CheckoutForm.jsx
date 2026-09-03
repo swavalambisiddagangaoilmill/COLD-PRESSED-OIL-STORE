@@ -110,7 +110,7 @@ export default function CheckoutForm() {
     };
     return {
       order: {
-        products: checkoutItems.map((item) => ({ product: item._id || item.id, quantity: item.quantity })),
+        products: checkoutItems.map((item) => ({ product: item._id || item.id, variant: item.variantId || undefined, quantity: item.quantity })),
         shippingAddress,
         paymentMethod: paymentMethod === "cod" ? "cod" : "cashfree",
         couponCode: appliedCoupon?.code,

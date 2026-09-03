@@ -48,8 +48,8 @@ export default function CartSummary({ totals, showCheckout = true }) {
     <aside className="rounded-3xl border border-ink/10 bg-white p-6 shadow-sm">
       <h2 className="font-serif text-3xl font-semibold">Order Summary</h2>
       <div className="mt-6 space-y-4 text-sm">
-        <div className="flex justify-between"><span className="text-ink/60">Subtotal</span><span className="font-semibold">{formatCurrency(totals.subtotal)}</span></div>
-        <div className="flex justify-between"><span className="text-ink/60">Savings</span><span className="font-semibold text-leaf">-{formatCurrency(totals.discount + totals.couponDiscount)}</span></div>
+        <div className="flex justify-between"><span className="text-ink/60">Subtotal</span><span className="font-semibold">{formatCurrency(totals.mrpTotal)}</span></div>
+        {totals.discount > 0 && <div className="flex justify-between"><span className="text-ink/60">Offer discount</span><span className="font-semibold text-leaf">-{formatCurrency(totals.discount)}</span></div>}
         {totals.couponDiscount > 0 && <div className="flex justify-between"><span className="text-ink/60">Coupon ({appliedCoupon?.code})</span><span className="font-semibold text-leaf">-{formatCurrency(totals.couponDiscount)}</span></div>}
         <div className="flex justify-between"><span className="text-ink/60">Shipping</span><span className="font-semibold">{totals.shipping ? formatCurrency(totals.shipping) : "Free"}</span></div>
         <div className="flex justify-between"><span className="text-ink/60">Estimated tax</span><span className="font-semibold">{formatCurrency(totals.tax)}</span></div>

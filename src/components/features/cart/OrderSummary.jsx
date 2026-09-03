@@ -12,7 +12,7 @@ export default function OrderSummary() {
         <h2 className="font-serif text-3xl font-semibold">Your Oils</h2>
         <div className="mt-5 space-y-4">
           {safeItems.map((item) => (
-            <div key={item.id || item._id} className="flex gap-4">
+            <div key={item.cartKey || `${item.id || item._id}:${item.variantId || ""}`} className="flex gap-4">
               <img src={item.image} alt={item.name} className="h-20 w-20 rounded-2xl object-cover" />
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">{item.name}</p>

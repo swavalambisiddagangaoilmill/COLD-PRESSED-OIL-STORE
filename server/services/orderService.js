@@ -7,6 +7,7 @@ import { withOrderTotals } from "../utils/orderTotals.js";
 import { createAdminNotification, createInventoryNotifications } from "./adminNotificationService.js";
 import { calculateCheckoutTotals, consumeCouponUsageForOrder, normalizeCouponCode, validateCouponForItems } from "./couponService.js";
 import { priceProducts } from "./offerPricingService.js";
+import { requiredStockLitres as calculateRequiredLitres, variantLitres } from "./variantInventoryService.js";
 
 const orderTransitions = {
   placed: ["confirmed", "cancelled"],
@@ -22,13 +23,19 @@ function normalizeOrderProducts(products = []) {
   products.forEach((item) => {
     const product = item.product?.toString?.() || item.product;
     if (!product) return;
-    merged.set(product, (merged.get(product) || 0) + Math.max(1, Number(item.quantity) || 1));
+    const variant = item.variant?.toString?.() || item.variant || "";
+    const key = `${product}:${variant}`;
+    const current = merged.get(key) || { product, variant: variant || undefined, quantity: 0 };
+    current.quantity += Math.max(1, Number(item.quantity) || 1);
+    merged.set(key, current);
   });
-  return [...merged.entries()].map(([product, quantity]) => ({ product, quantity }));
+  return [...merged.values()];
 }
 
 async function rollbackStock(updates) {
-  await Promise.all(updates.map((item) => Product.updateOne({ _id: item.product }, { $inc: { stock: item.quantity } })));
+  await Promise.all(updates.map((item) => item.variant
+    ? Product.updateOne({ _id: item.product, "variants._id": item.variant }, { $inc: { "variants.$.stock": item.requiredStockLitres } })
+    : Product.updateOne({ _id: item.product }, { $inc: { stock: item.quantity } })));
 }
 
 export async function createOrder(userId, payload) {
@@ -44,22 +51,31 @@ export async function createOrder(userId, payload) {
   const orderItems = requestedItems.map((item) => {
     const product = productMap.get(item.product.toString());
     if (!product) throw new ApiError("One or more products are unavailable.", 400);
-    if (product.stock < item.quantity) throw new ApiError(`${product.title} does not have enough stock.`, 400);
+    const variant = item.variant ? product.variants?.find((value) => String(value._id) === String(item.variant)) : null;
+    if (item.variant && !variant) throw new ApiError("Selected variant does not belong to this product.", 400);
+    if (variant?.isActive === false) throw new ApiError(`${product.title} (${variant.size}) is unavailable.`, 400);
+    const litreSize = variant ? variantLitres(variant) : 1;
+    const requiredStockLitres = variant ? calculateRequiredLitres(variant, item.quantity) : item.quantity;
+    const stock = variant ? variant.stock : product.stock;
+    if (stock < requiredStockLitres) throw new ApiError(`${product.title}${variant ? ` · ${variant.size}` : ""} is no longer available in the requested quantity. Only ${stock}L remains.`, 400);
     if (paymentMethod === "cod" && product.codEnabled === false) throw new ApiError(`${product.title} is not eligible for Cash on delivery.`, 400);
     if (paymentMethod !== "cod" && product.onlinePaymentEnabled === false) throw new ApiError(`${product.title} is not eligible for online payment.`, 400);
-    const price = product.effectivePrice;
-    return { product: product._id, category: product.category, title: product.title, image: product.images?.[0]?.url, quantity: item.quantity, price, basePrice: product.baseSellingPrice, offerId: product.appliedOffer?.id, offerName: product.appliedOffer?.name, offerPercentage: product.appliedOffer?.percentage, offerDiscount: product.discountAmount, lineOfferDiscount: product.discountAmount * item.quantity };
+    const priced = variant || product;
+    const price = priced.effectivePrice;
+    return { product: product._id, category: product.category, title: product.title, image: priced.images?.[0]?.url || product.images?.[0]?.url, quantity: item.quantity, price, variant: variant?._id, variantLabel: variant?.size, variantSku: variant?.sku || product.sku, litreSize, requiredStockLitres, basePrice: priced.baseSellingPrice, offerId: priced.appliedOffer?.id, offerName: priced.appliedOffer?.name, offerPercentage: priced.appliedOffer?.percentage, offerDiscount: priced.discountAmount, lineOfferDiscount: priced.discountAmount * item.quantity, lineTotal: price * item.quantity };
   });
 
   const couponResult = await validateCouponForItems({ code: payload.couponCode, userId, items: orderItems });
   const successfulUpdates = [];
   for (const item of orderItems) {
-    const result = await Product.updateOne({ _id: item.product, stock: { $gte: item.quantity }, isActive: true }, { $inc: { stock: -item.quantity } });
+    const result = item.variant
+      ? await Product.updateOne({ _id: item.product, isActive: true, variants: { $elemMatch: { _id: item.variant, isActive: { $ne: false }, stock: { $gte: item.requiredStockLitres } } } }, { $inc: { "variants.$[variant].stock": -item.requiredStockLitres } }, { arrayFilters: [{ "variant._id": item.variant }] })
+      : await Product.updateOne({ _id: item.product, stock: { $gte: item.quantity }, isActive: true }, { $inc: { stock: -item.quantity } });
     if (result.modifiedCount !== 1) {
       await rollbackStock(successfulUpdates);
       throw new ApiError("One or more products do not have enough stock.", 400);
     }
-    successfulUpdates.push({ product: item.product, quantity: item.quantity });
+    successfulUpdates.push({ product: item.product, variant: item.variant, quantity: item.quantity, requiredStockLitres: item.requiredStockLitres });
   }
 
   let persistedOrder = null;

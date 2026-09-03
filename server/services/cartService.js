@@ -3,33 +3,51 @@ import User from "../models/User.js";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
 import { priceProducts } from "./offerPricingService.js";
+import { availableVariantQuantity, requiredStockLitres, variantLitres } from "./variantInventoryService.js";
 
 async function populatedCart(userId) {
   const user = await User.findById(userId).select("cart").lean();
   if (!user) throw new ApiError("User not found.", 404);
   const productIds = user.cart.map((item) => item.product).filter(Boolean);
-  const products = await Product.find({ _id: { $in: productIds }, isActive: true, stock: { $gt: 0 } });
+  const products = await Product.find({ _id: { $in: productIds }, isActive: true });
   const productMap = new Map(products.map((product) => [product._id.toString(), product]));
   const cart = user.cart.flatMap((item) => {
     const product = productMap.get(item.product?.toString());
     if (!product) return [];
-    return [{ product: product._id, quantity: Math.min(requestedQuantity(item.quantity), product.stock) }];
+    const variant = item.variant ? product.variants?.id?.(item.variant) : null;
+    if (item.variant && (!variant || variant.isActive === false || variant.stock < variantLitres(variant))) return [];
+    const stock = variant ? variant.stock : product.stock;
+    if (stock < 1) return [];
+    const availableQuantity = variant ? availableVariantQuantity(variant) : stock;
+    return [{ product: product._id, ...(variant ? { variant: variant._id } : {}), quantity: Math.min(requestedQuantity(item.quantity), availableQuantity) }];
   });
-  const changed = cart.length !== user.cart.length || cart.some((item, index) => item.product.toString() !== user.cart[index]?.product?.toString() || item.quantity !== user.cart[index]?.quantity);
+  const changed = cart.length !== user.cart.length || cart.some((item, index) => item.product.toString() !== user.cart[index]?.product?.toString() || String(item.variant || "") !== String(user.cart[index]?.variant || "") || item.quantity !== user.cart[index]?.quantity);
   // Only clean the snapshot we read. A concurrent cart mutation must win instead
   // of being overwritten by stale-item reconciliation.
   if (changed) await User.updateOne({ _id: userId, cart: user.cart }, { $set: { cart } });
   const priced = await priceProducts(cart.map((item) => productMap.get(item.product.toString())));
   const pricedMap = new Map(priced.map((product) => [String(product._id), product]));
-  return cart.map((item) => ({ product: pricedMap.get(item.product.toString()), quantity: item.quantity }));
+  return cart.map((item) => ({ product: pricedMap.get(item.product.toString()), variant: item.variant, quantity: item.quantity }));
 }
 
 function requestedQuantity(quantity) {
   return Math.max(1, Number(quantity) || 1);
 }
 
-function assertStock(product, quantity) {
-  if (product.stock < quantity) throw new ApiError(`${product.title} has only ${product.stock} in stock.`, 400);
+function selectedVariant(product, variantId) {
+  if (!variantId) return null;
+  const variant = product.variants?.id?.(variantId) || product.variants?.find((item) => String(item._id) === String(variantId));
+  if (!variant) throw new ApiError("Selected variant does not belong to this product.", 400);
+  if (variant.isActive === false) throw new ApiError("Selected variant is unavailable.", 400);
+  return variant;
+}
+
+function assertStock(product, quantity, variantId) {
+  const variant = selectedVariant(product, variantId);
+  const stock = variant ? variant.stock : product.stock;
+  const required = variant ? requiredStockLitres(variant, quantity) : quantity;
+  if (stock < required) throw new ApiError(`${product.title}${variant ? ` · ${variant.size}` : ""} is no longer available in the requested quantity. Only ${stock}L remains.`, 400);
+  return variant;
 }
 
 export async function getCart(userId) {
@@ -41,8 +59,11 @@ export function mergeRequestedCartItems(existingItems = [], incomingItems = []) 
   [...existingItems, ...incomingItems].forEach((item) => {
     const product = item.productId || item.product || item.id;
     if (!product) return;
-    const key = product.toString();
-    merged.set(key, (merged.get(key) || 0) + requestedQuantity(item.quantity));
+    const variant = item.variantId || item.variant;
+    const key = `${product}:${variant || ""}`;
+    const current = merged.get(key) || { product: product.toString(), variant: variant?.toString?.() || variant, quantity: 0 };
+    current.quantity += requestedQuantity(item.quantity);
+    merged.set(key, current);
   });
   return merged;
 }
@@ -51,25 +72,29 @@ export async function syncCart(userId, items = [], { merge = false } = {}) {
   const user = merge ? await User.findById(userId).select("cart").lean() : null;
   if (merge && !user) throw new ApiError("User not found.", 404);
   const merged = mergeRequestedCartItems(user?.cart || [], items);
-  const products = await Product.find({ _id: { $in: [...merged.keys()] }, isActive: true });
+  const entries = [...merged.values()];
+  const products = await Product.find({ _id: { $in: entries.map((item) => item.product) }, isActive: true });
   const productMap = new Map(products.map((product) => [product._id.toString(), product]));
-  const cart = [...merged.entries()].map(([productId, quantity]) => {
+  const cart = entries.map(({ product: productId, variant, quantity }) => {
     const product = productMap.get(productId);
     if (!product) return null;
-    assertStock(product, quantity);
-    return { product: product._id, quantity };
+    const selected = assertStock(product, quantity, variant);
+    return { product: product._id, variant: selected?._id, quantity };
   }).filter(Boolean);
   await User.findByIdAndUpdate(userId, { cart }, { new: true, runValidators: true });
   return populatedCart(userId);
 }
 
-export async function addCartItem(userId, productId, quantity = 1) {
+export async function addCartItem(userId, productId, quantity = 1, variantId) {
   const product = await Product.findOne({ _id: productId, isActive: true });
   if (!product) throw new ApiError("Product not found.", 404);
   const delta = requestedQuantity(quantity);
+  const variant = assertStock(product, delta, variantId);
+  const stock = variant ? availableVariantQuantity(variant) : product.stock;
+  const sameItem = { $and: [{ $eq: ["$$item.product", product._id] }, { $eq: [{ $ifNull: ["$$item.variant", null] }, variant?._id || null] }] };
   const user = await User.findOneAndUpdate(
-    { _id: userId, $expr: { $lte: [{ $add: [{ $ifNull: [{ $getField: { field: "quantity", input: { $arrayElemAt: [{ $filter: { input: "$cart", as: "item", cond: { $eq: ["$$item.product", product._id] } } }, 0] } } }, 0] }, delta] }, product.stock] } },
-    [{ $set: { cart: { $cond: [{ $in: [product._id, "$cart.product"] }, { $map: { input: "$cart", as: "item", in: { $cond: [{ $eq: ["$$item.product", product._id] }, { product: "$$item.product", quantity: { $add: ["$$item.quantity", delta] } }, "$$item"] } } }, { $concatArrays: ["$cart", [{ product: product._id, quantity: delta }]] }] } } }],
+    { _id: userId, $expr: { $lte: [{ $add: [{ $ifNull: [{ $getField: { field: "quantity", input: { $arrayElemAt: [{ $filter: { input: "$cart", as: "item", cond: sameItem } }, 0] } } }, 0] }, delta] }, stock] } },
+    [{ $set: { cart: { $cond: [{ $gt: [{ $size: { $filter: { input: "$cart", as: "item", cond: sameItem } } }, 0] }, { $map: { input: "$cart", as: "item", in: { $cond: [sameItem, { product: "$$item.product", variant: "$$item.variant", quantity: { $add: ["$$item.quantity", delta] } }, "$$item"] } } }, { $concatArrays: ["$cart", [{ product: product._id, variant: variant?._id, quantity: delta }]] }] } } }],
     { new: true }
   );
   if (!user) {
@@ -79,13 +104,13 @@ export async function addCartItem(userId, productId, quantity = 1) {
   return populatedCart(userId);
 }
 
-export async function updateCartItem(userId, productId, quantity) {
+export async function updateCartItem(userId, productId, quantity, variantId) {
   const product = await Product.findOne({ _id: productId, isActive: true });
   if (!product) throw new ApiError("Product not found.", 404);
   const nextQuantity = requestedQuantity(quantity);
-  assertStock(product, nextQuantity);
+  const variant = assertStock(product, nextQuantity, variantId);
   const user = await User.findOneAndUpdate(
-    { _id: userId, "cart.product": productId },
+    { _id: userId, cart: { $elemMatch: { product: productId, variant: variant?._id || { $exists: false } } } },
     { $set: { "cart.$.quantity": nextQuantity } },
     { new: true, runValidators: true }
   );
@@ -96,8 +121,8 @@ export async function updateCartItem(userId, productId, quantity) {
   return populatedCart(userId);
 }
 
-export async function removeCartItem(userId, productId) {
-  await User.findByIdAndUpdate(userId, { $pull: { cart: { product: productId } } });
+export async function removeCartItem(userId, productId, variantId) {
+  await User.findByIdAndUpdate(userId, { $pull: { cart: { product: productId, ...(variantId ? { variant: variantId } : { variant: { $exists: false } }) } } });
   return populatedCart(userId);
 }
 

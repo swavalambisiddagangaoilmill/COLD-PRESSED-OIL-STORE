@@ -29,7 +29,7 @@ const productFields = [
   body("variants.*.size").optional({ checkFalsy: false }).trim().notEmpty().withMessage("Variant size is required.").bail().custom((value) => { sizeInLitres(value); return true; }),
   body("variants.*.price").optional({ checkFalsy: false }).isFloat({ gt: 0 }).withMessage("Variant price must be greater than zero."),
   body("variants.*.mrp").optional({ checkFalsy: false }).isFloat({ gt: 0 }).withMessage("Variant MRP must be greater than zero.").bail().custom((value, { req, pathValues }) => Number(value) >= Number(req.body.variants?.[pathValues[0]]?.price)).withMessage("Variant MRP cannot be lower than its price."),
-  body("variants.*.stock").optional({ checkFalsy: false }).isInt({ min: 0 }).withMessage("Variant stock cannot be negative."),
+  body("variants.*.stock").optional({ checkFalsy: false }).isFloat({ min: 0 }).withMessage("Variant stock in litres cannot be negative."),
   body("variants.*.images").optional().isArray().withMessage("Variant images must be an array."),
   body("variants.*.images.*.url").optional().isURL().withMessage("Variant image URL must be valid."),
 ];

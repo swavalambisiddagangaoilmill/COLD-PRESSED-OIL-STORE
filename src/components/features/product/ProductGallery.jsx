@@ -14,7 +14,7 @@ export default function ProductGallery({ product }) {
   useEffect(() => {
     setActiveIndex(0);
     setZoomed(false);
-  }, [product.id]);
+  }, [product.id, product.variantId]);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[96px_1fr]">

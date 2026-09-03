@@ -4,9 +4,12 @@ import { apiRequest } from "../api/apiClient.js";
 
 export function normalizeCartItem(item) {
   const product = item.product || item;
-  const baseSellingPrice = product?.baseSellingPrice ?? product?.discountPrice ?? product?.price ?? 0;
-  const price = product?.effectivePrice ?? baseSellingPrice;
-  return { ...(product || {}), id: product?._id || product?.id, name: product?.title || product?.name, image: product?.images?.[0]?.url || product?.image || "", price, effectivePrice: price, baseSellingPrice, mrp: product?.appliedOffer ? baseSellingPrice : product?.price || product?.mrp || baseSellingPrice, stock: product?.stock ?? 0, isActive: product?.isActive !== false, quantity: item.quantity || 1, category: product?.category?.name || product?.category || "Oil", volume: product?.volume || "1L", appliedOffer: product?.appliedOffer || null, codEnabled: product?.codEnabled !== false, onlinePaymentEnabled: product?.onlinePaymentEnabled !== false, returnEligible: product?.returnEligible !== false, exchangeEligible: Boolean(product?.exchangeEligible) };
+  const variantId = item.variant?._id || item.variant || item.variantId;
+  const variant = product?.variants?.find((value) => String(value._id || value.id) === String(variantId));
+  const priced = variant || product;
+  const baseSellingPrice = priced?.baseSellingPrice ?? (variant ? variant.price : (product?.discountPrice ?? product?.price)) ?? 0;
+  const price = priced?.effectivePrice ?? baseSellingPrice;
+  return { ...(product || {}), id: product?._id || product?.id, variantId: variantId || null, cartKey: `${product?._id || product?.id}:${variantId || ""}`, name: product?.title || product?.name, image: priced?.images?.[0]?.url || product?.images?.[0]?.url || product?.image || "", price, effectivePrice: price, baseSellingPrice, mrp: priced?.appliedOffer ? baseSellingPrice : priced?.mrp || baseSellingPrice, stock: priced?.stock ?? 0, stockLitres: variant ? Number(variant.stock || 0) : undefined, litres: variant?.litres, isActive: product?.isActive !== false && priced?.isActive !== false, quantity: item.quantity || 1, category: product?.category?.name || product?.category || "Oil", volume: variant?.size || product?.volume || product?.size || "1L", sku: variant?.sku || product?.sku, appliedOffer: priced?.appliedOffer || null, codEnabled: product?.codEnabled !== false, onlinePaymentEnabled: product?.onlinePaymentEnabled !== false, returnEligible: product?.returnEligible !== false, exchangeEligible: Boolean(product?.exchangeEligible) };
 }
 
 export async function fetchCart() {
@@ -15,22 +18,22 @@ export async function fetchCart() {
 }
 
 export async function syncCart(items, { merge = false } = {}) {
-  const data = await apiRequest(API_ENDPOINTS.cartSync, { method: "PUT", body: JSON.stringify({ merge, items: items.map((item) => ({ productId: item._id || item.id, quantity: item.quantity })) }) });
+  const data = await apiRequest(API_ENDPOINTS.cartSync, { method: "PUT", body: JSON.stringify({ merge, items: items.map((item) => ({ productId: item._id || item.id, variantId: item.variantId, quantity: item.quantity })) }) });
   return (data.cart || []).map(normalizeCartItem);
 }
 
-export async function addCartItem(productId, quantity = 1) {
-  const data = await apiRequest(API_ENDPOINTS.cartItems, { method: "POST", body: JSON.stringify({ productId, quantity }) });
+export async function addCartItem(productId, quantity = 1, variantId) {
+  const data = await apiRequest(API_ENDPOINTS.cartItems, { method: "POST", body: JSON.stringify({ productId, variantId, quantity }) });
   return (data.cart || []).map(normalizeCartItem);
 }
 
-export async function updateCartItem(productId, quantity) {
-  const data = await apiRequest(API_ENDPOINTS.cartItem(productId), { method: "PUT", body: JSON.stringify({ quantity }) });
+export async function updateCartItem(productId, quantity, variantId) {
+  const data = await apiRequest(`${API_ENDPOINTS.cartItem(productId)}${variantId ? `?variantId=${encodeURIComponent(variantId)}` : ""}`, { method: "PUT", body: JSON.stringify({ quantity }) });
   return (data.cart || []).map(normalizeCartItem);
 }
 
-export async function removeCartItem(productId) {
-  const data = await apiRequest(API_ENDPOINTS.cartItem(productId), { method: "DELETE" });
+export async function removeCartItem(productId, variantId) {
+  const data = await apiRequest(`${API_ENDPOINTS.cartItem(productId)}${variantId ? `?variantId=${encodeURIComponent(variantId)}` : ""}`, { method: "DELETE" });
   return (data.cart || []).map(normalizeCartItem);
 }
 

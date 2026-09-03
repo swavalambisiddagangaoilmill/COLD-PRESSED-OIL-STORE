@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import User from "../models/User.js";
 import Product from "../models/Product.js";
 import Order from "../models/Order.js";
+import Offer from "../models/Offer.js";
 import { clearPurchasedCart, createOrder } from "../services/orderService.js";
 import { getCart } from "../services/cartService.js";
 import { getWishlist } from "../services/wishlistService.js";
@@ -15,7 +16,9 @@ const originalFindById = User.findById;
 const originalProductFind = Product.find;
 const originalProductUpdate = Product.updateOne;
 const originalOrderCreate = Order.create;
-test.afterEach(() => { User.updateOne = originalUpdateOne; User.findById = originalFindById; Product.find = originalProductFind; Product.updateOne = originalProductUpdate; Order.create = originalOrderCreate; });
+const originalOfferFind = Offer.find;
+test.beforeEach(() => { Offer.find = () => ({ lean: async () => [] }); });
+test.afterEach(() => { User.updateOne = originalUpdateOne; User.findById = originalFindById; Product.find = originalProductFind; Product.updateOne = originalProductUpdate; Order.create = originalOrderCreate; Offer.find = originalOfferFind; });
 
 function mockUserSelection(value) {
   User.findById = () => ({ select: () => ({ lean: async () => value }) });

@@ -29,7 +29,7 @@ offerSchema.pre("validate", function validateTarget(next) {
   if (this.targetType === "CATEGORY" && !this.categories.length) this.invalidate("categories", "Select at least one category.");
   if (this.targetType === "VARIANT" && !this.variants.length) this.invalidate("variants", "Select at least one variant.");
   if (this.targetType === "CUSTOM" && !this.categories.length && !this.products.length && !this.variants.length) this.invalidate("targetType", "Select at least one category, product, or variant.");
-  if (this.targetType) {
+  if (this.targetType && this.startDate instanceof Date && !Number.isNaN(this.startDate.getTime()) && this.endDate instanceof Date && !Number.isNaN(this.endDate.getTime())) {
     const values = [this.name.trim().toLowerCase(), this.targetType, [...this.categories].map(String).sort().join(","), [...this.products].map(String).sort().join(","), [...this.variants].map((item) => `${item.product}:${item.variant}`).sort().join(","), new Date(this.startDate).toISOString(), new Date(this.endDate).toISOString()];
     this.fingerprint = values.join("|");
   }
@@ -37,6 +37,10 @@ offerSchema.pre("validate", function validateTarget(next) {
 });
 
 offerSchema.index({ isActive: 1, startDate: 1, endDate: 1 });
-offerSchema.index({ categories: 1, products: 1 });
+// These must remain separate: MongoDB cannot index two array fields in one
+// compound multikey index ("cannot index parallel arrays").
+offerSchema.index({ categories: 1 });
+offerSchema.index({ products: 1 });
+offerSchema.index({ "variants.product": 1, "variants.variant": 1 });
 export default mongoose.model("Offer", offerSchema);
 

@@ -8,10 +8,13 @@ const dimensionsSchema = new mongoose.Schema(
 
 const variantSchema = new mongoose.Schema({
   size: { type: String, required: true, trim: true },
+  litres: { type: Number, required: true, min: 0.001 },
+  stockUnit: { type: String, enum: ["LITRES"], default: "LITRES" },
   sku: { type: String, required: true, trim: true, uppercase: true },
   price: { type: Number, required: true, min: 0.01 },
   mrp: { type: Number, required: true, min: 0.01, validate: { validator(value) { return value >= this.price; }, message: "Variant MRP cannot be lower than its price." } },
   stock: { type: Number, required: true, min: 0 },
+  isActive: { type: Boolean, default: true },
   images: [{ url: { type: String, required: true }, publicId: { type: String } }],
   shippingWeight: { type: Number, required: true, min: 0.01 },
   dimensions: { type: dimensionsSchema, required: true },

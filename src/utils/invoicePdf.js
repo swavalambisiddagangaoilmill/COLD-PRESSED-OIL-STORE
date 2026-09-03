@@ -69,7 +69,7 @@ function normalizeItems(order) {
   return (order.items || order.products || []).map((item) => {
     const product = item.product && typeof item.product === "object" ? item.product : item;
     const name = item.name || item.title || product.name || product.title || "Product";
-    const variant = item.variant || item.volume || product.volume || item.weight || "-";
+    const variant = item.variantLabel || item.volume || product.volume || item.weight || "-";
     const quantity = Number(item.quantity || 1);
     const unitPrice = Number(item.price || item.unitPrice || product.discountPrice || product.price || 0);
     const listPrice = Number(item.basePrice || item.originalPrice || item.listPrice || product.originalPrice || unitPrice);

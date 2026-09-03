@@ -15,7 +15,7 @@ export default function AddToCartButton({ product, quantity = 1, className = "",
   const [pulse, setPulse] = useState(false);
   const cancelRef = useRef(null);
   const selectedQuantity = Math.max(1, Number(quantity) || 1);
-  const cartQuantity = getItemQuantity(product.id);
+  const cartQuantity = getItemQuantity(product.id, product.variantId);
   const inCart = cartQuantity > 0;
   const totalQuantity = cartQuantity + selectedQuantity;
 
@@ -23,7 +23,7 @@ export default function AddToCartButton({ product, quantity = 1, className = "",
     if (loading) return;
     setLoading(true);
     try {
-      if (addMore && inCart) await updateQuantity(product.id, totalQuantity);
+      if (addMore && inCart) await updateQuantity(product.id, totalQuantity, product.variantId);
       else await addItem(product, selectedQuantity);
       setPulse(true);
       showToast(addMore ? "Cart updated" : "Added to Cart", "cart", { label: "View Cart", to: "/cart" }, { id: `cart-${product.id}` });

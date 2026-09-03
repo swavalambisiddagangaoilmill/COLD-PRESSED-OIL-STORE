@@ -20,6 +20,8 @@ import { createProductWithGeneratedSku, prepareProductVariants } from "../../ser
 import { sendOrderConfirmationEmail } from "../../services/emailService.js";
 import { createCategory, listCategories as listCanonicalCategories, requireCanonicalCategory, updateCategory } from "../../services/categoryService.js";
 import { priceProducts } from "../../services/offerPricingService.js";
+import { sizeInLitres } from "../../utils/shippingDefaults.js";
+import mongoose from "mongoose";
 
 const orderTransitions = {
   placed: ["confirmed", "cancelled"],
@@ -93,7 +95,7 @@ export async function updateOrderStatus(id, nextStatus) {
   if (nextStatus === "confirmed") await sendConfirmationOnce(order);
   if (nextStatus === "cancelled" && !order.inventoryRestoredAt) {
     try {
-      await Product.bulkWrite(order.products.map((item) => ({ updateOne: { filter: { _id: item.product }, update: { $inc: { stock: item.quantity } } } })));
+      await Product.bulkWrite(order.products.map((item) => ({ updateOne: item.variant ? { filter: { _id: item.product, "variants._id": item.variant }, update: { $inc: { "variants.$.stock": item.requiredStockLitres || item.quantity } } } : { filter: { _id: item.product }, update: { $inc: { stock: item.quantity } } } })));
       order.inventoryRestoredAt = new Date();
       await order.save();
       const restoredProducts = await Product.find({ _id: { $in: order.products.map((item) => item.product) } });
@@ -205,13 +207,26 @@ export async function bulkPriceApply(payload) {
   return { updated: products.length };
 }
 
-export async function updateInventory(id, { mode, quantity }) {
+export async function updateInventory(id, { mode, quantity, variantId }) {
   const product = await Product.findById(id);
   if (!product) throw new ApiError("Product not found.", 404);
   const qty = Number(quantity);
-  if (!Number.isInteger(qty) || qty < 0) throw new ApiError("Quantity must be a whole number of zero or more.", 400);
-  if (mode === "reduce" && qty > product.stock) throw new ApiError("Quantity cannot reduce stock below zero.", 400);
-  product.stock = mode === "set" ? qty : mode === "reduce" ? Math.max(0, product.stock - qty) : product.stock + qty;
+  if (!Number.isFinite(qty) || qty < 0) throw new ApiError("Stock litres must be zero or more.", 400);
+  const variant = variantId ? product.variants?.id(variantId) : null;
+  if (variantId && !variant) throw new ApiError("Selected variant does not belong to this product.", 400);
+  const target = variant || product;
+  if (mode === "reduce" && qty > target.stock) throw new ApiError("Litres cannot reduce stock below zero.", 400);
+  if (variant) {
+    const next = mode === "set" ? qty : mode === "reduce" ? target.stock - qty : target.stock + qty;
+    const updated = await Product.findOneAndUpdate(
+      { _id: id, variants: { $elemMatch: { _id: variantId, ...(mode === "reduce" ? { stock: { $gte: qty } } : {}) } } },
+      { $set: { "variants.$.stock": next, "variants.$.litres": Number(variant.litres || sizeInLitres(variant.size)), "variants.$.stockUnit": "LITRES" } },
+      { new: true }
+    );
+    if (!updated) throw new ApiError("Variant stock changed concurrently. Refresh and retry.", 409);
+    return updated;
+  }
+  target.stock = mode === "set" ? qty : mode === "reduce" ? target.stock - qty : target.stock + qty;
   await product.save();
   return product;
 }
@@ -261,15 +276,39 @@ export async function saveCategory(payload, id) { return id ? updateCategory(id,
 
 export const listOffers = () => Offer.find().populate("category", "name").populate("categories", "name").populate("products", "title variants").sort({ createdAt: -1 });
 export async function saveOffer(payload, userId, id) {
-  const data = { ...payload, discountType: "PERCENTAGE", discountValue: Number(payload.discountValue), categories: payload.categories || [], products: payload.products || [], variants: payload.variants || [] };
+  const uniqueIds = (values = []) => [...new Set(values.map((value) => String(value?._id || value)).filter(Boolean))];
+  const uniqueVariants = [...new Map((payload.variants || []).map((item) => [`${item.product?._id || item.product}:${item.variant?._id || item.variant}`, { product: String(item.product?._id || item.product), variant: String(item.variant?._id || item.variant) }])).values()];
+  const targetType = payload.targetType;
+  if (!["CATEGORY", "VARIANT", "CUSTOM"].includes(targetType)) throw new ApiError("Select a valid offer targeting mode.", 400);
+  const data = { ...payload, targetType, discountType: "PERCENTAGE", discountValue: Number(payload.discountValue), categories: targetType === "VARIANT" ? [] : uniqueIds(payload.categories), products: targetType === "CUSTOM" ? uniqueIds(payload.products) : [], variants: targetType === "CATEGORY" ? [] : uniqueVariants };
   if (!Number.isFinite(data.discountValue) || data.discountValue <= 0 || data.discountValue > 100) throw new ApiError("Discount percentage must be between 0 and 100.", 400);
-  if (!data.startDate || !data.endDate || new Date(data.endDate) <= new Date(data.startDate)) throw new ApiError("Offer end date must be after its start date.", 400);
+  const startDate = new Date(data.startDate); const endDate = new Date(data.endDate);
+  if (!data.startDate || !data.endDate || Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) throw new ApiError("Offer end date must be after its start date.", 400);
+  data.startDate = startDate; data.endDate = endDate;
+  if (targetType === "CATEGORY" && !data.categories.length || targetType === "VARIANT" && !data.variants.length || targetType === "CUSTOM" && !data.categories.length && !data.products.length && !data.variants.length) throw new ApiError("Please select at least one target.", 400);
+  const allIds = [...data.categories, ...data.products, ...data.variants.flatMap((item) => [item.product, item.variant])];
+  if (allIds.some((value) => !mongoose.isValidObjectId(value))) throw new ApiError("One or more selected targets are invalid.", 400);
   await Promise.all(data.categories.map(requireCanonicalCategory));
   const selectedProducts = await Product.find({ _id: { $in: [...data.products, ...data.variants.map((item) => item.product)] } }).select("variants");
   const productMap = new Map(selectedProducts.map((product) => [String(product._id), product]));
   if (productMap.size !== new Set([...data.products, ...data.variants.map((item) => String(item.product))]).size) throw new ApiError("One or more selected products are invalid.", 400);
   if (data.variants.some((item) => !productMap.get(String(item.product))?.variants.some((variant) => String(variant._id) === String(item.variant)))) throw new ApiError("One or more selected variants are invalid.", 400);
-  return id ? Offer.findByIdAndUpdate(id, data, { new: true, runValidators: true }) : Offer.create({ ...data, createdBy: userId });
+  try {
+    if (id) {
+      const offer = await Offer.findById(id);
+      if (!offer) throw new ApiError("Offer not found.", 404);
+      offer.set(data);
+      return await offer.save();
+    }
+    return await Offer.create({ ...data, createdBy: userId });
+  } catch (error) {
+    if (error?.code === 11000 && (error.keyPattern?.fingerprint || error.keyValue?.fingerprint)) {
+      const existing = await Offer.findOne({ fingerprint: error.keyValue?.fingerprint }).select("+fingerprint");
+      if (existing && !id) return existing;
+      throw new ApiError("This offer could not be saved because it conflicts with an existing offer.", 409, [{ field: "targets", message: "An identical offer already exists." }]);
+    }
+    throw error;
+  }
 }
 export const deleteOffer = (id) => Offer.findByIdAndDelete(id);
 export const listCoupons = () => Coupon.find().populate("categories", "name").populate("products", "title").sort({ createdAt: -1 });
