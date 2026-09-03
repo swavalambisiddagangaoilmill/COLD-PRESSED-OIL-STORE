@@ -29,7 +29,8 @@ test("cart read removes missing products and clamps valid quantities persistentl
   const cart = await getCart("user-1");
   assert.equal(cart.length, 1);
   assert.equal(cart[0].quantity, 3);
-  assert.deepEqual(update[1].cart, [{ product: "valid", quantity: 3 }]);
+  assert.deepEqual(update[1].$set.cart, [{ product: "valid", quantity: 3 }]);
+  assert.deepEqual(update[0].cart, [{ product: "valid", quantity: 8 }, { product: "deleted", quantity: 1 }]);
 });
 
 test("wishlist read removes only missing or inactive product references", async () => {

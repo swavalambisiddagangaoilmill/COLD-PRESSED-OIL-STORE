@@ -15,7 +15,9 @@ async function populatedCart(userId) {
     return [{ product: product._id, quantity: Math.min(requestedQuantity(item.quantity), product.stock) }];
   });
   const changed = cart.length !== user.cart.length || cart.some((item, index) => item.product.toString() !== user.cart[index]?.product?.toString() || item.quantity !== user.cart[index]?.quantity);
-  if (changed) await User.updateOne({ _id: userId }, { cart });
+  // Only clean the snapshot we read. A concurrent cart mutation must win instead
+  // of being overwritten by stale-item reconciliation.
+  if (changed) await User.updateOne({ _id: userId, cart: user.cart }, { $set: { cart } });
   return cart.map((item) => ({ product: productMap.get(item.product.toString()), quantity: item.quantity }));
 }
 
@@ -61,28 +63,33 @@ export async function syncCart(userId, items = [], { merge = false } = {}) {
 export async function addCartItem(userId, productId, quantity = 1) {
   const product = await Product.findOne({ _id: productId, isActive: true });
   if (!product) throw new ApiError("Product not found.", 404);
-  const user = await User.findById(userId);
-  if (!user) throw new ApiError("User not found.", 404);
   const delta = requestedQuantity(quantity);
-  const existing = user.cart.find((item) => item.product.toString() === productId.toString());
-  const nextQuantity = (existing?.quantity || 0) + delta;
-  assertStock(product, nextQuantity);
-  if (existing) existing.quantity = nextQuantity;
-  else user.cart.push({ product: productId, quantity: nextQuantity });
-  await user.save();
+  const user = await User.findOneAndUpdate(
+    { _id: userId, $expr: { $lte: [{ $add: [{ $ifNull: [{ $getField: { field: "quantity", input: { $arrayElemAt: [{ $filter: { input: "$cart", as: "item", cond: { $eq: ["$$item.product", product._id] } } }, 0] } } }, 0] }, delta] }, product.stock] } },
+    [{ $set: { cart: { $cond: [{ $in: [product._id, "$cart.product"] }, { $map: { input: "$cart", as: "item", in: { $cond: [{ $eq: ["$$item.product", product._id] }, { product: "$$item.product", quantity: { $add: ["$$item.quantity", delta] } }, "$$item"] } } }, { $concatArrays: ["$cart", [{ product: product._id, quantity: delta }]] }] } } }],
+    { new: true }
+  );
+  if (!user) {
+    if (!await User.exists({ _id: userId })) throw new ApiError("User not found.", 404);
+    throw new ApiError(`${product.title} does not have enough stock.`, 400);
+  }
   return populatedCart(userId);
 }
 
 export async function updateCartItem(userId, productId, quantity) {
   const product = await Product.findOne({ _id: productId, isActive: true });
   if (!product) throw new ApiError("Product not found.", 404);
-  const user = await User.findById(userId);
-  const existing = user?.cart.find((item) => item.product.toString() === productId.toString());
-  if (!existing) throw new ApiError("Cart item not found.", 404);
   const nextQuantity = requestedQuantity(quantity);
   assertStock(product, nextQuantity);
-  existing.quantity = nextQuantity;
-  await user.save();
+  const user = await User.findOneAndUpdate(
+    { _id: userId, "cart.product": productId },
+    { $set: { "cart.$.quantity": nextQuantity } },
+    { new: true, runValidators: true }
+  );
+  if (!user) {
+    if (!await User.exists({ _id: userId })) throw new ApiError("User not found.", 404);
+    throw new ApiError("Cart item not found.", 404);
+  }
   return populatedCart(userId);
 }
 
