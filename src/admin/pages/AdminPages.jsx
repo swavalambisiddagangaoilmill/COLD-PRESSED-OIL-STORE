@@ -390,6 +390,9 @@ function AdminOrderDetails({ order, onClose }) {
     };
   }, [onClose]);
   if (!order) return null;
+  const shipmentBooked = Boolean(
+    order.shiprocketOrderId || order.shiprocketShipmentId || order.awbCode,
+  );
   const timestamps = [
     ["Confirmed", order.confirmedAt],
     ["Shipment booked", order.shipmentBookedAt],
@@ -458,16 +461,39 @@ function AdminOrderDetails({ order, onClose }) {
                       </p>
                     </div>
                     <p className="text-lg font-bold">
-                      {money(Number(item.price) * Number(item.quantity))}
+                      {money(item.total ?? item.lineTotal)}
                     </p>
                   </div>
-                  <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
+                  <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
                     <OrderField label="SKU" value={item.variantSku} />
                     <OrderField label="Quantity" value={item.quantity} />
-                    <OrderField label="Unit price" value={money(item.price)} />
+                    <OrderField
+                      label="List price"
+                      value={money(item.basePrice ?? item.price)}
+                    />
+                    <OrderField
+                      label="Item discount"
+                      value={
+                        Number(item.offerDiscount) > 0
+                          ? `${item.offerName || "Offer"}${item.offerPercentage ? ` (${item.offerPercentage}%)` : ""} · - ${money(item.offerDiscount)}`
+                          : "Not applied"
+                      }
+                    />
+                    <OrderField
+                      label="Final unit price"
+                      value={money(item.price)}
+                    />
                     <OrderField
                       label="Line total"
-                      value={money(Number(item.price) * Number(item.quantity))}
+                      value={money(item.total ?? item.lineTotal)}
+                    />
+                    <OrderField
+                      label="Liters consumed"
+                      value={
+                        item.requiredStockLitres != null
+                          ? `${item.requiredStockLitres} L`
+                          : "Not recorded"
+                      }
                     />
                     <OrderField
                       label="Weight"
@@ -559,6 +585,12 @@ function AdminOrderDetails({ order, onClose }) {
                   <strong>Final total</strong>
                   <strong>{money(order.totalAmount)}</strong>
                 </div>
+                <div className="flex justify-between gap-4 border-t border-ink/10 pt-3">
+                  <span>Payment amount / status</span>
+                  <strong>
+                    {money(order.totalAmount)} · {statusText(order.paymentStatus)}
+                  </strong>
+                </div>
               </div>
             </section>
             <section className="rounded-xl border border-[var(--admin-border)] bg-white p-4">
@@ -575,6 +607,11 @@ function AdminOrderDetails({ order, onClose }) {
             </section>
             <section className="rounded-xl border border-[var(--admin-border)] bg-white p-4">
               <h3 className="font-bold">Fulfillment / Shipping</h3>
+              {!shipmentBooked && (
+                <p className="mt-3 rounded-lg bg-linen px-3 py-2 text-sm font-bold text-ink/60">
+                  Not booked
+                </p>
+              )}
               <div className="mt-4 grid grid-cols-2 gap-4">
                 <OrderField
                   label="Shipping status"
@@ -683,7 +720,20 @@ function OrdersTable({
         );
         const latest = order.trackingTimeline?.at?.(-1);
         return (
-          <tr key={order._id}>
+          <tr
+            key={order._id}
+            tabIndex={0}
+            aria-label={`Open details for order ${order._id}`}
+            onClick={(event) => openRow(event, order)}
+            onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openRow(event, order);
+              }
+            }}
+            className="cursor-pointer transition hover:bg-linen/45 focus-visible:bg-linen/60 focus-visible:outline-none"
+          >
             <Cell className="font-bold">{order._id}</Cell>
             <Cell>
               {order.user?.name ||
@@ -815,6 +865,7 @@ function OrdersTable({
 export function OrdersPage() {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState(null);
   const { data, loading, error, setData } = useAdminData(
     () => adminApi.orders(q ? `?search=${encodeURIComponent(q)}` : ""),
     [q],
@@ -823,7 +874,12 @@ export function OrdersPage() {
   const { data: serviceData } = useAdminData(adminApi.serviceStatus);
   const shiprocketAvailable =
     serviceData?.services?.shiprocket?.available !== false;
-  const setOrder = (order) => updateItemList(setData, order._id, order);
+  const setOrder = (order) => {
+    updateItemList(setData, order._id, order);
+    setSelectedOrder((current) =>
+      current?._id === order._id ? order : current,
+    );
+  };
   const action = async (type, order) => {
     const key = `${type}:${order._id}`;
     const status =
@@ -886,10 +942,17 @@ export function OrdersPage() {
         <OrdersTable
           orders={data.items}
           onAction={action}
+          onOpen={setSelectedOrder}
           pending={pending}
           shiprocketAvailable={shiprocketAvailable}
         />
       ) : null}
+      {selectedOrder && (
+        <AdminOrderDetails
+          order={selectedOrder}
+          onClose={() => setSelectedOrder(null)}
+        />
+      )}
     </>
   );
 }
