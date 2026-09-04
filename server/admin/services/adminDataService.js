@@ -9,7 +9,7 @@ import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";
 import StoreSettings from "../../models/StoreSettings.js";
 import User from "../../models/User.js";
-import { createReadyToShipShipment, markShipmentHandedOver } from "../../services/shiprocketService.js";
+import { cancelShiprocketShipment, createReadyToShipShipment, markShipmentHandedOver, requestShipmentPickup } from "../../services/shiprocketService.js";
 import { createAdminNotification, createInventoryNotifications } from "../../services/adminNotificationService.js";
 import { normalizeCouponCode } from "../../services/couponService.js";
 import { deleteImage } from "../../services/uploadService.js";
@@ -123,6 +123,8 @@ async function sendConfirmationOnce(order) {
 }
 
 export async function readyToShip(id) { return createReadyToShipShipment(id); }
+export async function requestPickup(id) { return requestShipmentPickup(id); }
+export async function cancelShipment(id) { return cancelShiprocketShipment(id); }
 export async function handoverShipment(id) { return markShipmentHandedOver(id); }
 
 export async function listProducts(query) {

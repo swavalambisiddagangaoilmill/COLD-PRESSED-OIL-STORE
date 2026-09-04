@@ -5,11 +5,15 @@ import Order from "../models/Order.js";
 import StoreSettings from "../models/StoreSettings.js";
 import { ApiError } from "../utils/ApiError.js";
 import { logExternalFailure } from "./serviceStatusService.js";
-import { sendShipmentReadyEmail } from "./emailService.js";
+import { sendShipmentReadyEmail, sendShipmentStatusEmail } from "./emailService.js";
 import { shipmentDataFromOrder } from "./shipmentDataService.js";
 
 const API_BASE = "https://apiv2.shiprocket.in/v1/external";
+const REQUEST_TIMEOUT_MS = 10_000;
+const TOKEN_LIFETIME_MS = 10 * 24 * 60 * 60 * 1000;
+const TOKEN_REFRESH_BUFFER_MS = 60 * 60 * 1000;
 let authCache = { token: "", expiresAt: 0 };
+let authenticationPromise = null;
 
 export async function assertShiprocketEnabled() {
   if (!env.shiprocket.enabled) throw new ApiError("Shipping is temporarily unavailable.", 503);
@@ -38,44 +42,76 @@ async function parseResponse(response) {
   if (!response.ok) {
     const message = data.message || data.error || data.errors?.[0]?.message || "Shiprocket request failed.";
     logExternalFailure("shiprocket", new Error(message), { status: response.status });
+    if (response.status === 429) throw new ApiError("Shipping service is busy. Please retry shortly.", 429);
     throw new ApiError(response.status >= 500 ? "Shipping integration is temporarily unavailable." : "Shiprocket could not process this shipment.", response.status >= 500 ? 502 : 400);
   }
   return data;
 }
 
-async function authenticate() {
-  requireConfig();
-  if (authCache.token && Date.now() < authCache.expiresAt) return authCache.token;
+async function requestAuthentication(transientRetry = true) {
   let response;
   try {
     response = await fetch(`${API_BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: env.shiprocket.email, password: env.shiprocket.password }),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: env.shiprocket.email, password: env.shiprocket.password }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
     logExternalFailure("shiprocket", error, { action: "authenticate" });
+    if (transientRetry) return requestAuthentication(false);
     throw new ApiError("Shipping integration is temporarily unavailable.", 503);
   }
-  const data = await parseResponse(response);
-  if (!data.token) throw new ApiError("Shiprocket authentication did not return a token.", 502);
-  authCache = { token: data.token, expiresAt: Date.now() + 9 * 24 * 60 * 60 * 1000 };
-  return data.token;
+  if (response.status >= 500 && transientRetry) return requestAuthentication(false);
+  return parseResponse(response);
 }
 
-async function shiprocketRequest(path, options = {}) {
+async function authenticate() {
+  requireConfig();
+  if (authCache.token && Date.now() < authCache.expiresAt) return authCache.token;
+  if (authenticationPromise) return authenticationPromise;
+  authenticationPromise = (async () => {
+    const data = await requestAuthentication();
+    if (!data.token || typeof data.token !== "string") throw new ApiError("Shipping integration is temporarily unavailable.", 502);
+    authCache = { token: data.token, expiresAt: Date.now() + TOKEN_LIFETIME_MS - TOKEN_REFRESH_BUFFER_MS };
+    return data.token;
+  })();
+  try {
+    return await authenticationPromise;
+  } finally {
+    authenticationPromise = null;
+  }
+}
+
+function clearAuthentication() {
+  authCache = { token: "", expiresAt: 0 };
+}
+
+export function resetShiprocketAuthForTests() {
+  clearAuthentication();
+  authenticationPromise = null;
+}
+
+async function shiprocketRequest(path, options = {}, authRetry = true, transientRetry = true) {
   const token = await authenticate();
   let response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
-    method: options.method || "GET",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: options.body ? JSON.stringify(options.body) : undefined,
+      method: options.method || "GET",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
     logExternalFailure("shiprocket", error, { action: path });
+    if ((options.method || "GET") === "GET" && transientRetry) return shiprocketRequest(path, options, authRetry, false);
     throw new ApiError("Shipping integration is temporarily unavailable.", 503);
   }
+  if (response.status === 401 && authRetry) {
+    clearAuthentication();
+    return shiprocketRequest(path, options, false, transientRetry);
+  }
+  if (response.status >= 500 && (options.method || "GET") === "GET" && transientRetry) return shiprocketRequest(path, options, authRetry, false);
   return parseResponse(response);
 }
 
@@ -130,7 +166,7 @@ function buildOrderPayload(order, packageDetails) {
 export function selectCourier(serviceability) {
   const companies = serviceability?.data?.available_courier_companies || serviceability?.available_courier_companies || [];
   if (!Array.isArray(companies) || companies.length === 0) throw new ApiError("No Shiprocket courier is serviceable for this order.", 400);
-  const cost = (item) => asNumber(item.freight_charge || item.rate);
+  const cost = (item) => asNumber(item.rate ?? item.freight_charge);
   const days = (item) => asNumber(item.estimated_delivery_days || item.etd_hours) || 999;
   const priced = companies.filter((item) => cost(item) > 0);
   if (!priced.length) throw new ApiError("Shiprocket did not return a valid shipping rate.", 502);
@@ -147,7 +183,7 @@ export async function getShippingRate({ deliveryPincode, weight, dimensions, pay
   if (!(Number(weight) > 0)) throw new ApiError("Shipment weight is required.", 400);
   const box = dimensions || {};
   const dimensionQuery = `&length=${positiveDimension(box.length)}&breadth=${positiveDimension(box.width ?? box.breadth)}&height=${positiveDimension(box.height)}`;
-  const data = await shiprocketRequest(`/courier/serviceability/?pickup_postcode=572106&delivery_postcode=${encodeURIComponent(deliveryPincode)}&weight=${Number(weight).toFixed(3)}${dimensionQuery}&cod=${paymentMethod === "cod" ? 1 : 0}&declared_value=${Math.max(1, Math.round(declaredValue))}`);
+  const data = await shiprocketRequest(`/courier/serviceability/?pickup_postcode=${encodeURIComponent(env.shiprocket.pickupPostcode)}&delivery_postcode=${encodeURIComponent(deliveryPincode)}&weight=${Number(weight).toFixed(3)}${dimensionQuery}&cod=${paymentMethod === "cod" ? 1 : 0}&declared_value=${Math.max(1, Math.round(declaredValue))}`);
   return selectCourier(data);
 }
 
@@ -187,6 +223,71 @@ function secretsMatch(received, expected) {
 
 const shippingProgress = { pending: 0, shiprocket_order_created: 1, awb_assigned: 2, pickup_generated: 3, ready_for_pickup: 4, picked_up: 5, shipped: 5, in_transit: 6, out_for_delivery: 7, delivered: 8 };
 
+export function normalizeShiprocketStatus(value) {
+  const status = String(value || "").trim().toLowerCase().replace(/[_-]+/g, " ");
+  if (!status) return null;
+  if (/\brto\b|return(ed|ing)? to origin|return initiated|return in transit/.test(status)) return "rto";
+  if (/\bndr\b|undelivered|delivery failed|non delivery/.test(status)) return "ndr";
+  if (/cancel(l)?ed|cancellation/.test(status)) return "cancelled";
+  if (/out for delivery/.test(status)) return "out_for_delivery";
+  if (/delivered/.test(status)) return "delivered";
+  if (/in transit|reached at destination|reached destination|shipment further connected/.test(status)) return "in_transit";
+  if (/picked up|pickup done|pickup completed/.test(status)) return "picked_up";
+  if (/shipped|departed/.test(status)) return "shipped";
+  if (/pickup scheduled|pickup generated|pickup queued|ready to ship|out for pickup/.test(status)) return "pickup_generated";
+  if (/awb assigned/.test(status)) return "awb_assigned";
+  if (/shipment created|new/.test(status)) return "shiprocket_order_created";
+  if (/fail|error/.test(status)) return "failed";
+  return null;
+}
+
+function providerEvent(payload = {}, source = "webhook") {
+  const providerStatus = String(payload.current_status || payload.shipment_status || payload.status || payload["sr-status-label"] || payload.activity || "Unknown").trim();
+  const dateValue = payload.event_time || payload.updated_at || payload.timestamp || payload.created_at || payload.date;
+  const occurredAt = dateValue && !Number.isNaN(new Date(dateValue).getTime()) ? new Date(dateValue) : new Date();
+  const event = {
+    status: normalizeShiprocketStatus(providerStatus) || "unknown",
+    providerStatus,
+    providerStatusCode: String(payload.status_code || payload.sr_status || payload["sr-status"] || ""),
+    location: String(payload.location || payload.current_location || "").slice(0, 300),
+    description: String(payload.activity || payload.description || payload.message || providerStatus).slice(0, 1000),
+    occurredAt,
+    source,
+  };
+  event.fingerprint = crypto.createHash("sha256").update(JSON.stringify([payload.awb || payload.awb_code || "", event.providerStatus, event.providerStatusCode, event.occurredAt.toISOString(), event.location, event.description])).digest("hex");
+  return event;
+}
+
+function nextShipmentStatus(current, incoming) {
+  if (!incoming || incoming === "unknown") return current;
+  if (current === "delivered") return "delivered";
+  if (["rto", "cancelled"].includes(current)) return current;
+  if (["rto", "ndr", "cancelled", "failed"].includes(incoming)) return incoming;
+  if (current === "ndr") return incoming;
+  return (shippingProgress[incoming] ?? -1) >= (shippingProgress[current] ?? -1) ? incoming : current;
+}
+
+async function notifyShipmentEvent(order, event) {
+  if (!event.status || event.status === "unknown" || order.shipmentNotificationEvents?.includes(event.status)) return;
+  const result = await sendShipmentStatusEmail(order, event.status, event);
+  if (!result?.skipped) await Order.updateOne({ _id: order._id }, { $addToSet: { shipmentNotificationEvents: event.status } });
+}
+
+async function persistTrackingEvent(order, event) {
+  if (order.processedTrackingEvents?.includes(event.fingerprint)) return { order, changed: false };
+  const nextStatus = nextShipmentStatus(order.shippingStatus, event.status);
+  const set = { lastTrackingSyncAt: new Date(), lastProviderStatus: event.providerStatus, lastProviderStatusCode: event.providerStatusCode };
+  if (nextStatus !== order.shippingStatus) set.shippingStatus = nextStatus;
+  if (nextStatus === "delivered") set.orderStatus = "delivered";
+  const update = { $set: set, $addToSet: { processedTrackingEvents: event.fingerprint }, $push: { trackingTimeline: event } };
+  const updated = await Order.findOneAndUpdate({ _id: order._id, processedTrackingEvents: { $ne: event.fingerprint } }, update, { new: true }).populate("user", "name email phone");
+  if (!updated) return { order: await loadOrder(order._id), changed: false };
+  updated.$locals ||= {};
+  updated.$locals.webhookStatusChanged = nextStatus !== order.shippingStatus;
+  await notifyShipmentEvent(updated, { ...event, status: nextStatus });
+  return { order: updated, changed: true };
+}
+
 async function sendShipmentEmailOnce(order) {
   if (order.shipmentEmailSentAt || !order.awbCode) return;
   const result = await sendShipmentReadyEmail(order);
@@ -203,6 +304,10 @@ function parseEstimatedDelivery(value) {
 
 function extractAwb(assignResponse) {
   return assignResponse?.response?.data?.awb_code || assignResponse?.data?.awb_code || assignResponse?.awb_code || "";
+}
+
+function extractCourierName(assignResponse, fallback) {
+  return assignResponse?.response?.data?.courier_name || assignResponse?.data?.courier_name || assignResponse?.courier_name || fallback;
 }
 
 function extractLabelUrl(labelResponse) {
@@ -226,11 +331,44 @@ async function failShipment(order, error, status = "failed") {
   throw error;
 }
 
+async function shipmentStep(operation, message) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error?.statusCode === 429) throw new ApiError("Shiprocket rate limit reached. Please retry shortly.", 429);
+    throw new ApiError(message, error?.statusCode || 502);
+  }
+}
+
 export async function getShipmentTracking(orderId, user) {
-  const order = await Order.findById(orderId).populate("user", "name email");
+  let order = await Order.findById(orderId).populate("user", "name email");
   if (!order) throw new ApiError("Order not found.", 404);
   if (user.role !== "admin" && order.user._id.toString() !== user._id.toString()) throw new ApiError("You cannot access this tracking details.", 403);
-  return { order, steps: [] };
+  if (order.awbCode) {
+    const tracking = await shipmentStep(
+      () => shiprocketRequest(`/courier/track/awb/${encodeURIComponent(order.awbCode)}`),
+      "Shiprocket tracking is temporarily unavailable. Please try again.",
+    );
+    const trackingData = tracking?.tracking_data || tracking?.data || tracking;
+    const activities = trackingData?.shipment_track_activities || trackingData?.activities || [];
+    const current = Array.isArray(trackingData?.shipment_track) ? trackingData.shipment_track[0] : trackingData?.shipment_track || trackingData;
+    const rawEvents = activities.length ? activities : current ? [current] : [];
+    for (const rawEvent of rawEvents) {
+      const result = await persistTrackingEvent(order, providerEvent({ ...rawEvent, awb: order.awbCode }, "tracking_api"));
+      order = result.order;
+    }
+  }
+  const steps = [
+    ["shiprocket_order_created", "Shipment Booked"], ["awb_assigned", "AWB Assigned"], ["pickup_generated", "Pickup Requested"], ["picked_up", "Picked Up"], ["in_transit", "In Transit"], ["out_for_delivery", "Out for Delivery"], ["delivered", "Delivered"],
+  ].map(([status, label]) => ({ status, label }));
+  if (user.role === "admin") return { order, steps };
+  const customerOrder = order.toJSON ? order.toJSON() : { ...order };
+  delete customerOrder.shiprocketOrderId;
+  delete customerOrder.shiprocketShipmentId;
+  delete customerOrder.shippingFailureReason;
+  delete customerOrder.processedTrackingEvents;
+  delete customerOrder.shipmentNotificationEvents;
+  return { order: customerOrder, steps };
 }
 
 export async function createReadyToShipShipment(orderId) {
@@ -239,6 +377,7 @@ export async function createReadyToShipShipment(orderId) {
   if (order.orderStatus === "cancelled") throw new ApiError("Cancelled orders cannot be shipped.", 400);
   if (order.orderStatus === "placed") throw new ApiError("Confirm the order before preparing its shipment.", 400);
   if (order.paymentMethod !== "cod" && order.paymentStatus !== "paid") throw new ApiError("Online payment orders must be paid before sending to Shiprocket.", 400);
+  if (!/^\d{6}$/.test(String(order.shippingAddress?.postalCode || ""))) throw new ApiError("A valid 6-digit shipping PIN is required before booking.", 400);
   if (order.awbCode) { await sendShipmentEmailOnce(order); return order; }
 
   const attemptAt = new Date();
@@ -258,8 +397,16 @@ export async function createReadyToShipShipment(orderId) {
   try {
     const snapshot = shipmentDataFromOrder(order);
     const packageDetails = { weight: snapshot.weight, length: snapshot.dimensions.length, breadth: snapshot.dimensions.width, height: snapshot.dimensions.height };
+    const serviceability = await shipmentStep(
+      () => shiprocketRequest(`/courier/serviceability/?pickup_postcode=${encodeURIComponent(env.shiprocket.pickupPostcode)}&delivery_postcode=${encodeURIComponent(order.shippingAddress.postalCode)}&weight=${packageDetails.weight}&length=${packageDetails.length}&breadth=${packageDetails.breadth}&height=${packageDetails.height}&cod=${order.paymentMethod === "cod" ? 1 : 0}&declared_value=${Math.max(1, Math.round(order.totalAmount))}`),
+      "Shiprocket serviceability check failed. Verify the delivery PIN and try again.",
+    );
+    const courier = selectCourier(serviceability);
     if (!order.shiprocketShipmentId) {
-      const created = await shiprocketRequest("/orders/create/adhoc", { method: "POST", body: buildOrderPayload(order, packageDetails) });
+      const created = await shipmentStep(
+        () => shiprocketRequest("/orders/create/adhoc", { method: "POST", body: buildOrderPayload(order, packageDetails) }),
+        "Shiprocket order creation failed. No shipment was booked.",
+      );
       order.shiprocketOrderId = created.order_id || created.shiprocket_order_id || created.data?.order_id || order.shiprocketOrderId;
       order.shiprocketShipmentId = created.shipment_id || created.data?.shipment_id || order.shiprocketShipmentId;
       order.shippingStatus = "shiprocket_order_created";
@@ -269,29 +416,21 @@ export async function createReadyToShipShipment(orderId) {
 
     if (!order.shiprocketShipmentId) throw new ApiError("Shiprocket did not return a shipment id.", 502);
 
-    const serviceability = await shiprocketRequest(`/courier/serviceability/?pickup_postcode=${encodeURIComponent(env.shiprocket.pickupPostcode)}&delivery_postcode=${encodeURIComponent(order.shippingAddress.postalCode)}&weight=${packageDetails.weight}&cod=${order.paymentMethod === "cod" ? 1 : 0}&declared_value=${Math.round(order.totalAmount)}`);
-    const courier = selectCourier(serviceability);
-    const assigned = await shiprocketRequest("/courier/assign/awb", { method: "POST", body: { shipment_id: order.shiprocketShipmentId, courier_id: courier.courierId } });
+    const assigned = await shipmentStep(
+      () => shiprocketRequest("/courier/assign/awb", { method: "POST", body: { shipment_id: order.shiprocketShipmentId, courier_id: courier.courierId } }),
+      "Shiprocket AWB assignment failed. The shipment ID was saved; retry booking to continue.",
+    );
     const awbCode = extractAwb(assigned);
     if (!awbCode) throw new ApiError("Shiprocket did not return an AWB code.", 502);
 
     order.awbCode = awbCode;
-    order.courierName = courier.courierName;
+    order.selectedCourierId = courier.courierId;
+    order.courierName = extractCourierName(assigned, courier.courierName);
     order.trackingUrl = getTrackingUrl(awbCode);
     order.estimatedDelivery = parseEstimatedDelivery(courier.estimatedDelivery) || order.estimatedDelivery;
     order.shippingStatus = "awb_assigned";
+    order.shipmentBookedAt = order.shipmentBookedAt || new Date();
     recordStatus(order, "awb_assigned");
-    await order.save();
-
-    const pickup = await shiprocketRequest("/courier/generate/pickup", { method: "POST", body: { shipment_id: [order.shiprocketShipmentId] } });
-    order.pickupStatus = pickup?.response?.pickup_status || pickup?.pickup_status || pickup?.message || "Pickup requested";
-    order.shippingStatus = "pickup_generated";
-    recordStatus(order, "pickup_generated");
-    order.shippingStatus = "ready_for_pickup";
-    if (order.orderStatus === "confirmed") order.orderStatus = "packed";
-    order.readyToShipAt = new Date();
-    recordStatus(order, "packed");
-    recordStatus(order, "ready_for_pickup");
     order.shippingFailureReason = "";
     order.shipmentCreationStartedAt = undefined;
     await order.save();
@@ -304,11 +443,52 @@ export async function createReadyToShipShipment(orderId) {
   }
 }
 
+export async function requestShipmentPickup(orderId) {
+  await assertShiprocketEnabled();
+  let order = await loadOrder(orderId);
+  if (order.orderStatus === "cancelled" || order.shippingStatus === "cancelled") throw new ApiError("Cancelled orders cannot request pickup.", 400);
+  if (!order.shiprocketShipmentId || !order.awbCode) throw new ApiError("Book the shipment and assign an AWB before requesting pickup.", 400);
+  if (order.pickupRequestedAt || ["pickup_generated", "ready_for_pickup", "picked_up", "shipped", "in_transit", "out_for_delivery", "delivered"].includes(order.shippingStatus)) return order;
+
+  const attemptAt = new Date();
+  const staleLock = new Date(attemptAt.getTime() - 10 * 60 * 1000);
+  const claimed = await Order.findOneAndUpdate(
+    { _id: orderId, awbCode: { $nin: [null, ""] }, shiprocketShipmentId: { $nin: [null, ""] }, pickupRequestedAt: { $in: [null] }, $or: [{ pickupRequestStartedAt: { $exists: false } }, { pickupRequestStartedAt: null }, { pickupRequestStartedAt: { $lt: staleLock } }] },
+    { $set: { pickupRequestStartedAt: attemptAt } },
+    { new: true },
+  ).populate("user", "name email phone").populate("products.product");
+  if (!claimed) {
+    order = await loadOrder(orderId);
+    if (order.pickupRequestedAt) return order;
+    throw new ApiError("Pickup request is already in progress for this shipment.", 409);
+  }
+  order = claimed;
+
+  try {
+    const pickup = await shiprocketRequest("/courier/generate/pickup", { method: "POST", body: { shipment_id: [order.shiprocketShipmentId] } });
+    order.pickupStatus = pickup?.response?.pickup_status || pickup?.pickup_status || pickup?.message || "Pickup requested";
+    order.pickupRequestedAt = new Date();
+    order.pickupRequestStartedAt = undefined;
+    order.shippingStatus = "pickup_generated";
+    order.readyToShipAt = order.readyToShipAt || new Date();
+    if (order.orderStatus === "confirmed") order.orderStatus = "packed";
+    recordStatus(order, "pickup_generated");
+    order.shippingFailureReason = "";
+    await order.save();
+    return order;
+  } catch (error) {
+    order.pickupRequestStartedAt = undefined;
+    order.shippingFailureReason = "Unable to request Shiprocket pickup. Please retry.";
+    await order.save();
+    throw error;
+  }
+}
+
 export async function markShipmentHandedOver(orderId) {
   const order = await loadOrder(orderId);
   if (["picked_up", "shipped", "in_transit", "out_for_delivery", "delivered"].includes(order.shippingStatus)) return order;
   if (order.orderStatus === "cancelled" || order.shippingStatus === "cancelled") throw new ApiError("Cancelled orders cannot be handed over.", 400);
-  if (order.shippingStatus !== "ready_for_pickup" || !order.awbCode) throw new ApiError("The shipment must be ready with an AWB before handover.", 400);
+  if (!["pickup_generated", "ready_for_pickup"].includes(order.shippingStatus) || !order.awbCode) throw new ApiError("Pickup must be requested before handover.", 400);
   // Physical handover is recorded separately; customer pickup status remains
   // pending until Shiprocket confirms pickup through its signed webhook.
   order.shippingStatus = "ready_for_pickup";
@@ -327,38 +507,37 @@ export async function syncShiprocketWebhook(payload, headers = {}) {
   const awbCode = payload.awb || payload.awb_code || payload.awbCode;
   const shipmentId = payload.shipment_id || payload.shipmentId;
   const shiprocketOrderId = payload.order_id || payload.sr_order_id || payload.shiprocket_order_id;
+  if (!awbCode && !shipmentId && !shiprocketOrderId) throw new ApiError("Shiprocket webhook shipment identifier is required.", 400);
   const query = awbCode ? { awbCode } : shipmentId ? { shiprocketShipmentId: String(shipmentId) } : { shiprocketOrderId: String(shiprocketOrderId || "") };
   const order = await Order.findOne(query);
   if (!order) throw new ApiError("Order not found for Shiprocket webhook.", 404);
+  const event = providerEvent(payload, "webhook");
+  const result = await persistTrackingEvent(order, event);
+  result.order.trackingUrl = trustedTrackingUrl(payload.tracking_url) || result.order.trackingUrl || getTrackingUrl(result.order.awbCode);
+  if (result.changed) await result.order.save({ validateBeforeSave: false });
+  return result.order;
+}
 
-  const rawStatus = String(payload.current_status || payload.shipment_status || payload.status || "").toLowerCase();
-  const normalized = rawStatus.includes("out for delivery") ? "out_for_delivery"
-    : rawStatus.includes("delivered") ? "delivered"
-    : rawStatus.includes("picked up") || rawStatus.includes("pickup done") ? "picked_up"
-    : rawStatus.includes("in transit") ? "in_transit"
-    : rawStatus.includes("pickup scheduled") || rawStatus.includes("ready to ship") ? "ready_for_pickup"
-    : rawStatus.includes("shipment created") || rawStatus.includes("awb assigned") ? order.shippingStatus
-    : rawStatus.includes("cancel") ? "cancelled"
-    : rawStatus.includes("rto") ? "rto"
-    : rawStatus.includes("ship") ? "shipped"
-    : order.shippingStatus;
-
-  order.$locals ||= {};
-  order.$locals.webhookStatusChanged = false;
-  if (order.orderStatus === "cancelled" && normalized !== "cancelled") return order;
-  if (order.shippingStatus === "delivered" && normalized !== "delivered") return order;
-  if (shippingProgress[normalized] != null && shippingProgress[order.shippingStatus] != null && shippingProgress[normalized] < shippingProgress[order.shippingStatus]) return order;
-
-  order.$locals.webhookStatusChanged = order.shippingStatus !== normalized;
-  order.shippingStatus = normalized;
-  if (normalized === "delivered") order.orderStatus = "delivered";
-  if (["picked_up", "shipped", "in_transit", "out_for_delivery"].includes(normalized) && order.orderStatus !== "delivered") order.orderStatus = "shipped";
-  if (normalized === "cancelled") order.orderStatus = "cancelled";
-  const eventDateValue = payload.event_time || payload.updated_at || payload.timestamp || payload.created_at;
-  const eventDate = eventDateValue && !Number.isNaN(new Date(eventDateValue).getTime()) ? new Date(eventDateValue) : new Date();
-  recordStatus(order, normalized, "shiprocket", eventDate);
-  order.trackingUrl = trustedTrackingUrl(payload.tracking_url) || order.trackingUrl || getTrackingUrl(order.awbCode);
+export async function cancelShiprocketShipment(orderId) {
+  await assertShiprocketEnabled();
+  const order = await loadOrder(orderId);
+  if (!order.shiprocketOrderId) throw new ApiError("This order has no Shiprocket shipment to cancel.", 400);
+  if (["picked_up", "shipped", "in_transit", "out_for_delivery", "delivered", "ndr", "rto"].includes(order.shippingStatus)) throw new ApiError("Shiprocket does not allow cancellation after courier pickup.", 409);
+  if (order.shippingStatus === "cancelled" || order.shipmentCancelledAt) return order;
+  await shipmentStep(
+    () => shiprocketRequest("/orders/cancel", { method: "POST", body: { ids: [Number(order.shiprocketOrderId) || order.shiprocketOrderId] } }),
+    "Shiprocket shipment cancellation failed. The shipment remains active.",
+  );
+  order.shippingStatus = "cancelled";
+  order.shipmentCancellationStatus = "cancelled";
+  order.shipmentCancelledAt = new Date();
+  const event = providerEvent({ awb: order.awbCode, status: "cancelled", event_time: order.shipmentCancelledAt, activity: "Shipment cancelled" }, "tracking_api");
+  if (!order.processedTrackingEvents?.includes(event.fingerprint)) {
+    order.processedTrackingEvents = [...(order.processedTrackingEvents || []), event.fingerprint];
+    order.trackingTimeline = [...(order.trackingTimeline || []), event];
+  }
   await order.save();
+  await notifyShipmentEvent(order, event);
   return order;
 }
 

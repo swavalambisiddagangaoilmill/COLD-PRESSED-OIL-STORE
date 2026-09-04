@@ -61,7 +61,8 @@ export default function TrackOrder() {
               </div>
               <div className="rounded-2xl bg-cream p-4 text-sm">
                 <p className="font-bold text-ink">AWB {order.awbCode || "Pending"}</p>
-                <p className="mt-1 text-ink/55">Live shipment</p>
+                <p className="mt-1 text-ink/55">{order.courierName || "Courier assignment pending"}</p>
+                <p className="mt-1 font-semibold text-leaf">{String(order.shippingStatus || "pending").replaceAll("_", " ")}</p>
               </div>
             </div>
 
@@ -81,6 +82,8 @@ export default function TrackOrder() {
                 </div>;
               })}
             </div>
+
+            {order.trackingTimeline?.length > 0 && <section className="mt-8 border-t border-ink/10 pt-6"><h2 className="font-serif text-3xl font-semibold">Tracking updates</h2><div className="mt-4 space-y-3">{[...order.trackingTimeline].reverse().map((event) => <article key={event.fingerprint} className="rounded-2xl border border-ink/10 p-4"><div className="flex flex-wrap items-start justify-between gap-2"><p className="font-bold capitalize">{String(event.status).replaceAll("_", " ")}</p><time className="text-xs text-ink/45">{formatDate(event.occurredAt)}</time></div><p className="mt-2 text-sm text-ink/60">{event.description || event.providerStatus}</p>{event.location && <p className="mt-1 text-xs font-semibold text-ink/45">{event.location}</p>}</article>)}</div></section>}
 
           </div>}
         </Container>

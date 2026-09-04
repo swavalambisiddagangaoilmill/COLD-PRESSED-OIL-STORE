@@ -40,10 +40,11 @@ export async function uploadImage(file, folder = "products") {
 
 export async function uploadCarouselImage(file, orientation) {
   if (!["desktop", "mobile"].includes(orientation)) throw new ApiError("Carousel image format is invalid.", 400);
-  if (!["image/jpeg", "image/png", "image/webp"].includes(file?.mimetype)) throw new ApiError("Carousel images must be JPEG, PNG, or WebP.", 400);
+  if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file?.mimetype?.toLowerCase())) throw new ApiError("Carousel images must be JPEG, PNG, or WebP.", 400);
   if (!hasValidImageSignature(file)) throw new ApiError("Uploaded file is not a valid image.", 400);
   if (!isServiceAvailable("cloudinary")) throw new ApiError("Image upload failed. Please try again.", 503);
-  const dataUri = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+  const mimeType = file.mimetype.toLowerCase() === "image/jpg" ? "image/jpeg" : file.mimetype.toLowerCase();
+  const dataUri = `data:${mimeType};base64,${file.buffer.toString("base64")}`;
   try {
     const result = await cloudinary.uploader.upload(dataUri, {
       folder: "ss-oil-mill/carousel",

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import cloudinary from "../config/cloudinary.js";
 import CarouselImage from "../models/CarouselImage.js";
-import { validateCarouselDimensions } from "../services/uploadService.js";
+import { uploadCarouselImage, validateCarouselDimensions } from "../services/uploadService.js";
 
 test("carousel model accepts responsive and legacy records but rejects empty records", async () => {
   await new CarouselImage({ desktopImage: { url: "/desktop.webp" }, mobileImage: { url: "/mobile.webp" }, order: 1 }).validate();
@@ -35,4 +36,33 @@ test("admin carousel mutations are mounted behind authentication and role checks
   assert.match(routes, /router\.use\(protect, adminOnly/);
   assert.match(routes, /carouselUpload\.fields/);
   assert.match(uploads, /crop: "fill", gravity: "auto"/);
+});
+
+test("production CSP permits local carousel blob previews", async () => {
+  const [vercel, app] = await Promise.all([
+    readFile(new URL("../../vercel.json", import.meta.url), "utf8"),
+    readFile(new URL("../app.js", import.meta.url), "utf8"),
+  ]);
+  assert.match(vercel, /img-src 'self' data: blob: https:/);
+  assert.match(app, /imgSrc: \["'self'", "data:", "blob:", "https:"\]/);
+});
+
+test("carousel upload accepts image\/jpg as JPEG without weakening signature validation", async () => {
+  const originalUpload = cloudinary.uploader.upload;
+  let receivedDataUri = "";
+  cloudinary.uploader.upload = async (dataUri, options) => {
+    receivedDataUri = dataUri;
+    assert.deepEqual(options.transformation[0], { width: 1920, height: 1080, crop: "fill", gravity: "auto", quality: "auto:good" });
+    return { secure_url: "https://res.cloudinary.com/example/carousel.webp", public_id: "carousel/test", width: 1920, height: 1080 };
+  };
+  try {
+    const jpeg = Buffer.alloc(1536 * 1024);
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0]).copy(jpeg);
+    const result = await uploadCarouselImage({ mimetype: "image/jpg", buffer: jpeg }, "desktop");
+    assert.match(receivedDataUri, /^data:image\/jpeg;base64,/);
+    assert.equal(result.width, 1920);
+    await assert.rejects(uploadCarouselImage({ mimetype: "application/octet-stream", buffer: jpeg }, "desktop"), /must be JPEG, PNG, or WebP/);
+  } finally {
+    cloudinary.uploader.upload = originalUpload;
+  }
 });

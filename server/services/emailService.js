@@ -184,3 +184,27 @@ export function sendShipmentReadyEmail(order) {
   return sendMail({ to: order.user.email, subject: `Order ${orderId} is ready for shipment`, text: `Your order #${orderId} is ready for shipment.\n${summary}\nPayment: ${payment}\nAWB: ${order.awbCode}\nTrack your order: ${trackUrl}`, html: htmlLayout("Your order is ready for shipment", `${paragraph("Your order has been prepared and tracking information is now available.")}${details}${items}${actionButton("Track Your Order", trackUrl)}`, "Tracking is now available for your order."), idempotencyKey: `order-shipment-ready/${orderId}` });
 }
 
+export function sendShipmentStatusEmail(order, status, event = {}) {
+  if (!order?.user?.email) return Promise.resolve({ skipped: true, reason: "CUSTOMER_EMAIL_MISSING" });
+  const copy = {
+    picked_up: ["Your order has been picked up", "Your package has been collected by the courier."],
+    out_for_delivery: ["Your order is out for delivery", "Your package is on its way to you today."],
+    delivered: ["Your order has been delivered", "Shiprocket has confirmed delivery of your package."],
+    ndr: ["Delivery needs your attention", "The courier reported a delivery issue. Please keep your phone available and contact us if you need assistance."],
+    rto: ["Your order is returning to us", "The courier has marked this shipment as return-to-origin."],
+    cancelled: ["Your shipment was cancelled", "The Shiprocket shipment for this order has been cancelled."],
+    failed: ["Shipment update", "We encountered a problem while processing your shipment. Our team will review it."],
+  }[status];
+  if (!copy) return Promise.resolve({ skipped: true, reason: "NON_NOTIFIABLE_STATUS" });
+  const orderId = String(order._id);
+  const trackUrl = `${env.clientUrl}/track/${encodeURIComponent(orderId)}`;
+  const detail = event.description ? paragraph(escapeHtml(event.description), "color:#76685c;font-size:13px") : "";
+  return sendMail({
+    to: order.user.email,
+    subject: `${copy[0]} — Order ${orderId}`,
+    text: `${copy[1]}\nOrder: ${orderId}\n${event.description || ""}\nTrack your order: ${trackUrl}`,
+    html: htmlLayout(copy[0], `${paragraph(copy[1])}${detail}${actionButton("Track Your Order", trackUrl)}`, `${copy[0]} for order ${orderId}.`),
+    idempotencyKey: `shipment-status/${orderId}/${status}`,
+  });
+}
+

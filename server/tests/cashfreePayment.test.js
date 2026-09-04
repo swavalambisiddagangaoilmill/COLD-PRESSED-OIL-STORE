@@ -9,12 +9,13 @@ import User from "../models/User.js";
 import Offer from "../models/Offer.js";
 import StoreSettings from "../models/StoreSettings.js";
 import { createPaymentOrder, processCashfreeWebhook, verifyPaymentAndCreateOrder } from "../services/paymentService.js";
+import { resetShiprocketAuthForTests } from "../services/shiprocketService.js";
 
 const original = { fetch: global.fetch, productFind: Product.find, offerFind: Offer.find, settingsFind: StoreSettings.findOne, userFind: User.findById, userUpdate: User.updateOne, checkoutCreate: PaymentCheckout.create, checkoutFind: PaymentCheckout.findOne, checkoutUpdate: PaymentCheckout.updateOne, orderFind: Order.findOne, orderUpdate: Order.updateOne };
 const checkout = { _id: "checkout-id", user: "user-id", status: "created", amount: 650, currency: "INR", cashfreeOrderId: "cf_11111111-1111-4111-8111-111111111111", orderPayload: { products: [], shippingAddress: {} } };
 
-test.beforeEach(() => { Offer.find = () => ({ lean: async () => [] }); StoreSettings.findOne = () => ({ select: () => ({ lean: async () => ({ shiprocketEnabled: true }) }) }); });
-test.afterEach(() => { global.fetch = original.fetch; Product.find = original.productFind; Offer.find = original.offerFind; StoreSettings.findOne = original.settingsFind; User.findById = original.userFind; User.updateOne = original.userUpdate; PaymentCheckout.create = original.checkoutCreate; PaymentCheckout.findOne = original.checkoutFind; PaymentCheckout.updateOne = original.checkoutUpdate; Order.findOne = original.orderFind; Order.updateOne = original.orderUpdate; });
+test.beforeEach(() => { resetShiprocketAuthForTests(); Offer.find = () => ({ lean: async () => [] }); StoreSettings.findOne = () => ({ select: () => ({ lean: async () => ({ shiprocketEnabled: true }) }) }); });
+test.afterEach(() => { resetShiprocketAuthForTests(); global.fetch = original.fetch; Product.find = original.productFind; Offer.find = original.offerFind; StoreSettings.findOne = original.settingsFind; User.findById = original.userFind; User.updateOne = original.userUpdate; PaymentCheckout.create = original.checkoutCreate; PaymentCheckout.findOne = original.checkoutFind; PaymentCheckout.updateOne = original.checkoutUpdate; Order.findOne = original.orderFind; Order.updateOne = original.orderUpdate; });
 
 test("Cashfree session is created server-side and response exposes no secret", async () => {
   Object.assign(env.cashfree, { environment: "sandbox", clientId: "client-id", clientSecret: "client-secret", apiVersion: "2025-01-01" });
@@ -38,6 +39,24 @@ test("Cashfree session is created server-side and response exposes no secret", a
   assert.equal(stored.orderPayload._shippingQuote.customerShippingCharge, 100);
   assert.equal(stored.razorpayQrId, sent.body.order_id);
   assert.equal(stored.idempotencyKey, sent.headers["x-idempotency-key"]);
+});
+
+test("Shiprocket failure blocks Cashfree order creation with a controlled error", async () => {
+  Object.assign(env.cashfree, { environment: "production", clientId: "client-id", clientSecret: "client-secret", apiVersion: "2025-01-01" });
+  Object.assign(env.shiprocket, { enabled: true, email: "shiprocket@example.com", password: "secret", pickupLocation: "Primary", pickupPostcode: "572106" });
+  Product.find = async () => [{ _id: { toString: () => "64b000000000000000000001" }, title: "Oil", stock: 10, price: 650, onlinePaymentEnabled: true, variants: [{ _id: "64b000000000000000000002", size: "1L", litres: 1, price: 650, shippingWeight: 1, dimensions: { length: 10, width: 11, height: 30 }, images: [] }] }];
+  let cashfreeCalled = false;
+  global.fetch = async (url) => {
+    if (url.includes("shiprocket.in/v1/external/auth/login")) return { ok: true, status: 200, text: async () => JSON.stringify({ token: "private-token" }) };
+    if (url.includes("shiprocket.in/v1/external/courier/serviceability")) return { ok: false, status: 503, text: async () => JSON.stringify({ message: "upstream unavailable" }) };
+    cashfreeCalled = true;
+    throw new Error("Cashfree must not be called");
+  };
+  await assert.rejects(
+    createPaymentOrder("user-id", { order: { products: [{ product: "64b000000000000000000001", variant: "64b000000000000000000002", quantity: 1 }], shippingAddress: { phone: "9876543210", postalCode: "560091" } }, customer: {} }),
+    /Shipping charges could not be calculated\. Please try again\./,
+  );
+  assert.equal(cashfreeCalled, false);
 });
 
 test("server verification rejects wrong amount and non-paid status", async () => {

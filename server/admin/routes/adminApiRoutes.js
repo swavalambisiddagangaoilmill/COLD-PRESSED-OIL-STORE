@@ -33,7 +33,9 @@ router.get("/fulfillment", requireAdminPermission("shipping.read"), controller.f
 router.post("/fulfillment/ready", requireAdminPermission("orders.ship"), [body("orderIds").isArray({ min: 1, max: 50 }).withMessage("Select between 1 and 50 orders."), body("orderIds.*").isMongoId().withMessage("Every order id must be valid.")], validate, controller.bulkReadyToShip);
 router.get("/fulfillment/export", requireAdminPermission("shipping.read"), controller.fulfillmentExport);
 router.put("/orders/:id/status", requireAdminPermission("orders.update"), controller.orderStatus);
-router.post("/orders/:id/ready-to-ship", requireAdminPermission("orders.ship"), controller.orderReadyToShip);
+router.post("/orders/:id/ready-to-ship", requireAdminPermission("orders.ship"), [param("id").isMongoId().withMessage("Valid order id is required.")], validate, controller.orderReadyToShip);
+router.post("/orders/:id/request-pickup", requireAdminPermission("shipping.manage"), [param("id").isMongoId().withMessage("Valid order id is required.")], validate, controller.orderRequestPickup);
+router.post("/orders/:id/cancel-shipment", requireAdminPermission("shipping.manage"), [param("id").isMongoId().withMessage("Valid order id is required.")], validate, controller.orderCancelShipment);
 router.post("/orders/:id/handover", requireAdminPermission("shipping.manage"), controller.orderHandover);
 router.get("/products", requireAdminPermission("products.read"), productQueryValidator, validate, controller.products);
 router.post("/products", requireAdminPermission("products.create"), productValidator, validate, controller.saveProduct);
