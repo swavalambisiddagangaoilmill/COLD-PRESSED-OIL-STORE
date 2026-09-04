@@ -87,3 +87,12 @@ test("carousel crop zoom and drag stay within the source image", async () => {
   assert.ok(moved.x + moved.width <= 2400);
   assert.ok(moved.y + moved.height <= 1600);
 });
+
+test("simple crop UI supports wheel, pinch, drag, and exports on slide save", async () => {
+  const source = await readFile(new URL("../../src/admin/pages/CarouselPage.jsx", import.meta.url), "utf8");
+  assert.match(source, /onWheel=/);
+  assert.match(source, /pointers\.current\.size === 2/);
+  assert.match(source, /onPointerMove=/);
+  assert.match(source, /exporters\.current\.desktop \? await exporters\.current\.desktop\(\)/);
+  assert.doesNotMatch(source, /Apply crop/);
+});

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, ImagePlus, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ImagePlus, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../../components/features/feedback/ToastProvider.jsx";
 import { AdminBadge, AdminButton, AdminModal, AdminPageHeader } from "../components/AdminUi.jsx";
@@ -17,9 +17,11 @@ async function validateImage(file) {
   } finally { URL.revokeObjectURL(url); }
 }
 
-function CropEditor({ kind, source, originalFile, onApply, onCancel }) {
+function CropEditor({ kind, source, originalFile, setExporter }) {
   const canvas = useRef(null);
   const drag = useRef(null);
+  const pointers = useRef(new Map());
+  const pinch = useRef(null);
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const portrait = kind === "mobile";
@@ -29,29 +31,41 @@ function CropEditor({ kind, source, originalFile, onApply, onCancel }) {
     drawCarouselCrop(target.getContext("2d"), source, kind, zoom, position, target.width, target.height);
   };
   useEffect(redraw, [kind, position, source, zoom]);
+  useEffect(() => { setExporter(() => exportCarouselCrop(source, originalFile, kind, zoom, position)); return () => setExporter(null); }, [kind, originalFile, position, setExporter, source, zoom]);
   const reset = () => { setZoom(1); setPosition({ x: 0, y: 0 }); };
+  const distance = () => { const [first, second] = [...pointers.current.values()]; return first && second ? Math.hypot(second.x - first.x, second.y - first.y) : 0; };
+  const start = (event) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 2) pinch.current = { distance: distance(), zoom };
+    else drag.current = { x: event.clientX, y: event.clientY, position };
+  };
   const move = (event) => {
+    if (!pointers.current.has(event.pointerId)) return;
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 2 && pinch.current) {
+      setZoom(Math.max(1, Math.min(3, pinch.current.zoom * distance() / Math.max(1, pinch.current.distance))));
+      return;
+    }
     if (!drag.current) return;
     const rect = canvas.current.getBoundingClientRect();
     const x = Math.max(-1, Math.min(1, drag.current.position.x + ((event.clientX - drag.current.x) / rect.width) * 2));
     const y = Math.max(-1, Math.min(1, drag.current.position.y + ((event.clientY - drag.current.y) / rect.height) * 2));
     setPosition({ x, y });
   };
-  const finish = (event) => { if (drag.current) canvas.current?.releasePointerCapture?.(event.pointerId); drag.current = null; };
-  const apply = async () => onApply(await exportCarouselCrop(source, originalFile, kind, zoom, position));
+  const finish = (event) => { pointers.current.delete(event.pointerId); canvas.current?.releasePointerCapture?.(event.pointerId); drag.current = null; pinch.current = null; };
   return <div className="grid gap-3">
     <div className={`relative mx-auto w-full overflow-hidden border-2 border-[var(--admin-primary)] bg-black shadow-inner ${portrait ? "max-w-[270px]" : "max-w-[640px]"}`}>
-      <canvas ref={canvas} width={portrait ? 270 : 640} height={portrait ? 360 : 360} className="block h-auto w-full cursor-grab touch-none active:cursor-grabbing" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); drag.current = { x: event.clientX, y: event.clientY, position }; }} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} aria-label={`${kind} carousel crop preview`} />
+      <canvas ref={canvas} width={portrait ? 270 : 640} height={360} className="block h-auto w-full cursor-grab touch-none active:cursor-grabbing" onWheel={(event) => { event.preventDefault(); setZoom((current) => Math.max(1, Math.min(3, current + (event.deltaY < 0 ? 0.1 : -0.1)))); }} onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} aria-label={`${kind} carousel crop preview`} />
       <div className="pointer-events-none absolute inset-0 border border-white/70" />
       <span className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/65 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white">{portrait ? "Mobile 3:4" : "Desktop 16:9"} preview</span>
     </div>
-    <p className="text-center text-xs font-semibold text-ink/55">Drag inside the frame to reposition the image.</p>
-    <label className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-xs font-bold text-ink/65"><span>Zoom</span><input type="range" min="1" max="3" step="0.01" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} aria-label={`${kind} image zoom`} /><span>{Math.round(zoom * 100)}%</span></label>
-    <div className="flex flex-wrap justify-center gap-2"><AdminButton type="button" variant="secondary" onClick={reset}><RotateCcw size={15} />Reset</AdminButton><AdminButton type="button" variant="secondary" onClick={onCancel}><X size={15} />Cancel</AdminButton><AdminButton type="button" onClick={() => apply().catch((error) => onCancel(error.message))}><Check size={15} />Apply crop</AdminButton></div>
+    <p className="text-center text-xs font-semibold text-ink/55">Drag to position. Pinch or use the mouse wheel to zoom. Zoom: {Math.round(zoom * 100)}%</p>
+    <div className="flex justify-center"><AdminButton type="button" variant="secondary" onClick={reset}><RotateCcw size={15} />Reset</AdminButton></div>
   </div>;
 }
 
-function UploadArtboard({ kind, file, existing, removed, onFile, onRemove }) {
+function UploadArtboard({ kind, file, existing, removed, onFile, onRemove, setExporter }) {
   const input = useRef(null);
   const [crop, setCrop] = useState(null);
   const portrait = kind === "mobile";
@@ -62,11 +76,11 @@ function UploadArtboard({ kind, file, existing, removed, onFile, onRemove }) {
     await validateImage(next);
     const url = URL.createObjectURL(next);
     const image = new Image();
-    image.onload = () => setCrop({ file: next, image, url });
+    image.onload = () => { onFile(null); setCrop({ file: next, image, url }); };
     image.onerror = () => { URL.revokeObjectURL(url); onFile(null, "The selected file could not be read as an image."); };
     image.src = url;
   };
-  if (crop) return <section className="grid gap-3"><div><p className="text-sm font-extrabold uppercase tracking-[0.12em] text-ink">Fit {portrait ? "mobile" : "desktop"} banner</p><p className="mt-1 text-xs font-semibold text-ink/50">Crop output: {CAROUSEL_CROP[kind].width} × {CAROUSEL_CROP[kind].height}</p></div><CropEditor kind={kind} source={crop.image} originalFile={crop.file} onApply={(next) => { onFile(next); setCrop(null); }} onCancel={(message) => { if (message) onFile(null, message); setCrop(null); }} /></section>;
+  if (crop) return <section className="grid gap-3"><div><p className="text-sm font-extrabold uppercase tracking-[0.12em] text-ink">Fit {portrait ? "mobile" : "desktop"} banner</p><p className="mt-1 text-xs font-semibold text-ink/50">The visible frame will be physically cropped to {CAROUSEL_CROP[kind].width} × {CAROUSEL_CROP[kind].height} when saved.</p></div><CropEditor kind={kind} source={crop.image} originalFile={crop.file} setExporter={setExporter} /><input ref={input} type="file" className="hidden" accept=".jpg,.jpeg,image/jpeg,image/jpg,image/png,image/webp" onChange={(event) => { const next = event.target.files?.[0]; event.target.value = ""; select(next).catch((error) => onFile(null, error.message)); }} /><div className="flex justify-center gap-2"><AdminButton type="button" variant="secondary" onClick={() => input.current?.click()}>Replace</AdminButton><AdminButton type="button" variant="danger" onClick={() => { setCrop(null); setExporter(null); onRemove(); }}>Remove</AdminButton></div></section>;
   return <section className="grid gap-3"><div><p className="text-sm font-extrabold uppercase tracking-[0.12em] text-ink">{portrait ? "Mobile banner" : "Desktop banner"}</p><p className="mt-1 text-xs font-semibold text-ink/50">{portrait ? "Crop to 1080 × 1440 (3:4)" : "Crop to 1920 × 1080 (16:9)"}</p></div><div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); select(event.dataTransfer.files?.[0]).catch((error) => onFile(null, error.message)); }} className={`relative grid place-items-center overflow-hidden border-2 border-dashed border-[var(--admin-border)] bg-linen/50 ${portrait ? "mx-auto aspect-[3/4] w-full max-w-[230px]" : "aspect-video w-full"}`}>{preview ? <img src={preview} alt={`${kind} preview`} className="h-full w-full object-cover" /> : <div className="p-6 text-center"><ImagePlus className="mx-auto text-[var(--admin-primary)]" /><p className="mt-3 text-sm font-bold">Drag and drop or Browse</p></div>}<input ref={input} type="file" className="hidden" accept=".jpg,.jpeg,image/jpeg,image/jpg,image/png,image/webp" onChange={(event) => { const next = event.target.files?.[0]; event.target.value = ""; select(next).catch((error) => onFile(null, error.message)); }} /></div><div className="flex justify-center gap-2"><AdminButton type="button" variant="secondary" onClick={() => input.current?.click()}>{preview ? "Replace & crop" : "Browse & crop"}</AdminButton>{preview && <AdminButton type="button" variant="danger" onClick={onRemove}>Remove</AdminButton>}</div></section>;
 }
 
@@ -75,10 +89,11 @@ function SlideEditor({ item, onClose, onSaved }) {
   const [desktopFile, setDesktopFile] = useState(null); const [mobileFile, setMobileFile] = useState(null);
   const [removeDesktop, setRemoveDesktop] = useState(false); const [removeMobile, setRemoveMobile] = useState(false); const [saving, setSaving] = useState(false);
   const requestKey = useRef(globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
+  const exporters = useRef({ desktop: null, mobile: null });
   const [error, setError] = useState("");
   const setFile = (kind, file, message) => { if (message) return setError(message); setError(""); if (kind === "desktop") { setDesktopFile(file); setRemoveDesktop(false); } else { setMobileFile(file); setRemoveMobile(false); } };
-  const save = async () => { if (saving) return; if (!desktopFile && !mobileFile && (removeDesktop || !item?.desktopImage?.url) && (removeMobile || !item?.mobileImage?.url)) return setError("Keep at least one image, or delete the slide."); setSaving(true); setError(""); try { const data = await adminApi.saveCarousel({ id: item?._id, desktopFile, mobileFile, removeDesktop, removeMobile, isActive: item?.isActive ?? true, requestKey: requestKey.current }); onSaved(data.item); showToast(item?._id ? "Carousel slide updated successfully." : "Carousel slide created successfully.", "success"); onClose(); } catch (err) { setError(err.message || "Carousel slide could not be saved."); } finally { setSaving(false); } };
-  return <AdminModal title={item?._id ? "Edit carousel slide" : "Create carousel slide"} open onClose={onClose} footer={<AdminButton loading={saving} disabled={saving} onClick={save}>Save slide</AdminButton>}><p className="mb-5 text-sm text-ink/55">Upload a dedicated composition for each screen shape. Images are resized, compressed, and stored as WebP automatically.</p>{error && <p role="alert" className="mb-4 border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}<div className="grid items-start gap-8 lg:grid-cols-[1fr_260px]"><UploadArtboard kind="desktop" file={desktopFile} existing={item?.desktopImage} removed={removeDesktop} onFile={(file, message) => setFile("desktop", file, message)} onRemove={() => { setDesktopFile(null); setRemoveDesktop(true); }} /><UploadArtboard kind="mobile" file={mobileFile} existing={item?.mobileImage} removed={removeMobile} onFile={(file, message) => setFile("mobile", file, message)} onRemove={() => { setMobileFile(null); setRemoveMobile(true); }} /></div></AdminModal>;
+  const save = async () => { if (saving) return; setSaving(true); setError(""); try { const finalDesktop = exporters.current.desktop ? await exporters.current.desktop() : desktopFile; const finalMobile = exporters.current.mobile ? await exporters.current.mobile() : mobileFile; if (!finalDesktop && !finalMobile && (removeDesktop || !item?.desktopImage?.url) && (removeMobile || !item?.mobileImage?.url)) throw new Error("Keep at least one image, or delete the slide."); const data = await adminApi.saveCarousel({ id: item?._id, desktopFile: finalDesktop, mobileFile: finalMobile, removeDesktop, removeMobile, isActive: item?.isActive ?? true, requestKey: requestKey.current }); onSaved(data.item); showToast(item?._id ? "Carousel slide updated successfully." : "Carousel slide created successfully.", "success"); onClose(); } catch (err) { setError(err.message || "Carousel slide could not be saved."); } finally { setSaving(false); } };
+  return <AdminModal title={item?._id ? "Edit carousel slide" : "Create carousel slide"} open onClose={onClose} footer={<AdminButton loading={saving} disabled={saving} onClick={save}>Save slide</AdminButton>}><p className="mb-5 text-sm text-ink/55">Upload, zoom, and drag each image inside its exact carousel frame. Save exports only the visible crop.</p>{error && <p role="alert" className="mb-4 border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}<div className="grid items-start gap-8 lg:grid-cols-[1fr_260px]"><UploadArtboard kind="desktop" file={desktopFile} existing={item?.desktopImage} removed={removeDesktop} onFile={(file, message) => setFile("desktop", file, message)} onRemove={() => { setDesktopFile(null); setRemoveDesktop(true); }} setExporter={(value) => { exporters.current.desktop = value; }} /><UploadArtboard kind="mobile" file={mobileFile} existing={item?.mobileImage} removed={removeMobile} onFile={(file, message) => setFile("mobile", file, message)} onRemove={() => { setMobileFile(null); setRemoveMobile(true); }} setExporter={(value) => { exporters.current.mobile = value; }} /></div></AdminModal>;
 }
 
 export default function CarouselPage() {
