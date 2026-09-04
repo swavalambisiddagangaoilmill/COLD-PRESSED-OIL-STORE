@@ -25,7 +25,7 @@ test("the same product and variant merges quantities", () => {
 
 test("cart normalization selects variant price image availability and label without exposing SKU", () => {
   const item = normalizeCartItem({ product: priceProduct(product, []), variant: ids[2], quantity: 1 });
-  assert.deepEqual([item.price, item.image, item.stock, item.sku, item.volume], [2000, "/five.jpg", 1, undefined, "5L"]);
+  assert.deepEqual([item.price, item.image, item.stock, item.sku, item.volume], [2000, "/five.jpg", Number.MAX_SAFE_INTEGER, undefined, "5L"]);
 });
 
 test("variant offer pricing is calculated independently from its base selling price", () => {
@@ -53,7 +53,7 @@ test("order snapshots expose required variant fields", async () => {
 
 test("legacy product-only cart rows remain valid", () => {
   const item = normalizeCartItem({ product: { _id: ids[0], title: "Oil", price: 100, discountPrice: 90, stock: 3 }, quantity: 1 });
-  assert.deepEqual([item.variantId, item.price, item.stock], [null, 90, 3]);
+  assert.deepEqual([item.variantId, item.price, item.stock], [null, 90, Number.MAX_SAFE_INTEGER]);
 });
 
 for (const [size, quantity, expected] of [["1L", 1, 1], ["1L", 5, 5], ["5L", 1, 5], ["5L", 3, 15], ["16.5L", 1, 16.5], ["16.5L", 2, 33]]) {

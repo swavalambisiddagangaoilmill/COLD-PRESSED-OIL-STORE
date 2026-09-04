@@ -15,6 +15,23 @@ export const orderStatus = asyncHandler(async (req, res) => { const order = awai
 export const orderReadyToShip = asyncHandler(async (req, res) => { const order = await admin.readyToShip(req.params.id); await writeAuditLog(req, { action: "shipping.booked", resourceType: "Order", resourceId: order._id, summary: "Shiprocket shipment booked and AWB assigned" }); sendSuccess(res, 200, "Shipment booked", { order }); });
 export const orderRequestPickup = asyncHandler(async (req, res) => { const order = await admin.requestPickup(req.params.id); await writeAuditLog(req, { action: "shipping.pickup_requested", resourceType: "Order", resourceId: order._id, summary: "Shiprocket pickup requested" }); sendSuccess(res, 200, "Pickup requested", { order }); });
 export const orderCancelShipment = asyncHandler(async (req, res) => { const order = await admin.cancelShipment(req.params.id); await writeAuditLog(req, { action: "shipping.cancelled", resourceType: "Order", resourceId: order._id, summary: "Shiprocket shipment cancelled" }); sendSuccess(res, 200, "Shipment cancelled", { order }); });
+export const orderGenerateLabel = asyncHandler(async (req, res) => { const order = await admin.generateLabel(req.params.id); await writeAuditLog(req, { action: "shipping.label_generated", resourceType: "Order", resourceId: order._id, summary: "Shipment label generated" }); sendSuccess(res, 200, "Shipment label ready", { order }); });
+export const generateManifest = asyncHandler(async (req, res) => { const result = await admin.generateManifest(req.body.orderIds); await writeAuditLog(req, { action: "shipping.manifest_generated", resourceType: "Order", summary: `Manifest generated for ${result.orders.length} shipment(s)` }); sendSuccess(res, 200, "Shipment manifest ready", { orderIds: result.orders.map((order) => order._id), existing: result.existing }); });
+export const printManifest = asyncHandler(async (req, res) => { const result = await admin.printManifest(req.body.orderIds); await writeAuditLog(req, { action: "shipping.manifest_printed", resourceType: "Order", summary: `Manifest prepared for ${result.orders.length} shipment(s)` }); sendSuccess(res, 200, "Printable manifest ready", { orderIds: result.orders.map((order) => order._id), existing: result.existing }); });
+export const orderGenerateShipmentInvoice = asyncHandler(async (req, res) => { const order = await admin.generateShiprocketInvoice(req.params.id); await writeAuditLog(req, { action: "shipping.invoice_generated", resourceType: "Order", resourceId: order._id, summary: "Shiprocket operational invoice generated" }); sendSuccess(res, 200, "Shiprocket invoice ready", { order }); });
+export const shipmentDocument = asyncHandler(async (req, res) => {
+  const url = await admin.shipmentDocument(req.params.id, req.params.type);
+  const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  if (!response.ok) throw new Error("Shipment document download failed.");
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.toLowerCase().includes("pdf")) throw new Error("Shiprocket returned an invalid document.");
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (!bytes.length || bytes.length > 15 * 1024 * 1024) throw new Error("Shiprocket returned an invalid document.");
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="shipment-${req.params.type}-${req.params.id}.pdf"`);
+  res.setHeader("Cache-Control", "private, no-store");
+  res.send(bytes);
+});
 export const fulfillmentOrders = asyncHandler(async (req, res) => sendSuccess(res, 200, "Fulfillment orders fetched", await listFulfillmentOrders(req.query)));
 export const bulkReadyToShip = asyncHandler(async (req, res) => {
   const result = await submitFulfillmentBatch(req.body.orderIds);

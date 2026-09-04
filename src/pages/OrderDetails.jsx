@@ -158,7 +158,7 @@ export default function OrderDetails() {
                 <div className="mt-8 grid gap-4">
                   {products.map((item, index) => <article key={`${order._id}-${item.product || item.title || index}`} className="grid gap-4 rounded-2xl border border-ink/10 p-4 sm:grid-cols-[86px_1fr_auto] sm:items-center">
                     <SafeImage src={item.image} alt={item.title} className="h-24 w-24 rounded-xl object-cover sm:h-20 sm:w-20" />
-                    <div><h2 className="font-serif text-2xl font-semibold">{item.title}</h2><p className="mt-1 text-sm font-semibold text-ink/50">Quantity: {item.quantity}{item.variantLabel ? ` · ${item.variantLabel}` : ""}{item.variantSku ? ` · ${item.variantSku}` : ""}</p></div>
+                    <div><h2 className="font-serif text-2xl font-semibold">{item.title}</h2><p className="mt-1 text-sm font-semibold text-ink/50">Quantity: {item.quantity}{item.variantLabel ? ` · ${item.variantLabel}` : ""}</p></div>
                     <div className="text-left sm:text-right"><p className="font-bold">{formatCurrency(item.price)}</p><p className="mt-1 text-sm text-ink/45">Subtotal {formatCurrency(item.price * item.quantity)}</p></div>
                   </article>)}
                 </div>

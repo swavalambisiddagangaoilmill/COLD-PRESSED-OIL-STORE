@@ -10,7 +10,7 @@ import WishlistToggle from "./WishlistToggle.jsx";
 const staticCartClass = "h-11 w-full px-3 text-xs sm:h-12 sm:text-sm";
 
 function PremiumProductCard({ product }) {
-  const stockLabel = product.stock <= 8 ? "Low stock" : "In stock";
+  const stockLabel = product.inStock === false ? "Out of stock" : "In stock";
 
   return (
     <motion.article initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-60px" }} transition={{ duration: 0.35 }} className="group flex h-full min-w-0 flex-col overflow-hidden rounded-md border border-ink/10 bg-white transition duration-300 hover:border-leaf/35">
@@ -21,7 +21,7 @@ function PremiumProductCard({ product }) {
       <div className="flex flex-1 flex-col p-3.5 sm:p-4 lg:p-5">
         <Link to={`/product/${product.slug}`} className="min-h-[2.7rem] overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] text-sm font-semibold leading-snug transition hover:text-leaf sm:min-h-[3rem] sm:text-base">{product.name}</Link>
         <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-ink/55 sm:text-sm"><Star size={15} className="shrink-0 fill-clay text-clay" /><span>{product.rating}</span><span className="text-ink/25">/</span><span>{product.reviews ?? 84} reviews</span></div>
-        <p className={`mt-2 text-xs font-bold uppercase tracking-[0.16em] ${product.stock <= 8 ? "text-clay" : "text-leaf"}`}>{stockLabel}</p>
+        <p className={`mt-2 text-xs font-bold uppercase tracking-[0.16em] ${product.inStock === false ? "text-clay" : "text-leaf"}`}>{stockLabel}</p>
         <ProductPrice product={product} compact className="mt-auto min-h-[4.25rem] pt-4" />
         <AddToCartButton product={product} className={`mt-4 ${staticCartClass}`} iconSize={16} />
       </div>
@@ -43,7 +43,7 @@ function CatalogProductCard({ product }) {
         <div className="mt-3 flex items-center gap-2 text-sm text-ink/60"><Star size={16} className="fill-clay text-clay" /> {product.rating} / {product.volume}</div>
         <ProductPrice product={product} compact className="mt-4" />
         <AddToCartButton product={product} className={`mt-5 ${staticCartClass}`} iconSize={16} />
-        <p className={`mt-3 text-xs font-bold uppercase tracking-[0.16em] ${product.stock <= 8 ? "text-clay" : "text-leaf"}`}>{product.stock <= 8 ? "Low stock" : "In stock"}</p>
+        <p className={`mt-3 text-xs font-bold uppercase tracking-[0.16em] ${product.inStock === false ? "text-clay" : "text-leaf"}`}>{product.inStock === false ? "Out of stock" : "In stock"}</p>
       </div>
     </motion.article>
   );

@@ -4,6 +4,7 @@ import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
 import { priceProducts } from "./offerPricingService.js";
 import { availableVariantQuantity, requiredStockLitres, variantLitres } from "./variantInventoryService.js";
+import { customerProductView } from "../utils/customerCommerceView.js";
 
 async function populatedCart(userId) {
   const user = await User.findById(userId).select("cart").lean();
@@ -27,7 +28,7 @@ async function populatedCart(userId) {
   if (changed) await User.updateOne({ _id: userId, cart: user.cart }, { $set: { cart } });
   const priced = await priceProducts(cart.map((item) => productMap.get(item.product.toString())));
   const pricedMap = new Map(priced.map((product) => [String(product._id), product]));
-  return cart.map((item) => ({ product: pricedMap.get(item.product.toString()), variant: item.variant, quantity: item.quantity }));
+  return cart.map((item) => ({ product: customerProductView(pricedMap.get(item.product.toString())), variant: item.variant, quantity: item.quantity }));
 }
 
 function requestedQuantity(quantity) {
@@ -46,7 +47,7 @@ function assertStock(product, quantity, variantId) {
   const variant = selectedVariant(product, variantId);
   const stock = product.stock;
   const required = variant ? requiredStockLitres(variant, quantity) : quantity;
-  if (stock < required) throw new ApiError(`${product.title}${variant ? ` · ${variant.size}` : ""} is no longer available in the requested quantity. Only ${stock}L remains.`, 400);
+  if (stock < required) throw new ApiError(`${product.title}${variant ? ` · ${variant.size}` : ""} is no longer available in the requested quantity.`, 400);
   return variant;
 }
 

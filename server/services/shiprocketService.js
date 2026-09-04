@@ -4,6 +4,7 @@ import { env } from "../config/env.js";
 import Order from "../models/Order.js";
 import StoreSettings from "../models/StoreSettings.js";
 import { ApiError } from "../utils/ApiError.js";
+import { customerOrderView } from "../utils/customerCommerceView.js";
 import { logExternalFailure } from "./serviceStatusService.js";
 import { sendShipmentReadyEmail, sendShipmentStatusEmail } from "./emailService.js";
 import { shipmentDataFromOrder } from "./shipmentDataService.js";
@@ -318,6 +319,56 @@ function extractManifestUrl(manifestResponse) {
   return manifestResponse?.manifest_url || manifestResponse?.manifest_url_download || manifestResponse?.response?.manifest_url || manifestResponse?.data?.manifest_url || "";
 }
 
+function extractInvoiceUrl(invoiceResponse) {
+  return invoiceResponse?.invoice_url || invoiceResponse?.response?.invoice_url || invoiceResponse?.data?.invoice_url || "";
+}
+
+function trustedDocumentUrl(value) {
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    const trusted = host === "shiprocket.in" || host.endsWith(".shiprocket.in") || host === "shiprocket.co" || host.endsWith(".shiprocket.co") || host === "amazonaws.com" || host.endsWith(".amazonaws.com");
+    return url.protocol === "https:" && trusted && url.pathname.toLowerCase().endsWith(".pdf") ? url.toString() : "";
+  } catch { return ""; }
+}
+
+const documentBlockedStatuses = new Set(["pending", "requires_details", "cancelled", "failed"]);
+const staleOperationLock = () => new Date(Date.now() - 10 * 60 * 1000);
+const providerId = (value) => Number(value) || value;
+
+async function claimDocumentOperation(orderId, resultField, lockField, requirements = {}) {
+  const order = await loadOrder(orderId);
+  if (order[resultField]) return { order, existing: true };
+  if (!order.shiprocketShipmentId) throw new ApiError("Shiprocket shipment ID is required.", 400);
+  if (requirements.awb && !order.awbCode) throw new ApiError("AWB assignment is required before generating this document.", 400);
+  if (documentBlockedStatuses.has(order.shippingStatus)) throw new ApiError("This shipment is not eligible for document generation.", 409);
+  if (requirements.pickup && !order.pickupRequestedAt && !["pickup_generated", "ready_for_pickup", "picked_up", "shipped", "in_transit", "out_for_delivery", "delivered"].includes(order.shippingStatus)) throw new ApiError("Request pickup before generating a manifest.", 409);
+  const claimed = await Order.findOneAndUpdate(
+    { _id: orderId, [resultField]: { $in: [null, ""] }, $or: [{ [lockField]: { $exists: false } }, { [lockField]: null }, { [lockField]: { $lt: staleOperationLock() } }] },
+    { $set: { [lockField]: new Date() } }, { new: true },
+  ).populate("user", "name email phone").populate("products.product");
+  if (!claimed) throw new ApiError("Document generation is already in progress.", 409);
+  return { order: claimed, existing: false };
+}
+
+async function completeDocument(order, resultField, timeField, lockField, url) {
+  order[resultField] = url;
+  order[timeField] = order[timeField] || new Date();
+  order[lockField] = undefined;
+  order.shippingFailureReason = "";
+  await order.save({ validateBeforeSave: false });
+  return order;
+}
+
+async function failDocument(order, lockField, error, message) {
+  order[lockField] = undefined;
+  order.shippingFailureReason = message;
+  await order.save({ validateBeforeSave: false }).catch(() => undefined);
+  if (error?.statusCode === 429) throw new ApiError("Shiprocket rate limit reached. Please retry shortly.", 429);
+  throw new ApiError(message, error?.statusCode || 502);
+}
+
 async function loadOrder(orderId) {
   const order = await Order.findById(orderId).populate("user", "name email phone").populate("products.product");
   if (!order) throw new ApiError("Order not found.", 404);
@@ -362,12 +413,7 @@ export async function getShipmentTracking(orderId, user) {
     ["shiprocket_order_created", "Shipment Booked"], ["awb_assigned", "AWB Assigned"], ["pickup_generated", "Pickup Requested"], ["picked_up", "Picked Up"], ["in_transit", "In Transit"], ["out_for_delivery", "Out for Delivery"], ["delivered", "Delivered"],
   ].map(([status, label]) => ({ status, label }));
   if (user.role === "admin") return { order, steps };
-  const customerOrder = order.toJSON ? order.toJSON() : { ...order };
-  delete customerOrder.shiprocketOrderId;
-  delete customerOrder.shiprocketShipmentId;
-  delete customerOrder.shippingFailureReason;
-  delete customerOrder.processedTrackingEvents;
-  delete customerOrder.shipmentNotificationEvents;
+  const customerOrder = customerOrderView(order);
   return { order: customerOrder, steps };
 }
 
@@ -539,6 +585,108 @@ export async function cancelShiprocketShipment(orderId) {
   await order.save();
   await notifyShipmentEvent(order, event);
   return order;
+}
+
+export async function generateShipmentLabel(orderId) {
+  await assertShiprocketEnabled();
+  const { order, existing } = await claimDocumentOperation(orderId, "labelUrl", "labelGenerationStartedAt", { awb: true });
+  if (existing) return order;
+  try {
+    const response = await shiprocketRequest("/courier/generate/label", { method: "POST", body: { shipment_id: [providerId(order.shiprocketShipmentId)] } });
+    const url = trustedDocumentUrl(extractLabelUrl(response));
+    if (!url || response?.label_created === 0) throw new ApiError("Shiprocket did not generate a valid shipment label.", 502);
+    return completeDocument(order, "labelUrl", "labelGeneratedAt", "labelGenerationStartedAt", url);
+  } catch (error) { return failDocument(order, "labelGenerationStartedAt", error, "Unable to generate the shipment label. Please retry."); }
+}
+
+async function loadManifestOrders(orderIds) {
+  const ids = [...new Set(orderIds.map(String))];
+  if (!ids.length || ids.length > 50 || ids.some((id) => !/^[a-f\d]{24}$/i.test(id))) throw new ApiError("Select between 1 and 50 valid shipments.", 400);
+  const orders = await Order.find({ _id: { $in: ids } });
+  if (orders.length !== ids.length) throw new ApiError("One or more selected orders were not found.", 404);
+  for (const order of orders) {
+    if (!order.shiprocketShipmentId || !order.shiprocketOrderId || !order.awbCode) throw new ApiError("Every selected order must have a Shiprocket shipment and AWB.", 400);
+    if (documentBlockedStatuses.has(order.shippingStatus)) throw new ApiError("Cancelled, failed, or unbooked shipments cannot be added to a manifest.", 409);
+    if (!order.pickupRequestedAt && !["pickup_generated", "ready_for_pickup", "picked_up", "shipped", "in_transit", "out_for_delivery", "delivered"].includes(order.shippingStatus)) throw new ApiError("Request pickup for every shipment before generating a manifest.", 409);
+  }
+  return orders;
+}
+
+export async function generateShipmentManifest(orderIds = []) {
+  await assertShiprocketEnabled();
+  const orders = await loadManifestOrders(orderIds);
+  const existingUrls = [...new Set(orders.map((order) => order.manifestUrl).filter(Boolean))];
+  if (orders.every((order) => order.manifestUrl) && existingUrls.length === 1) return { orders, url: existingUrls[0], existing: true };
+  const pending = orders.filter((order) => !order.manifestUrl);
+  const lockAt = new Date();
+  const locked = await Order.updateMany({ _id: { $in: pending.map((order) => order._id) }, manifestUrl: { $in: [null, ""] }, $or: [{ manifestGenerationStartedAt: { $exists: false } }, { manifestGenerationStartedAt: null }, { manifestGenerationStartedAt: { $lt: staleOperationLock() } }] }, { $set: { manifestGenerationStartedAt: lockAt } });
+  if (locked.modifiedCount !== pending.length) {
+    await Order.updateMany({ _id: { $in: pending.map((order) => order._id) }, manifestGenerationStartedAt: lockAt }, { $unset: { manifestGenerationStartedAt: 1 } });
+    throw new ApiError("Manifest generation is already in progress.", 409);
+  }
+  try {
+    const response = await shiprocketRequest("/manifests/generate", { method: "POST", body: { shipment_id: pending.map((order) => providerId(order.shiprocketShipmentId)) } });
+    const url = trustedDocumentUrl(extractManifestUrl(response));
+    if (!url || response?.status === 0) throw new ApiError("Shiprocket did not generate a valid manifest.", 502);
+    const now = new Date();
+    await Order.updateMany({ _id: { $in: pending.map((order) => order._id) } }, { $set: { manifestUrl: url, manifestGeneratedAt: now, shippingFailureReason: "" }, $unset: { manifestGenerationStartedAt: 1 } });
+    pending.forEach((order) => { order.manifestUrl = url; order.manifestGeneratedAt = now; order.manifestGenerationStartedAt = undefined; });
+    return { orders, url, existing: false };
+  } catch (error) {
+    await Order.updateMany({ _id: { $in: pending.map((order) => order._id) }, manifestGenerationStartedAt: lockAt }, { $unset: { manifestGenerationStartedAt: 1 } }).catch(() => undefined);
+    if (error?.statusCode === 429) throw new ApiError("Shiprocket rate limit reached. Please retry shortly.", 429);
+    throw new ApiError("Unable to generate the shipment manifest. Please retry.", error?.statusCode || 502);
+  }
+}
+
+export async function printShipmentManifest(orderIds = []) {
+  await assertShiprocketEnabled();
+  const orders = await loadManifestOrders(orderIds);
+  if (orders.some((order) => !order.manifestUrl)) throw new ApiError("Generate the manifest before printing it.", 409);
+  const existingUrls = [...new Set(orders.map((order) => order.manifestPrintUrl).filter(Boolean))];
+  if (orders.every((order) => order.manifestPrintUrl) && existingUrls.length === 1) return { orders, url: existingUrls[0], existing: true };
+  const pending = orders.filter((order) => !order.manifestPrintUrl);
+  const lockAt = new Date();
+  const locked = await Order.updateMany({ _id: { $in: pending.map((order) => order._id) }, manifestPrintUrl: { $in: [null, ""] }, $or: [{ manifestPrintStartedAt: { $exists: false } }, { manifestPrintStartedAt: null }, { manifestPrintStartedAt: { $lt: staleOperationLock() } }] }, { $set: { manifestPrintStartedAt: lockAt } });
+  if (locked.modifiedCount !== pending.length) {
+    await Order.updateMany({ _id: { $in: pending.map((order) => order._id) }, manifestPrintStartedAt: lockAt }, { $unset: { manifestPrintStartedAt: 1 } });
+    throw new ApiError("Manifest printing is already in progress.", 409);
+  }
+  try {
+    const response = await shiprocketRequest("/manifests/print", { method: "POST", body: { order_ids: orders.map((order) => providerId(order.shiprocketOrderId)) } });
+    const url = trustedDocumentUrl(extractManifestUrl(response));
+    if (!url) throw new ApiError("Shiprocket did not return a valid printable manifest.", 502);
+    const now = new Date();
+    await Order.updateMany({ _id: { $in: pending.map((order) => order._id) }, manifestPrintStartedAt: lockAt }, { $set: { manifestPrintUrl: url, manifestPrintedAt: now }, $unset: { manifestPrintStartedAt: 1 } });
+    pending.forEach((order) => { order.manifestPrintUrl = url; order.manifestPrintedAt = now; order.manifestPrintStartedAt = undefined; });
+    return { orders, url, existing: false };
+  } catch (error) {
+    await Order.updateMany({ _id: { $in: pending.map((order) => order._id) }, manifestPrintStartedAt: lockAt }, { $unset: { manifestPrintStartedAt: 1 } }).catch(() => undefined);
+    if (error?.statusCode === 429) throw new ApiError("Shiprocket rate limit reached. Please retry shortly.", 429);
+    throw new ApiError("Unable to prepare the printable manifest. Please retry.", error?.statusCode || 502);
+  }
+}
+
+export async function generateShipmentInvoice(orderId) {
+  await assertShiprocketEnabled();
+  const { order, existing } = await claimDocumentOperation(orderId, "shiprocketInvoiceUrl", "shiprocketInvoiceGenerationStartedAt");
+  if (existing) return order;
+  if (!order.shiprocketOrderId) return failDocument(order, "shiprocketInvoiceGenerationStartedAt", new ApiError("Shiprocket order ID is required.", 400), "Shiprocket order ID is required.");
+  try {
+    const response = await shiprocketRequest("/orders/print/invoice", { method: "POST", body: { ids: [providerId(order.shiprocketOrderId)] } });
+    const url = trustedDocumentUrl(extractInvoiceUrl(response));
+    if (!url || response?.is_invoice_created === false) throw new ApiError("Shiprocket did not generate a valid shipment invoice.", 502);
+    return completeDocument(order, "shiprocketInvoiceUrl", "shiprocketInvoiceGeneratedAt", "shiprocketInvoiceGenerationStartedAt", url);
+  } catch (error) { return failDocument(order, "shiprocketInvoiceGenerationStartedAt", error, "Unable to generate the Shiprocket invoice. Please retry."); }
+}
+
+export function getShipmentDocument(order, type) {
+  const fields = { label: "labelUrl", manifest: "manifestPrintUrl", invoice: "shiprocketInvoiceUrl" };
+  const field = fields[type];
+  if (!field) throw new ApiError("Unknown shipment document type.", 400);
+  const url = trustedDocumentUrl(order?.[field]);
+  if (!url) throw new ApiError("Shipment document is not available.", 404);
+  return url;
 }
 
 

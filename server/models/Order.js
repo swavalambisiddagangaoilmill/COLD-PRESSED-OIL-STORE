@@ -98,6 +98,16 @@ const orderSchema = new mongoose.Schema(
     estimatedDelivery: { type: Date },
     labelUrl: { type: String },
     manifestUrl: { type: String },
+    manifestPrintUrl: { type: String },
+    shiprocketInvoiceUrl: { type: String },
+    labelGeneratedAt: { type: Date },
+    manifestGeneratedAt: { type: Date },
+    manifestPrintedAt: { type: Date },
+    shiprocketInvoiceGeneratedAt: { type: Date },
+    labelGenerationStartedAt: { type: Date },
+    manifestGenerationStartedAt: { type: Date },
+    manifestPrintStartedAt: { type: Date },
+    shiprocketInvoiceGenerationStartedAt: { type: Date },
     shippingFailureReason: { type: String },
     shipmentBookedAt: { type: Date },
     readyToShipAt: { type: Date },
@@ -132,7 +142,7 @@ const orderSchema = new mongoose.Schema(
     cartCleanupCompletedAt: { type: Date },
     inventoryRestoredAt: { type: Date },
   },
-  { timestamps: true, toJSON: { transform(_doc, value) { delete value.shiprocketShippingCost; delete value.selectedCourierId; delete value.selectedCourierService; return value; } } }
+  { timestamps: true, toJSON: { transform(_doc, value) { delete value.shiprocketShippingCost; delete value.selectedCourierId; delete value.selectedCourierService; delete value.labelUrl; delete value.manifestUrl; delete value.manifestPrintUrl; delete value.shiprocketInvoiceUrl; return value; } } }
 );
 
 orderSchema.index({ shiprocketShipmentId: 1 });

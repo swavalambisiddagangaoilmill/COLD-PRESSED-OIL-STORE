@@ -31,11 +31,16 @@ router.post("/sessions/revoke", requireAdminPermission("sessions.manage"), contr
 router.get("/orders", requireAdminPermission("orders.read"), controller.orders);
 router.get("/fulfillment", requireAdminPermission("shipping.read"), controller.fulfillmentOrders);
 router.post("/fulfillment/ready", requireAdminPermission("orders.ship"), [body("orderIds").isArray({ min: 1, max: 50 }).withMessage("Select between 1 and 50 orders."), body("orderIds.*").isMongoId().withMessage("Every order id must be valid.")], validate, controller.bulkReadyToShip);
+router.post("/fulfillment/manifest", requireAdminPermission("shipping.manage"), [body("orderIds").isArray({ min: 1, max: 50 }).withMessage("Select between 1 and 50 shipments."), body("orderIds.*").isMongoId().withMessage("Every order id must be valid.")], validate, controller.generateManifest);
+router.post("/fulfillment/manifest/print", requireAdminPermission("shipping.manage"), [body("orderIds").isArray({ min: 1, max: 50 }).withMessage("Select between 1 and 50 shipments."), body("orderIds.*").isMongoId().withMessage("Every order id must be valid.")], validate, controller.printManifest);
 router.get("/fulfillment/export", requireAdminPermission("shipping.read"), controller.fulfillmentExport);
 router.put("/orders/:id/status", requireAdminPermission("orders.update"), controller.orderStatus);
 router.post("/orders/:id/ready-to-ship", requireAdminPermission("orders.ship"), [param("id").isMongoId().withMessage("Valid order id is required.")], validate, controller.orderReadyToShip);
 router.post("/orders/:id/request-pickup", requireAdminPermission("shipping.manage"), [param("id").isMongoId().withMessage("Valid order id is required.")], validate, controller.orderRequestPickup);
 router.post("/orders/:id/cancel-shipment", requireAdminPermission("shipping.manage"), [param("id").isMongoId().withMessage("Valid order id is required.")], validate, controller.orderCancelShipment);
+router.post("/orders/:id/label", requireAdminPermission("shipping.manage"), [param("id").isMongoId().withMessage("Valid order id is required.")], validate, controller.orderGenerateLabel);
+router.post("/orders/:id/shipment-invoice", requireAdminPermission("shipping.manage"), [param("id").isMongoId().withMessage("Valid order id is required.")], validate, controller.orderGenerateShipmentInvoice);
+router.get("/orders/:id/documents/:type", requireAdminPermission("shipping.read"), [param("id").isMongoId().withMessage("Valid order id is required."), param("type").isIn(["label", "manifest", "invoice"]).withMessage("Valid shipment document type is required.")], validate, controller.shipmentDocument);
 router.post("/orders/:id/handover", requireAdminPermission("shipping.manage"), controller.orderHandover);
 router.get("/products", requireAdminPermission("products.read"), productQueryValidator, validate, controller.products);
 router.post("/products", requireAdminPermission("products.create"), productValidator, validate, controller.saveProduct);

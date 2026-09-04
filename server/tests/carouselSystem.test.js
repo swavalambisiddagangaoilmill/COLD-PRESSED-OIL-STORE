@@ -66,3 +66,24 @@ test("carousel upload accepts image\/jpg as JPEG without weakening signature val
     cloudinary.uploader.upload = originalUpload;
   }
 });
+
+test("carousel crop editor preserves exact desktop and mobile aspect ratios", async () => {
+  const { CAROUSEL_CROP, cropSourceRect } = await import("../../src/admin/utils/carouselCrop.js");
+  const desktop = cropSourceRect(2400, 1600, "desktop", 1, { x: 0, y: 0 });
+  const mobile = cropSourceRect(2400, 1600, "mobile", 1, { x: 0, y: 0 });
+  assert.equal(CAROUSEL_CROP.desktop.width / CAROUSEL_CROP.desktop.height, 16 / 9);
+  assert.equal(CAROUSEL_CROP.mobile.width / CAROUSEL_CROP.mobile.height, 3 / 4);
+  assert.ok(Math.abs(desktop.width / desktop.height - 16 / 9) < 0.000001);
+  assert.ok(Math.abs(mobile.width / mobile.height - 3 / 4) < 0.000001);
+});
+
+test("carousel crop zoom and drag stay within the source image", async () => {
+  const { cropSourceRect } = await import("../../src/admin/utils/carouselCrop.js");
+  const centered = cropSourceRect(2400, 1600, "desktop", 1, { x: 0, y: 0 });
+  const moved = cropSourceRect(2400, 1600, "desktop", 2, { x: 1, y: -1 });
+  assert.ok(moved.width < centered.width);
+  assert.ok(moved.height < centered.height);
+  assert.ok(moved.x >= 0 && moved.y >= 0);
+  assert.ok(moved.x + moved.width <= 2400);
+  assert.ok(moved.y + moved.height <= 1600);
+});

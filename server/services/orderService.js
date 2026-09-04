@@ -4,6 +4,7 @@ import Product from "../models/Product.js";
 import User from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { withOrderTotals } from "../utils/orderTotals.js";
+import { customerOrderView } from "../utils/customerCommerceView.js";
 import { createAdminNotification, createInventoryNotifications } from "./adminNotificationService.js";
 import { calculateCheckoutTotals, consumeCouponUsageForOrder, normalizeCouponCode, validateCouponForItems } from "./couponService.js";
 import { priceProducts } from "./offerPricingService.js";
@@ -111,7 +112,7 @@ export async function createOrder(userId, payload, options = {}) {
 }
 
 export async function getMyOrders(userId) {
-  return (await Order.find({ user: userId }).sort({ createdAt: -1 }).lean()).map(withOrderTotals);
+  return (await Order.find({ user: userId }).sort({ createdAt: -1 }).lean()).map((order) => customerOrderView(withOrderTotals(order)));
 }
 
 export async function getOrderForUser(orderId, user) {
@@ -120,7 +121,8 @@ export async function getOrderForUser(orderId, user) {
   if (user.role !== "admin" && order.user._id.toString() !== user._id.toString()) {
     throw new ApiError("You cannot access this order.", 403);
   }
-  return withOrderTotals(order);
+  const result = withOrderTotals(order);
+  return user.role === "admin" ? result : customerOrderView(result);
 }
 
 export async function getAllOrders() {

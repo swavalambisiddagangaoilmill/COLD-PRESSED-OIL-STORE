@@ -16,6 +16,19 @@ async function downloadFulfillmentExport() {
   link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove();
   URL.revokeObjectURL(url);
 }
+async function openShipmentDocument(id, type) {
+  const popup = window.open("about:blank", "_blank");
+  if (popup) popup.opener = null;
+  const token = getAuthToken();
+  try {
+    const response = await fetch(`${API_BASE_URL}${base}/orders/${id}/documents/${type}`, { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!response.ok) { const payload = await response.json().catch(() => ({})); throw new Error(payload.message || "Unable to open shipment document."); }
+    const url = URL.createObjectURL(await response.blob());
+    if (popup) popup.location.href = url;
+    else { const link = document.createElement("a"); link.href = url; link.target = "_blank"; link.rel = "noopener noreferrer"; link.click(); }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (error) { popup?.close(); throw error; }
+}
 
 export const adminApi = {
   search: (q) => apiRequest(`${base}/search?q=${encodeURIComponent(q)}`),
@@ -29,6 +42,11 @@ export const adminApi = {
   refreshTracking: (id) => apiRequest(`/orders/${id}/tracking`),
   fulfillment: (query = "") => apiRequest(`${base}/fulfillment${query}`),
   bulkReadyToShip: (orderIds) => apiRequest(`${base}/fulfillment/ready`, { method: "POST", body: JSON.stringify({ orderIds }) }),
+  generateManifest: (orderIds) => apiRequest(`${base}/fulfillment/manifest`, { method: "POST", body: JSON.stringify({ orderIds }) }),
+  printManifest: (orderIds) => apiRequest(`${base}/fulfillment/manifest/print`, { method: "POST", body: JSON.stringify({ orderIds }) }),
+  generateLabel: (id) => apiRequest(`${base}/orders/${id}/label`, { method: "POST" }),
+  generateShipmentInvoice: (id) => apiRequest(`${base}/orders/${id}/shipment-invoice`, { method: "POST" }),
+  openShipmentDocument,
   downloadFulfillmentExport,
   handoverShipment: (id) => apiRequest(`${base}/orders/${id}/handover`, { method: "POST" }),
   products: (query = "") => apiRequest(`${base}/products${query}`),

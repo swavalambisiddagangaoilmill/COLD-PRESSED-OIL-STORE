@@ -1,6 +1,7 @@
 ﻿// Product controller maps catalog requests to product services.
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendSuccess } from "../utils/apiResponse.js";
+import { customerProductView } from "../utils/customerCommerceView.js";
 import {
   createProduct,
   deleteProduct,
@@ -14,27 +15,27 @@ import {
 
 export const getProducts = asyncHandler(async (req, res) => {
   const data = await listProducts(req.query);
-  sendSuccess(res, 200, "Products fetched successfully", data);
+  sendSuccess(res, 200, "Products fetched successfully", { ...data, items: data.items.map(customerProductView) });
 });
 
 export const getFeatured = asyncHandler(async (_req, res) => {
   const products = await getFeaturedProducts();
-  sendSuccess(res, 200, "Featured products fetched successfully", { products });
+  sendSuccess(res, 200, "Featured products fetched successfully", { products: products.map(customerProductView) });
 });
 
 export const getProduct = asyncHandler(async (req, res) => {
   const product = await getProductBySlug(req.params.slug);
-  sendSuccess(res, 200, "Product fetched successfully", { product });
+  sendSuccess(res, 200, "Product fetched successfully", { product: customerProductView(product) });
 });
 
 export const getCategoryProducts = asyncHandler(async (req, res) => {
   const data = await getProductsByCategory(req.params.categoryId, req.query);
-  sendSuccess(res, 200, "Category products fetched successfully", data);
+  sendSuccess(res, 200, "Category products fetched successfully", { ...data, items: data.items.map(customerProductView) });
 });
 
 export const getRelated = asyncHandler(async (req, res) => {
   const products = await getRelatedProducts(req.params.id, req.query.limit);
-  sendSuccess(res, 200, "Related products fetched successfully", { products });
+  sendSuccess(res, 200, "Related products fetched successfully", { products: products.map(customerProductView) });
 });
 
 export const createProductHandler = asyncHandler(async (req, res) => {

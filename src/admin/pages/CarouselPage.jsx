@@ -1,8 +1,9 @@
-import { ArrowDown, ArrowUp, ImagePlus, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ImagePlus, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../../components/features/feedback/ToastProvider.jsx";
 import { AdminBadge, AdminButton, AdminModal, AdminPageHeader } from "../components/AdminUi.jsx";
 import { adminApi } from "../services/adminApi.js";
+import { CAROUSEL_CROP, drawCarouselCrop, exportCarouselCrop } from "../utils/carouselCrop.js";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -16,13 +17,57 @@ async function validateImage(file) {
   } finally { URL.revokeObjectURL(url); }
 }
 
+function CropEditor({ kind, source, originalFile, onApply, onCancel }) {
+  const canvas = useRef(null);
+  const drag = useRef(null);
+  const [zoom, setZoom] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const portrait = kind === "mobile";
+  const redraw = () => {
+    const target = canvas.current;
+    if (!target || !source) return;
+    drawCarouselCrop(target.getContext("2d"), source, kind, zoom, position, target.width, target.height);
+  };
+  useEffect(redraw, [kind, position, source, zoom]);
+  const reset = () => { setZoom(1); setPosition({ x: 0, y: 0 }); };
+  const move = (event) => {
+    if (!drag.current) return;
+    const rect = canvas.current.getBoundingClientRect();
+    const x = Math.max(-1, Math.min(1, drag.current.position.x + ((event.clientX - drag.current.x) / rect.width) * 2));
+    const y = Math.max(-1, Math.min(1, drag.current.position.y + ((event.clientY - drag.current.y) / rect.height) * 2));
+    setPosition({ x, y });
+  };
+  const finish = (event) => { if (drag.current) canvas.current?.releasePointerCapture?.(event.pointerId); drag.current = null; };
+  const apply = async () => onApply(await exportCarouselCrop(source, originalFile, kind, zoom, position));
+  return <div className="grid gap-3">
+    <div className={`relative mx-auto w-full overflow-hidden border-2 border-[var(--admin-primary)] bg-black shadow-inner ${portrait ? "max-w-[270px]" : "max-w-[640px]"}`}>
+      <canvas ref={canvas} width={portrait ? 270 : 640} height={portrait ? 360 : 360} className="block h-auto w-full cursor-grab touch-none active:cursor-grabbing" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); drag.current = { x: event.clientX, y: event.clientY, position }; }} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} aria-label={`${kind} carousel crop preview`} />
+      <div className="pointer-events-none absolute inset-0 border border-white/70" />
+      <span className="pointer-events-none absolute bottom-2 left-2 rounded bg-black/65 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white">{portrait ? "Mobile 3:4" : "Desktop 16:9"} preview</span>
+    </div>
+    <p className="text-center text-xs font-semibold text-ink/55">Drag inside the frame to reposition the image.</p>
+    <label className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-xs font-bold text-ink/65"><span>Zoom</span><input type="range" min="1" max="3" step="0.01" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} aria-label={`${kind} image zoom`} /><span>{Math.round(zoom * 100)}%</span></label>
+    <div className="flex flex-wrap justify-center gap-2"><AdminButton type="button" variant="secondary" onClick={reset}><RotateCcw size={15} />Reset</AdminButton><AdminButton type="button" variant="secondary" onClick={onCancel}><X size={15} />Cancel</AdminButton><AdminButton type="button" onClick={() => apply().catch((error) => onCancel(error.message))}><Check size={15} />Apply crop</AdminButton></div>
+  </div>;
+}
+
 function UploadArtboard({ kind, file, existing, removed, onFile, onRemove }) {
   const input = useRef(null);
+  const [crop, setCrop] = useState(null);
   const portrait = kind === "mobile";
   const preview = useMemo(() => file ? URL.createObjectURL(file) : removed ? "" : existing?.url, [existing?.url, file, removed]);
   useEffect(() => () => { if (file && preview) URL.revokeObjectURL(preview); }, [file, preview]);
-  const select = async (next) => { await validateImage(next); onFile(next); };
-  return <section className="grid gap-3"><div><p className="text-sm font-extrabold uppercase tracking-[0.12em] text-ink">{portrait ? "Mobile banner" : "Desktop banner"}</p><p className="mt-1 text-xs font-semibold text-ink/50">{portrait ? "Automatically cropped to 1080 × 1440 (3:4)" : "Automatically cropped to 1920 × 1080 (16:9)"}</p></div><div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); select(event.dataTransfer.files?.[0]).catch((error) => onFile(null, error.message)); }} className={`relative grid place-items-center overflow-hidden border-2 border-dashed border-[var(--admin-border)] bg-linen/50 ${portrait ? "mx-auto aspect-[3/4] w-full max-w-[230px]" : "aspect-video w-full"}`}>{preview ? <img src={preview} alt={`${kind} preview`} className="h-full w-full object-cover" /> : <div className="p-6 text-center"><ImagePlus className="mx-auto text-[var(--admin-primary)]" /><p className="mt-3 text-sm font-bold">Drag and drop or Browse</p></div>}<input ref={input} type="file" className="hidden" accept=".jpg,.jpeg,image/jpeg,image/jpg,image/png,image/webp" onChange={(event) => select(event.target.files?.[0]).catch((error) => onFile(null, error.message))} /></div><div className="flex justify-center gap-2"><AdminButton type="button" variant="secondary" onClick={() => input.current?.click()}>{preview ? "Replace" : "Browse"}</AdminButton>{preview && <AdminButton type="button" variant="danger" onClick={onRemove}>Remove</AdminButton>}</div></section>;
+  useEffect(() => () => { if (crop?.url) URL.revokeObjectURL(crop.url); }, [crop?.url]);
+  const select = async (next) => {
+    await validateImage(next);
+    const url = URL.createObjectURL(next);
+    const image = new Image();
+    image.onload = () => setCrop({ file: next, image, url });
+    image.onerror = () => { URL.revokeObjectURL(url); onFile(null, "The selected file could not be read as an image."); };
+    image.src = url;
+  };
+  if (crop) return <section className="grid gap-3"><div><p className="text-sm font-extrabold uppercase tracking-[0.12em] text-ink">Fit {portrait ? "mobile" : "desktop"} banner</p><p className="mt-1 text-xs font-semibold text-ink/50">Crop output: {CAROUSEL_CROP[kind].width} × {CAROUSEL_CROP[kind].height}</p></div><CropEditor kind={kind} source={crop.image} originalFile={crop.file} onApply={(next) => { onFile(next); setCrop(null); }} onCancel={(message) => { if (message) onFile(null, message); setCrop(null); }} /></section>;
+  return <section className="grid gap-3"><div><p className="text-sm font-extrabold uppercase tracking-[0.12em] text-ink">{portrait ? "Mobile banner" : "Desktop banner"}</p><p className="mt-1 text-xs font-semibold text-ink/50">{portrait ? "Crop to 1080 × 1440 (3:4)" : "Crop to 1920 × 1080 (16:9)"}</p></div><div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); select(event.dataTransfer.files?.[0]).catch((error) => onFile(null, error.message)); }} className={`relative grid place-items-center overflow-hidden border-2 border-dashed border-[var(--admin-border)] bg-linen/50 ${portrait ? "mx-auto aspect-[3/4] w-full max-w-[230px]" : "aspect-video w-full"}`}>{preview ? <img src={preview} alt={`${kind} preview`} className="h-full w-full object-cover" /> : <div className="p-6 text-center"><ImagePlus className="mx-auto text-[var(--admin-primary)]" /><p className="mt-3 text-sm font-bold">Drag and drop or Browse</p></div>}<input ref={input} type="file" className="hidden" accept=".jpg,.jpeg,image/jpeg,image/jpg,image/png,image/webp" onChange={(event) => { const next = event.target.files?.[0]; event.target.value = ""; select(next).catch((error) => onFile(null, error.message)); }} /></div><div className="flex justify-center gap-2"><AdminButton type="button" variant="secondary" onClick={() => input.current?.click()}>{preview ? "Replace & crop" : "Browse & crop"}</AdminButton>{preview && <AdminButton type="button" variant="danger" onClick={onRemove}>Remove</AdminButton>}</div></section>;
 }
 
 function SlideEditor({ item, onClose, onSaved }) {

@@ -28,7 +28,7 @@ export default function ProductDetails() {
     let active = true;
     setLoading(true);
     getProductBySlug(slug)
-      .then((item) => { if (active) { setProduct(item); setMissing(!item); setSelectedVariantId(String(item?.variants?.find((variant) => variant.isActive !== false && item.stock >= Number(variant.litres || 0))?._id || item?.variants?.find((variant) => variant.isActive !== false)?._id || "")); } })
+      .then((item) => { if (active) { setProduct(item); setMissing(!item); setSelectedVariantId(String(item?.variants?.find((variant) => variant.isActive !== false && variant.isAvailable !== false)?._id || item?.variants?.find((variant) => variant.isActive !== false)?._id || "")); } })
       .catch(() => active && setMissing(true))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
@@ -42,8 +42,8 @@ export default function ProductDetails() {
     ...product,
     variantId: selectedVariantId,
     volume: selectedVariant.size,
-    stock: Math.floor((Number(product.stock) + Number.EPSILON) / Number(selectedVariant.litres || parseFloat(selectedVariant.size))),
-    availableQuantity: Math.floor((Number(product.stock) + Number.EPSILON) / Number(selectedVariant.litres || parseFloat(selectedVariant.size))),
+    stock: selectedVariant.isAvailable === false ? 0 : Number.MAX_SAFE_INTEGER,
+    availableQuantity: selectedVariant.isAvailable === false ? 0 : Number.MAX_SAFE_INTEGER,
     price: selectedVariant.effectivePrice ?? selectedVariant.price,
     effectivePrice: selectedVariant.effectivePrice ?? selectedVariant.price,
     baseSellingPrice: selectedVariant.baseSellingPrice ?? selectedVariant.price,
@@ -73,7 +73,7 @@ export default function ProductDetails() {
               <h1 className="mt-4 font-serif text-5xl font-semibold leading-tight lg:text-6xl">{product.name}</h1>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-ink/65">{product.description}</p>
               <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-ink/60"><Star size={17} className="fill-clay text-clay" /> {product.rating} rating · {selectedProduct.volume}</div>
-              {product.variants?.length > 0 && <fieldset className="mt-6"><legend className="text-xs font-bold uppercase tracking-[0.2em] text-ink/65">Select size</legend><div className="mt-3 flex flex-wrap gap-3">{product.variants.filter((variant) => variant.isActive !== false).map((variant) => { const unavailable = Number(product.stock) < Number(variant.litres); return <button key={variant._id || variant.id} type="button" disabled={unavailable} onClick={() => { setSelectedVariantId(String(variant._id || variant.id)); setQuantity(1); }} className={`min-w-20 rounded-xl border px-4 py-3 text-sm font-bold transition ${selectedVariantId === String(variant._id || variant.id) ? "border-leaf bg-leaf text-white" : "border-ink/15 bg-white text-ink hover:border-leaf"} disabled:cursor-not-allowed disabled:opacity-40`}>{variant.size}{unavailable ? " · Out" : ""}</button>; })}</div></fieldset>}
+              {product.variants?.length > 0 && <fieldset className="mt-6"><legend className="text-xs font-bold uppercase tracking-[0.2em] text-ink/65">Select size</legend><div className="mt-3 flex flex-wrap gap-3">{product.variants.filter((variant) => variant.isActive !== false).map((variant) => { const unavailable = variant.isAvailable === false; return <button key={variant._id || variant.id} type="button" disabled={unavailable} onClick={() => { setSelectedVariantId(String(variant._id || variant.id)); setQuantity(1); }} className={`min-w-20 rounded-xl border px-4 py-3 text-sm font-bold transition ${selectedVariantId === String(variant._id || variant.id) ? "border-leaf bg-leaf text-white" : "border-ink/15 bg-white text-ink hover:border-leaf"} disabled:cursor-not-allowed disabled:opacity-40`}>{variant.size}{unavailable ? " · Out" : ""}</button>; })}</div></fieldset>}
               <p className={`mt-3 text-xs font-bold uppercase tracking-[0.16em] ${selectedProduct.stock === 0 ? "text-clay" : "text-leaf"}`}>{selectedProduct.stock === 0 ? "Out of stock" : selectedProduct.stock <= 8 ? "Low stock" : "In stock"}</p>
               <ProductPrice product={selectedProduct} className="mt-6" />
               <div className="sticky bottom-0 z-20 -mx-4 mt-8 flex flex-col gap-4 border-t border-ink/10 bg-cream/95 p-4 backdrop-blur sm:static sm:mx-0 sm:flex-row sm:border-0 sm:bg-transparent sm:p-0">

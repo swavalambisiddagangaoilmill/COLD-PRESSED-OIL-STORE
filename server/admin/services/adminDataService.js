@@ -9,7 +9,7 @@ import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";
 import StoreSettings from "../../models/StoreSettings.js";
 import User from "../../models/User.js";
-import { cancelShiprocketShipment, createReadyToShipShipment, markShipmentHandedOver, requestShipmentPickup } from "../../services/shiprocketService.js";
+import { cancelShiprocketShipment, createReadyToShipShipment, generateShipmentInvoice, generateShipmentLabel, generateShipmentManifest, getShipmentDocument, markShipmentHandedOver, printShipmentManifest, requestShipmentPickup } from "../../services/shiprocketService.js";
 import { createAdminNotification, createInventoryNotifications } from "../../services/adminNotificationService.js";
 import { normalizeCouponCode } from "../../services/couponService.js";
 import { deleteImage } from "../../services/uploadService.js";
@@ -123,6 +123,15 @@ async function sendConfirmationOnce(order) {
 }
 
 export async function readyToShip(id) { return createReadyToShipShipment(id); }
+export async function generateLabel(id) { return generateShipmentLabel(id); }
+export async function generateManifest(ids) { return generateShipmentManifest(ids); }
+export async function printManifest(ids) { return printShipmentManifest(ids); }
+export async function generateShiprocketInvoice(id) { return generateShipmentInvoice(id); }
+export async function shipmentDocument(id, type) {
+  const order = await Order.findById(id);
+  if (!order) throw new ApiError("Order not found.", 404);
+  return getShipmentDocument(order, type);
+}
 export async function requestPickup(id) { return requestShipmentPickup(id); }
 export async function cancelShipment(id) { return cancelShiprocketShipment(id); }
 export async function handoverShipment(id) { return markShipmentHandedOver(id); }
