@@ -24,9 +24,8 @@ export function shipmentDataFromProducts(items = []) {
   const lines = items.map((item) => {
     const variants = item.product?.variants || [];
     const variant = item.variant
-      ? variants.find((entry) => String(entry._id) === String(item.variant))
-      : variants.find((entry) => entry.isActive !== false && entry.size === item.product?.size)
-        || variants.find((entry) => entry.isActive !== false);
+      ? variants.find((entry) => entry.isActive !== false && String(entry._id) === String(item.variant))
+      : variants.find((entry) => entry.isActive !== false && entry.size === item.product?.size);
     if (!variant) throw new ApiError("A valid product variant is required for shipping.", 400);
     const quantity = positive(item.quantity, "Quantity");
     return {

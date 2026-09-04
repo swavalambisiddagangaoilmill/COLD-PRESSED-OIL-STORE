@@ -131,3 +131,36 @@ test("a transient authentication failure is retried once", async () => {
   assert.equal((await getShippingRate(rateInput())).shippingCost, 98);
   assert.equal(authenticationCalls, 2);
 });
+
+test("provider 403 and 4xx failures fail closed without a rate", async () => {
+  for (const status of [403, 422]) {
+    resetShiprocketAuthForTests();
+    globalThis.fetch = async (url) => url.endsWith("/auth/login")
+      ? jsonResponse(200, { token: "private-token" })
+      : jsonResponse(status, { message: "Provider rejected request" });
+    await assert.rejects(getShippingRate(rateInput()), (error) => error.statusCode === 400);
+  }
+});
+
+test("provider 5xx is retried once and then fails closed", async () => {
+  let rateCalls = 0;
+  globalThis.fetch = async (url) => {
+    if (url.endsWith("/auth/login")) return jsonResponse(200, { token: "private-token" });
+    rateCalls += 1;
+    return jsonResponse(503, { message: "Provider unavailable" });
+  };
+  await assert.rejects(getShippingRate(rateInput()), (error) => error.statusCode === 502);
+  assert.equal(rateCalls, 2);
+});
+
+test("malformed and unserviceable provider responses never produce zero shipping", async () => {
+  const malformed = { ok: true, status: 200, text: async () => "not-json" };
+  globalThis.fetch = async (url) => url.endsWith("/auth/login") ? jsonResponse(200, { token: "private-token" }) : malformed;
+  await assert.rejects(getShippingRate(rateInput()), (error) => error.statusCode === 502);
+
+  resetShiprocketAuthForTests();
+  globalThis.fetch = async (url) => url.endsWith("/auth/login")
+    ? jsonResponse(200, { token: "private-token" })
+    : jsonResponse(200, { data: { available_courier_companies: [] } });
+  await assert.rejects(getShippingRate(rateInput()), /No Shiprocket courier is serviceable/);
+});

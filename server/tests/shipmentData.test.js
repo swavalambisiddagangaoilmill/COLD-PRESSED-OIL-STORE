@@ -35,6 +35,31 @@ test("an explicitly invalid variant never falls back to another variant", () => 
   assert.throws(() => shipmentDataFromProducts([{ product, variant: "missing", quantity: 1 }]), /valid product variant/);
 });
 
+test("inactive and deleted variants are rejected without substitution", () => {
+  const inactive = { ...variant("v1", "1L", 1, { length: 10, width: 10, height: 30 }), isActive: false };
+  const active = variant("v5", "5L", 5, { length: 20, width: 15, height: 30 });
+  const product = { _id: "p1", size: "1L", variants: [inactive, active] };
+
+  assert.throws(() => shipmentDataFromProducts([{ product, variant: "v1", quantity: 1 }]), /valid product variant/);
+  assert.throws(() => shipmentDataFromProducts([{ product, quantity: 1 }]), /valid product variant/);
+  assert.throws(() => shipmentDataFromProducts([{ product, variant: "deleted", quantity: 1 }]), /valid product variant/);
+});
+
+test("mixed legacy and current cart rows resolve independently from persisted variants", () => {
+  const one = variant("v1", "1L", 1, { length: 10, width: 10, height: 30 });
+  const five = variant("v5", "5L", 5, { length: 20, width: 15, height: 30 });
+  const legacyProduct = { _id: "p1", size: "1L", variants: [one, five] };
+  const currentProduct = { _id: "p2", size: "1L", variants: [one, five] };
+  const shipment = shipmentDataFromProducts([
+    { product: legacyProduct, quantity: 1 },
+    { product: currentProduct, variant: "v5", quantity: 2 },
+  ]);
+
+  assert.deepEqual(shipment.lines.map((line) => line.variant), ["v1", "v5"]);
+  assert.equal(shipment.weight, 11);
+  assert.deepEqual(shipment.dimensions, five.dimensions);
+});
+
 test("shipment booking reads immutable order snapshots, not current products", () => {
   const order = {
     products: [{ quantity: 3, shippingWeight: 1.2, dimensions: { length: 10.1, width: 9.2, height: 28.3 } }],
