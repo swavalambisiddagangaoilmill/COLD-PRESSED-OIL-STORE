@@ -23,12 +23,16 @@ function mockOrder() {
   return {
     _id: "64b000000000000000000020",
     user: { _id: "64b000000000000000000021", name: "Test Customer", email: "test@example.com" },
-    products: [{ product: { _id: "64b000000000000000000022" }, title: "Test Oil", quantity: 1, price: 250 }],
+    products: [{ product: { _id: "64b000000000000000000022" }, variant: "64b000000000000000000023", variantLabel: "1L", variantSku: "TEST-OIL-1L", title: "Test Oil", quantity: 1, price: 250, shippingWeight: 1.1, dimensions: { length: 10, width: 11, height: 30 }, requiredStockLitres: 1 }],
+    shipmentDimensions: { length: 10, width: 11, height: 30 },
     shippingAddress: { fullName: "Test Customer", phone: "9999999999", street: "Test Road", city: "Tumakuru", state: "Karnataka", postalCode: "572106", country: "India" },
     paymentMethod: "cod",
     paymentStatus: "pending",
     orderStatus: "confirmed",
     shippingStatus: "pending",
+    subtotal: 250,
+    shippingAmount: 0,
+    couponDiscount: 0,
     totalAmount: 250,
     mockShippingHistory: [],
     async save() { return this; },
@@ -46,17 +50,13 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-test("live Ready creates an order and AWB without generating pickup", async () => {
+test("live Ready creates an order, AWB, and pickup from the order snapshot", async () => {
   Object.assign(env.shiprocket, {
     enabled: true,
     email: "shiprocket@example.com",
     password: "secret",
     pickupLocation: "Primary",
     pickupPostcode: "572106",
-    defaultWeightKg: 1,
-    defaultLengthCm: 10,
-    defaultBreadthCm: 10,
-    defaultHeightCm: 10,
   });
   const order = mockOrder();
   order.createdAt = new Date("2026-09-02T00:00:00Z");
@@ -82,8 +82,8 @@ test("live Ready creates an order and AWB without generating pickup", async () =
   assert.equal(ready.shiprocketShipmentId, "sr-shipment-1");
   assert.equal(ready.awbCode, "AWB123");
   assert.equal(ready.shippingStatus, "ready_for_pickup");
-  assert.deepEqual(ready.statusHistory.map((entry) => entry.status), ["shiprocket_order_created", "packed", "awb_assigned", "ready_for_pickup"]);
-  assert.equal(paths.some((url) => url.includes("generate/pickup")), false);
+  assert.deepEqual(ready.statusHistory.map((entry) => entry.status), ["shiprocket_order_created", "awb_assigned", "pickup_generated", "packed", "ready_for_pickup"]);
+  assert.equal(paths.some((url) => url.includes("generate/pickup")), true);
   assert.equal(paths.some((url) => url.includes("generate/label")), false);
   assert.equal(paths.some((url) => url.includes("manifests/generate")), false);
 });
@@ -107,7 +107,7 @@ test("signed Shiprocket updates preserve precise customer tracking states and ve
   order.statusHistory = [{ status: "ready_for_pickup", source: "shiprocket", createdAt: new Date("2026-09-03T08:00:00Z") }];
   Order.findOne = async () => order;
 
-  await syncShiprocketWebhook({ awb: "AWB123", current_status: "In Transit", event_time: "2026-09-03T10:30:00Z", tracking_url: "https://shiprocket.co/tracking/AWB123" }, { "x-shiprocket-token": "webhook-test-secret" });
+  await syncShiprocketWebhook({ awb: "AWB123", current_status: "In Transit", event_time: "2026-09-03T10:30:00Z", tracking_url: "https://shiprocket.co/tracking/AWB123" }, { "x-api-key": "webhook-test-secret" });
 
   assert.equal(order.shippingStatus, "in_transit");
   assert.equal(order.orderStatus, "shipped");
@@ -123,7 +123,7 @@ test("Shiprocket webhook rejects untrusted external tracking links", async () =>
   order.statusHistory = [];
   Order.findOne = async () => order;
 
-  await syncShiprocketWebhook({ awb: "AWB123", current_status: "Picked Up", tracking_url: "https://malicious.example/track" }, { "x-shiprocket-token": "webhook-test-secret" });
+  await syncShiprocketWebhook({ awb: "AWB123", current_status: "Picked Up", tracking_url: "https://malicious.example/track" }, { "x-api-key": "webhook-test-secret" });
 
   assert.equal(order.shippingStatus, "picked_up");
   assert.equal(order.trackingUrl, "https://shiprocket.co/tracking/AWB123");
@@ -137,7 +137,7 @@ test("out-of-order Shiprocket webhook events cannot regress fulfillment", async 
   order.statusHistory = [{ status: "out_for_delivery", source: "shiprocket", createdAt: new Date() }];
   Order.findOne = async () => order;
 
-  await syncShiprocketWebhook({ awb: "AWB123", current_status: "In Transit" }, { "x-shiprocket-token": "webhook-test-secret" });
+  await syncShiprocketWebhook({ awb: "AWB123", current_status: "In Transit" }, { "x-api-key": "webhook-test-secret" });
 
   assert.equal(order.shippingStatus, "out_for_delivery");
   assert.equal(order.statusHistory.length, 1);
@@ -148,6 +148,6 @@ test("Shiprocket webhook rejects an invalid token without processing the event",
   let databaseCalls = 0;
   Order.findOne = async () => { databaseCalls += 1; return mockOrder(); };
 
-  await assert.rejects(syncShiprocketWebhook({ awb: "AWB123", current_status: "Delivered" }, { "x-shiprocket-token": "wrong" }), /Invalid Shiprocket webhook token/);
+  await assert.rejects(syncShiprocketWebhook({ awb: "AWB123", current_status: "Delivered" }, { "x-api-key": "wrong" }), /Invalid Shiprocket webhook token/);
   assert.equal(databaseCalls, 0);
 });

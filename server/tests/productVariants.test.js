@@ -9,8 +9,8 @@ import { availableVariantQuantity, requiredStockLitres, variantLitres } from "..
 
 const ids = [1, 2, 3].map((number) => new mongoose.Types.ObjectId(`64b00000000000000000000${number}`));
 const product = { _id: ids[0], title: "Oil", category: "c1", price: 100, stock: 9, variants: [
-  { _id: ids[1], size: "1L", sku: "OIL-1L", price: 500, mrp: 550, stock: 4, isActive: true, images: [{ url: "/one.jpg" }] },
-  { _id: ids[2], size: "5L", sku: "OIL-5L", price: 2000, mrp: 2200, stock: 2, isActive: true, images: [{ url: "/five.jpg" }] },
+  { _id: ids[1], size: "1L", litres: 1, sku: "OIL-1L", price: 500, mrp: 550, isActive: true, images: [{ url: "/one.jpg" }] },
+  { _id: ids[2], size: "5L", litres: 5, sku: "OIL-5L", price: 2000, mrp: 2200, isActive: true, images: [{ url: "/five.jpg" }] },
 ] };
 
 test("different variants of the same product remain separate cart lines", () => {
@@ -23,9 +23,9 @@ test("the same product and variant merges quantities", () => {
   assert.equal([...merged.values()][0].quantity, 3);
 });
 
-test("cart normalization selects variant price image stock sku and label", () => {
+test("cart normalization selects variant price image availability and label without exposing SKU", () => {
   const item = normalizeCartItem({ product: priceProduct(product, []), variant: ids[2], quantity: 1 });
-  assert.deepEqual([item.price, item.image, item.stock, item.sku, item.volume], [2000, "/five.jpg", 2, "OIL-5L", "5L"]);
+  assert.deepEqual([item.price, item.image, item.stock, item.sku, item.volume], [2000, "/five.jpg", 1, undefined, "5L"]);
 });
 
 test("variant offer pricing is calculated independently from its base selling price", () => {
@@ -48,7 +48,7 @@ test("inactive variant state is retained by the schema", () => {
 test("order snapshots expose required variant fields", async () => {
   const Order = (await import("../models/Order.js")).default;
   const schema = Order.schema.path("products").schema;
-  for (const field of ["variant", "variantLabel", "variantSku", "basePrice", "offerId", "offerName", "offerDiscount"]) assert.ok(schema.path(field), field);
+  for (const field of ["variant", "variantLabel", "variantSku", "shippingWeight", "dimensions", "requiredStockLitres", "basePrice", "offerId", "offerName", "offerDiscount"]) assert.ok(schema.path(field), field);
 });
 
 test("legacy product-only cart rows remain valid", () => {
@@ -63,8 +63,8 @@ for (const [size, quantity, expected] of [["1L", 1, 1], ["1L", 5, 5], ["5L", 1, 
 }
 
 test("available order quantity is derived from litre stock", () => {
-  assert.equal(availableVariantQuantity({ size: "5L", stock: 12 }), 2);
-  assert.equal(availableVariantQuantity({ size: "16.5L", stock: 49.5 }), 3);
+  assert.equal(availableVariantQuantity({ size: "5L" }, 12), 2);
+  assert.equal(availableVariantQuantity({ size: "16.5L" }, 49.5), 3);
 });
 
 test("stored litre value is authoritative over the display label", () => {

@@ -8,6 +8,6 @@ export function requiredStockLitres(variant, quantity) {
   return Number((variantLitres(variant) * Math.max(1, Number(quantity) || 1)).toFixed(3));
 }
 
-export function availableVariantQuantity(variant) {
-  return Math.floor((Number(variant?.stock || 0) + Number.EPSILON) / variantLitres(variant));
+export function availableVariantQuantity(variant, productStockLitres = 0) {
+  return Math.floor((Number(productStockLitres || 0) + Number.EPSILON) / variantLitres(variant));
 }

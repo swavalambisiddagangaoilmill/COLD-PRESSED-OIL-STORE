@@ -10,6 +10,7 @@ import { priceProducts } from "./offerPricingService.js";
 import { requiredStockLitres as calculateRequiredLitres, variantLitres } from "./variantInventoryService.js";
 import { calculateShippingQuote } from "./shippingQuoteService.js";
 import { sendOrderCancellationOnce } from "./emailService.js";
+import { shipmentDataFromProducts } from "./shipmentDataService.js";
 
 const orderTransitions = {
   placed: ["confirmed", "cancelled"],
@@ -35,9 +36,7 @@ function normalizeOrderProducts(products = []) {
 }
 
 async function rollbackStock(updates) {
-  await Promise.all(updates.map((item) => item.variant
-    ? Product.updateOne({ _id: item.product, "variants._id": item.variant }, { $inc: { "variants.$.stock": item.requiredStockLitres } })
-    : Product.updateOne({ _id: item.product }, { $inc: { stock: item.quantity } })));
+  await Promise.all(updates.map((item) => Product.updateOne({ _id: item.product }, { $inc: { stock: item.variant ? item.requiredStockLitres : item.quantity } })));
 }
 
 export async function createOrder(userId, payload, options = {}) {
@@ -58,24 +57,27 @@ export async function createOrder(userId, payload, options = {}) {
     if (variant?.isActive === false) throw new ApiError(`${product.title} (${variant.size}) is unavailable.`, 400);
     const litreSize = variant ? variantLitres(variant) : 1;
     const requiredStockLitres = variant ? calculateRequiredLitres(variant, item.quantity) : item.quantity;
-    const stock = variant ? variant.stock : product.stock;
-    if (stock < requiredStockLitres) throw new ApiError(`${product.title}${variant ? ` · ${variant.size}` : ""} is no longer available in the requested quantity. Only ${stock}L remains.`, 400);
+    const stock = product.stock;
+    if (stock < requiredStockLitres) throw new ApiError(`${product.title}${variant ? ` · ${variant.size}` : ""} is no longer available in the requested quantity.`, 400);
     if (paymentMethod === "cod" && product.codEnabled === false) throw new ApiError(`${product.title} is not eligible for Cash on delivery.`, 400);
     if (paymentMethod !== "cod" && product.onlinePaymentEnabled === false) throw new ApiError(`${product.title} is not eligible for online payment.`, 400);
     const priced = variant || product;
     const price = priced.effectivePrice;
-    return { product: product._id, category: product.category, title: product.title, image: priced.images?.[0]?.url || product.images?.[0]?.url, quantity: item.quantity, price, variant: variant?._id, variantLabel: variant?.size, variantSku: variant?.sku || product.sku, litreSize, requiredStockLitres, basePrice: priced.baseSellingPrice, offerId: priced.appliedOffer?.id, offerName: priced.appliedOffer?.name, offerPercentage: priced.appliedOffer?.percentage, offerDiscount: priced.discountAmount, lineOfferDiscount: priced.discountAmount * item.quantity, lineTotal: price * item.quantity };
+    return { product: product._id, productDocument: product, category: product.category, title: product.title, image: priced.images?.[0]?.url || product.images?.[0]?.url, quantity: item.quantity, price, variant: variant?._id, variantLabel: variant?.size, variantSku: variant?.sku || product.sku, litreSize, requiredStockLitres, shippingWeight: variant?.shippingWeight, dimensions: variant?.dimensions, basePrice: priced.baseSellingPrice, offerId: priced.appliedOffer?.id, offerName: priced.appliedOffer?.name, offerPercentage: priced.appliedOffer?.percentage, offerDiscount: priced.discountAmount, lineOfferDiscount: priced.discountAmount * item.quantity, lineTotal: price * item.quantity };
   });
 
   const couponResult = await validateCouponForItems({ code: payload.couponCode, userId, items: orderItems });
   const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
   const productSubtotal = orderItems.reduce((sum, item) => sum + item.basePrice * item.quantity, 0);
   const offerDiscount = orderItems.reduce((sum, item) => sum + item.lineOfferDiscount, 0);
-  const shippingQuote = options.trustedShippingQuote || await calculateShippingQuote({ items: orderItems, deliveryPincode: payload.shippingAddress?.postalCode, paymentMethod, declaredValue: Math.max(0, subtotal - couponResult.discountAmount) });
+  const authoritativeShippingItems = orderItems.map((item) => ({ ...item, product: item.productDocument }));
+  const shippingQuote = options.trustedShippingQuote || await calculateShippingQuote({ items: authoritativeShippingItems, deliveryPincode: payload.shippingAddress?.postalCode, paymentMethod, declaredValue: Math.max(0, subtotal - couponResult.discountAmount) });
+  const shipmentSnapshot = shipmentDataFromProducts(authoritativeShippingItems);
+  orderItems.forEach((item) => { delete item.productDocument; });
   const successfulUpdates = [];
   for (const item of orderItems) {
     const result = item.variant
-      ? await Product.updateOne({ _id: item.product, isActive: true, variants: { $elemMatch: { _id: item.variant, isActive: { $ne: false }, stock: { $gte: item.requiredStockLitres } } } }, { $inc: { "variants.$[variant].stock": -item.requiredStockLitres } }, { arrayFilters: [{ "variant._id": item.variant }] })
+      ? await Product.updateOne({ _id: item.product, stock: { $gte: item.requiredStockLitres }, isActive: true, variants: { $elemMatch: { _id: item.variant, isActive: { $ne: false } } } }, { $inc: { stock: -item.requiredStockLitres } })
       : await Product.updateOne({ _id: item.product, stock: { $gte: item.quantity }, isActive: true }, { $inc: { stock: -item.quantity } });
     if (result.modifiedCount !== 1) {
       await rollbackStock(successfulUpdates);
@@ -87,7 +89,7 @@ export async function createOrder(userId, payload, options = {}) {
   let persistedOrder = null;
   try {
     const totals = calculateCheckoutTotals(orderItems, couponResult.discountAmount, shippingQuote.customerShippingCharge);
-    const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: payload.paymentStatus || "pending", razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature, cashfreeOrderId: payload.cashfreeOrderId, cashfreeCfOrderId: payload.cashfreeCfOrderId, cashfreePaymentId: payload.cashfreePaymentId, productSubtotal, offerDiscount, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, shiprocketShippingCost: shippingQuote.shiprocketShippingCost, selectedCourierId: shippingQuote.courierId, selectedCourierService: shippingQuote.courierName, deliveryPincode: shippingQuote.deliveryPincode, shipmentWeight: shippingQuote.shipmentWeight, estimatedDelivery: shippingQuote.estimatedDelivery, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount, statusHistory: [{ status: "placed", source: "order", createdAt: new Date() }] });
+    const order = await Order.create({ user: userId, products: orderItems, shippingAddress: payload.shippingAddress, paymentMethod, paymentStatus: payload.paymentStatus || "pending", razorpayOrderId: payload.razorpayOrderId, razorpayPaymentId: payload.razorpayPaymentId, razorpaySignature: payload.razorpaySignature, cashfreeOrderId: payload.cashfreeOrderId, cashfreeCfOrderId: payload.cashfreeCfOrderId, cashfreePaymentId: payload.cashfreePaymentId, productSubtotal, offerDiscount, subtotal: totals.subtotal, shippingAmount: totals.shippingAmount, shiprocketShippingCost: shippingQuote.shiprocketShippingCost, selectedCourierId: shippingQuote.courierId, selectedCourierService: shippingQuote.courierName, deliveryPincode: shippingQuote.deliveryPincode, shipmentWeight: shipmentSnapshot.weight, shipmentDimensions: shipmentSnapshot.dimensions, estimatedDelivery: shippingQuote.estimatedDelivery, taxAmount: totals.taxAmount, totalAmount: totals.totalAmount, couponCode: normalizeCouponCode(payload.couponCode) || undefined, couponDiscount: totals.discountAmount, statusHistory: [{ status: "placed", source: "order", createdAt: new Date() }] });
     persistedOrder = order;
     try {
       await consumeCouponUsageForOrder(order);

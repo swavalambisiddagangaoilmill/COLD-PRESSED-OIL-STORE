@@ -169,9 +169,9 @@ export async function updateProduct(id, payload) {
   delete updates.dimensions;
   if (updates.category) await requireCanonicalCategory(updates.category);
   if (Array.isArray(updates.variants)) {
-    const current = await Product.findById(id).select("sku variants");
+    const current = await Product.findById(id).select("title sku variants");
     if (!current) throw new ApiError("Product not found.", 404);
-    updates.variants = await prepareProductVariants(updates.variants, current.sku, current.variants || []);
+    updates.variants = await prepareProductVariants(updates.variants, updates.title || current.title, current.variants || []);
   }
   const product = await Product.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
   if (!product) throw new ApiError("Product not found.", 404);

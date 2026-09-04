@@ -6,6 +6,7 @@ import StoreSettings from "../models/StoreSettings.js";
 import { ApiError } from "../utils/ApiError.js";
 import { logExternalFailure } from "./serviceStatusService.js";
 import { sendShipmentReadyEmail } from "./emailService.js";
+import { shipmentDataFromOrder } from "./shipmentDataService.js";
 
 const API_BASE = "https://apiv2.shiprocket.in/v1/external";
 let authCache = { token: "", expiresAt: 0 };
@@ -83,37 +84,6 @@ function asNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function productMetric(product, keys) {
-  for (const key of keys) {
-    const value = key.split(".").reduce((current, part) => current?.[part], product);
-    if (asNumber(value) > 0) return asNumber(value);
-  }
-  return 0;
-}
-
-function getPackageDetails(order) {
-  const defaults = env.shiprocket;
-  let weight = 0;
-  let length = defaults.defaultLengthCm;
-  let breadth = defaults.defaultBreadthCm;
-  let height = defaults.defaultHeightCm;
-
-  for (const item of order.products || []) {
-    const product = item.product || {};
-    const itemWeight = productMetric(product, ["shippingWeight", "packageWeight", "weight", "dimensions.weight"]);
-    if (itemWeight > 0) weight += itemWeight * item.quantity;
-    length = Math.max(length, productMetric(product, ["dimensions.length", "packageDimensions.length", "length"]));
-    breadth = Math.max(breadth, productMetric(product, ["dimensions.breadth", "dimensions.width", "packageDimensions.breadth", "packageDimensions.width", "breadth", "width"]));
-    height = Math.max(height, productMetric(product, ["dimensions.height", "packageDimensions.height", "height"]));
-  }
-
-  if (!weight) weight = defaults.defaultWeightKg;
-  if (!weight || !length || !breadth || !height) {
-    throw new ApiError("Shipping package weight and dimensions are required before creating a Shiprocket shipment.", 400);
-  }
-  return { weight: Number(weight.toFixed(2)), length, breadth, height };
-}
-
 function splitName(fullName = "Customer") {
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
   return { firstName: parts[0] || "Customer", lastName: parts.slice(1).join(" ") || parts[0] || "Customer" };
@@ -123,6 +93,9 @@ function buildOrderPayload(order, packageDetails) {
   const address = order.shippingAddress;
   const customer = splitName(address.fullName || order.user?.name);
   const isCod = order.paymentMethod === "cod";
+  const email = String(order.user?.email || "").trim();
+  const phone = String(address.phone || order.user?.phone || "").replace(/\D/g, "");
+  if (!email || !/^\d{10,15}$/.test(phone)) throw new ApiError("Customer email and phone are required to book this shipment.", 400);
   return {
     order_id: order._id.toString(),
     order_date: new Date(order.createdAt || Date.now()).toISOString().slice(0, 19).replace("T", " "),
@@ -134,8 +107,8 @@ function buildOrderPayload(order, packageDetails) {
     billing_pincode: address.postalCode,
     billing_state: address.state,
     billing_country: address.country || "India",
-    billing_email: order.user?.email || "support@ss-oil-mill.local",
-    billing_phone: address.phone || order.user?.phone || "9999999999",
+    billing_email: email,
+    billing_phone: phone,
     shipping_is_billing: true,
     order_items: order.products.map((item) => ({
       name: `${item.title}${item.variantLabel ? ` - ${item.variantLabel}` : ""}`,
@@ -144,7 +117,9 @@ function buildOrderPayload(order, packageDetails) {
       selling_price: item.price,
     })),
     payment_method: isCod ? "COD" : "Prepaid",
-    sub_total: order.totalAmount,
+    sub_total: order.subtotal,
+    total_discount: order.couponDiscount || 0,
+    shipping_charges: order.shippingAmount || 0,
     length: packageDetails.length,
     breadth: packageDetails.breadth,
     height: packageDetails.height,
@@ -166,12 +141,20 @@ export function selectCourier(serviceability) {
   return { courierId, courierName: selected.courier_name || selected.name || "Shiprocket courier", estimatedDelivery: selected.etd || selected.estimated_delivery_days, shippingCost: cost(selected) };
 }
 
-export async function getShippingRate({ deliveryPincode, weight, paymentMethod = "prepaid", declaredValue = 0 }) {
+export async function getShippingRate({ deliveryPincode, weight, dimensions, paymentMethod = "prepaid", declaredValue = 0 }) {
   await assertShiprocketEnabled();
   if (!/^\d{6}$/.test(String(deliveryPincode || ""))) throw new ApiError("Enter a valid 6-digit delivery PIN code.", 400);
   if (!(Number(weight) > 0)) throw new ApiError("Shipment weight is required.", 400);
-  const data = await shiprocketRequest(`/courier/serviceability/?pickup_postcode=572106&delivery_postcode=${encodeURIComponent(deliveryPincode)}&weight=${Number(weight).toFixed(2)}&cod=${paymentMethod === "cod" ? 1 : 0}&declared_value=${Math.max(1, Math.round(declaredValue))}`);
+  const box = dimensions || {};
+  const dimensionQuery = `&length=${positiveDimension(box.length)}&breadth=${positiveDimension(box.width ?? box.breadth)}&height=${positiveDimension(box.height)}`;
+  const data = await shiprocketRequest(`/courier/serviceability/?pickup_postcode=572106&delivery_postcode=${encodeURIComponent(deliveryPincode)}&weight=${Number(weight).toFixed(3)}${dimensionQuery}&cod=${paymentMethod === "cod" ? 1 : 0}&declared_value=${Math.max(1, Math.round(declaredValue))}`);
   return selectCourier(data);
+}
+
+function positiveDimension(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) throw new ApiError("Shipment dimensions are required.", 400);
+  return encodeURIComponent(number);
 }
 
 function getTrackingUrl(awbCode) {
@@ -202,7 +185,7 @@ function secretsMatch(received, expected) {
   return receivedBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(receivedBuffer, expectedBuffer);
 }
 
-const shippingProgress = { pending: 0, shiprocket_order_created: 1, awb_assigned: 2, ready_for_pickup: 3, picked_up: 4, shipped: 4, in_transit: 5, out_for_delivery: 6, delivered: 7 };
+const shippingProgress = { pending: 0, shiprocket_order_created: 1, awb_assigned: 2, pickup_generated: 3, ready_for_pickup: 4, picked_up: 5, shipped: 5, in_transit: 6, out_for_delivery: 7, delivered: 8 };
 
 async function sendShipmentEmailOnce(order) {
   if (order.shipmentEmailSentAt || !order.awbCode) return;
@@ -273,7 +256,8 @@ export async function createReadyToShipShipment(orderId) {
   order = claimed;
 
   try {
-    const packageDetails = getPackageDetails(order);
+    const snapshot = shipmentDataFromOrder(order);
+    const packageDetails = { weight: snapshot.weight, length: snapshot.dimensions.length, breadth: snapshot.dimensions.width, height: snapshot.dimensions.height };
     if (!order.shiprocketShipmentId) {
       const created = await shiprocketRequest("/orders/create/adhoc", { method: "POST", body: buildOrderPayload(order, packageDetails) });
       order.shiprocketOrderId = created.order_id || created.shiprocket_order_id || created.data?.order_id || order.shiprocketOrderId;
@@ -295,11 +279,18 @@ export async function createReadyToShipShipment(orderId) {
     order.courierName = courier.courierName;
     order.trackingUrl = getTrackingUrl(awbCode);
     order.estimatedDelivery = parseEstimatedDelivery(courier.estimatedDelivery) || order.estimatedDelivery;
+    order.shippingStatus = "awb_assigned";
+    recordStatus(order, "awb_assigned");
+    await order.save();
+
+    const pickup = await shiprocketRequest("/courier/generate/pickup", { method: "POST", body: { shipment_id: [order.shiprocketShipmentId] } });
+    order.pickupStatus = pickup?.response?.pickup_status || pickup?.pickup_status || pickup?.message || "Pickup requested";
+    order.shippingStatus = "pickup_generated";
+    recordStatus(order, "pickup_generated");
     order.shippingStatus = "ready_for_pickup";
     if (order.orderStatus === "confirmed") order.orderStatus = "packed";
     order.readyToShipAt = new Date();
     recordStatus(order, "packed");
-    recordStatus(order, "awb_assigned");
     recordStatus(order, "ready_for_pickup");
     order.shippingFailureReason = "";
     order.shipmentCreationStartedAt = undefined;
@@ -330,7 +321,7 @@ export async function markShipmentHandedOver(orderId) {
 export async function syncShiprocketWebhook(payload, headers = {}) {
   const expected = env.shiprocket.webhookSecret;
   if (!expected) throw new ApiError("Shiprocket webhook secret is not configured.", 503);
-  const received = headers["x-shiprocket-token"] || headers["x-webhook-token"] || headers["x-shiprocket-signature"];
+  const received = headers["x-api-key"];
   if (!secretsMatch(received, expected)) throw new ApiError("Invalid Shiprocket webhook token.", 401);
 
   const awbCode = payload.awb || payload.awb_code || payload.awbCode;

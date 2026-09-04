@@ -94,7 +94,7 @@ export default function CheckoutForm() {
     let active = true;
     setShippingLoading(true);
     setShippingError("");
-    const timer = window.setTimeout(() => getShippingQuote({ products: items.map((item) => ({ product: item._id || item.id, variant: item.variantId || undefined, quantity: item.quantity })), deliveryPincode: pin, paymentMethod: paymentMethod === "cod" ? "cod" : "cashfree", couponCode: appliedCoupon?.code }).then((data) => { if (active) { setShippingQuote(data.quote); setShippingError(""); } }).catch(() => { if (active) { setShippingQuote(null); setShippingError("Unable to calculate shipping for this PIN code. Please try again."); } }).finally(() => active && setShippingLoading(false)), 400);
+    const timer = window.setTimeout(() => getShippingQuote({ products: items.map((item) => ({ product: item._id || item.id, variant: item.variantId || undefined, quantity: item.quantity })), deliveryPincode: pin, paymentMethod: paymentMethod === "cod" ? "cod" : "cashfree", couponCode: appliedCoupon?.code }).then((data) => { if (active) { setShippingQuote(data.quote); setShippingError(""); } }).catch(() => { if (active) { setShippingQuote(null); setShippingError("Shipping charges could not be calculated. Please try again."); } }).finally(() => active && setShippingLoading(false)), 400);
     return () => { active = false; window.clearTimeout(timer); };
   }, [appliedCoupon?.code, items, paymentMethod, pin, setShippingQuote]);
   const applyAddress = (address) => {
@@ -187,7 +187,7 @@ export default function CheckoutForm() {
     let checkoutStage = "checkout_processing";
     const setCheckoutStage = (stage) => { checkoutStage = stage; };
     try {
-      if (shippingLoading || !shippingQuote) { setShippingError("Unable to calculate shipping for this PIN code. Please try again."); return; }
+      if (shippingLoading || !shippingQuote) { setShippingError("Shipping charges could not be calculated. Please try again."); return; }
       setCheckoutStage("cart_preflight");
       const validated = await revalidateCart({ notify: true });
       if (!validated.items.length) { showToast("Your cart has no available products.", "warning", null, { id: "checkout-empty" }); return; }

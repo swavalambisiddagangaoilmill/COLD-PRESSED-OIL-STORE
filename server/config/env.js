@@ -70,10 +70,6 @@ export const env = {
     pickupLocation: process.env.SHIPROCKET_PICKUP_LOCATION || "",
     pickupPostcode: "572106",
     webhookSecret: process.env.SHIPROCKET_WEBHOOK_SECRET || "",
-    defaultWeightKg: Number(process.env.SHIPROCKET_DEFAULT_WEIGHT_KG) || 0,
-    defaultLengthCm: Number(process.env.SHIPROCKET_DEFAULT_LENGTH_CM) || 0,
-    defaultBreadthCm: Number(process.env.SHIPROCKET_DEFAULT_BREADTH_CM) || 0,
-    defaultHeightCm: Number(process.env.SHIPROCKET_DEFAULT_HEIGHT_CM) || 0,
   },
 };
 

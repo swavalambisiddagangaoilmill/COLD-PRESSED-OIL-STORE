@@ -42,7 +42,7 @@ async function calculateAmount(productsPayload, userId, couponCode, paymentMetho
     const variant = item.variant ? product.variants?.find((value) => String(value._id) === String(item.variant)) : null;
     if (item.variant && !variant) throw new ApiError("Selected variant does not belong to this product.", 400);
     if (variant?.isActive === false) throw new ApiError(`${product.title} (${variant.size}) is unavailable.`, 400);
-    if ((variant ? variant.stock : product.stock) < (variant ? requiredStockLitres(variant, quantity) : quantity)) throw new ApiError(`${product.title}${variant ? ` · ${variant.size}` : ""} is no longer available in the requested quantity.`, 400);
+    if (product.stock < (variant ? requiredStockLitres(variant, quantity) : quantity)) throw new ApiError(`${product.title}${variant ? ` · ${variant.size}` : ""} is no longer available in the requested quantity.`, 400);
     if (paymentMethod === "cod" && product.codEnabled === false) throw new ApiError(`${product.title} is not eligible for Cash on delivery.`, 400);
     if (paymentMethod !== "cod" && product.onlinePaymentEnabled === false) throw new ApiError(`${product.title} is not eligible for online payment.`, 400);
     return { product, variant: variant?._id, quantity, price: (variant || product).effectivePrice, litreSize: variant ? Number(variant.litres) : 1 };

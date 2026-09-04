@@ -39,8 +39,8 @@ test("new products ignore client SKU values and use the generated SKU", async ()
   Product.create = async (data) => { created = data; return data; };
 
   await createProduct({ title: "Coconut Oil", category: "category-id", size: "500ml", weight: 99, sku: "CLIENT-SKU" });
-  assert.equal(created.sku, "COCONUT--COCONUT-OIL-0-55");
-  assert.equal(created.weight, 0.55);
+  assert.equal(created.sku, "COCONUT--COCONUT-OIL-UNIT");
+  assert.equal(created.weight, undefined);
   assert.notEqual(created.sku, "CLIENT-SKU");
 });
 
@@ -96,7 +96,7 @@ test("a concurrent product SKU collision is retried safely", async () => {
   };
 
   const product = await createProduct({ title: "Race Safe Oil", description: "Cold pressed", category: "category-id", size: "1L", price: 200, stock: 1, images: [] });
-  assert.equal(product.sku, "COCONUT--RACE-SAFE-OI-1-05-2");
+  assert.equal(product.sku, "COCONUT--RACE-SAFE-OI-UNIT-2");
 });
 
 test("a concurrent variant SKU collision is retried safely", async () => {
@@ -114,7 +114,7 @@ test("a concurrent variant SKU collision is retried safely", async () => {
   };
 
   const product = await createProduct({ title: "Variant Race Oil", description: "Cold pressed", category: "category-id", size: "1L", price: 200, stock: 1, images: [], variants: [{ size: "1L", price: 200, mrp: 220, stock: 1, images: [] }] });
-  assert.equal(product.variants[0].sku, "COCONUT--VARIANT-RACE-1-05-1L-2");
+  assert.equal(product.variants[0].sku, "VARIANT-RACE-OIL-1L-2");
 });
 
 test("an identical repeated create request returns the existing product", async () => {

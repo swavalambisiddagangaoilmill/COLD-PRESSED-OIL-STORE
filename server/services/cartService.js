@@ -15,10 +15,10 @@ async function populatedCart(userId) {
     const product = productMap.get(item.product?.toString());
     if (!product) return [];
     const variant = item.variant ? product.variants?.id?.(item.variant) : null;
-    if (item.variant && (!variant || variant.isActive === false || variant.stock < variantLitres(variant))) return [];
-    const stock = variant ? variant.stock : product.stock;
+    if (item.variant && (!variant || variant.isActive === false || product.stock < variantLitres(variant))) return [];
+    const stock = product.stock;
     if (stock < 1) return [];
-    const availableQuantity = variant ? availableVariantQuantity(variant) : stock;
+    const availableQuantity = variant ? availableVariantQuantity(variant, product.stock) : stock;
     return [{ product: product._id, ...(variant ? { variant: variant._id } : {}), quantity: Math.min(requestedQuantity(item.quantity), availableQuantity) }];
   });
   const changed = cart.length !== user.cart.length || cart.some((item, index) => item.product.toString() !== user.cart[index]?.product?.toString() || String(item.variant || "") !== String(user.cart[index]?.variant || "") || item.quantity !== user.cart[index]?.quantity);
@@ -44,7 +44,7 @@ function selectedVariant(product, variantId) {
 
 function assertStock(product, quantity, variantId) {
   const variant = selectedVariant(product, variantId);
-  const stock = variant ? variant.stock : product.stock;
+  const stock = product.stock;
   const required = variant ? requiredStockLitres(variant, quantity) : quantity;
   if (stock < required) throw new ApiError(`${product.title}${variant ? ` · ${variant.size}` : ""} is no longer available in the requested quantity. Only ${stock}L remains.`, 400);
   return variant;
@@ -90,7 +90,7 @@ export async function addCartItem(userId, productId, quantity = 1, variantId) {
   if (!product) throw new ApiError("Product not found.", 404);
   const delta = requestedQuantity(quantity);
   const variant = assertStock(product, delta, variantId);
-  const stock = variant ? availableVariantQuantity(variant) : product.stock;
+  const stock = variant ? availableVariantQuantity(variant, product.stock) : product.stock;
   const sameItem = { $and: [{ $eq: ["$$item.product", product._id] }, { $eq: [{ $ifNull: ["$$item.variant", null] }, variant?._id || null] }] };
   const user = await User.findOneAndUpdate(
     { _id: userId, $expr: { $lte: [{ $add: [{ $ifNull: [{ $getField: { field: "quantity", input: { $arrayElemAt: [{ $filter: { input: "$cart", as: "item", cond: sameItem } }, 0] } } }, 0] }, delta] }, stock] } },

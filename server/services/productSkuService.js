@@ -1,7 +1,7 @@
 import Category from "../models/Category.js";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
-import { packageDimensionsForSize, packedWeightForSize, sizeInLitres } from "../utils/shippingDefaults.js";
+import { sizeInLitres } from "../utils/shippingDefaults.js";
 import { isCanonicalProductCategory } from "../../shared/productCategories.js";
 
 function skuPart(value, fallback) {
@@ -30,7 +30,8 @@ function comparableVariant(variant = {}) {
     litres: Number(variant.litres || sizeInLitres(variant.size)),
     price: Number(variant.price),
     mrp: Number(variant.mrp),
-    stock: Number(variant.stock),
+    shippingWeight: Number(variant.shippingWeight),
+    dimensions: { length: Number(variant.dimensions?.length), width: Number(variant.dimensions?.width), height: Number(variant.dimensions?.height) },
     isActive: variant.isActive !== false,
     images: (variant.images || []).map(comparableImage),
   };
@@ -90,8 +91,9 @@ export async function generateProductSku(data) {
   return sku;
 }
 
-export async function generateVariantSku(productSku, size, reserved = new Set()) {
-  const base = `${productSku}-${skuPart(size, "VARIANT").slice(0, 12)}`;
+export async function generateVariantSku(productTitle, size, reserved = new Set()) {
+  const title = skuPart(productTitle, "PRODUCT").replace(/^(COLD-PRESSED-|PURE-)/, "").slice(0, 24);
+  const base = `${title}-${skuPart(size, "VARIANT").slice(0, 12)}`;
   let sku = base;
   let suffix = 1;
   while (reserved.has(sku) || await Product.exists({ "variants.sku": sku })) {
@@ -101,7 +103,7 @@ export async function generateVariantSku(productSku, size, reserved = new Set())
   return sku;
 }
 
-export async function prepareProductVariants(variants, productSku, existingVariants = []) {
+export async function prepareProductVariants(variants, productTitle, existingVariants = []) {
   if (!Array.isArray(variants)) return variants;
   const existingById = new Map(existingVariants.map((variant) => [String(variant._id), variant]));
   const reserved = new Set(existingVariants.map((variant) => variant.sku).filter(Boolean));
@@ -111,12 +113,12 @@ export async function prepareProductVariants(variants, productSku, existingVaria
     const variant = { ...submitted };
     const existing = variant._id ? existingById.get(String(variant._id)) : null;
     delete variant.sku;
-    delete variant.shippingWeight;
-    delete variant.dimensions;
-    variant.sku = existing?.sku || await generateVariantSku(productSku, variant.size, reserved);
+    delete variant.stock;
+    delete variant.stockUnit;
+    variant.sku = existing?.sku || await generateVariantSku(productTitle, variant.size, reserved);
     variant.litres = sizeInLitres(variant.size);
-    variant.shippingWeight = existing?.shippingWeight || packedWeightForSize(variant.size);
-    variant.dimensions = existing?.dimensions || packageDimensionsForSize(variant.size);
+    variant.shippingWeight = Number(variant.shippingWeight ?? existing?.shippingWeight);
+    variant.dimensions = { length: Number(variant.dimensions?.length ?? existing?.dimensions?.length), width: Number(variant.dimensions?.width ?? existing?.dimensions?.width), height: Number(variant.dimensions?.height ?? existing?.dimensions?.height) };
     reserved.add(variant.sku);
     prepared.push(variant);
   }
@@ -128,14 +130,10 @@ export async function createProductWithGeneratedSku(payload) {
   delete data.sku;
   delete data.weight;
   delete data.dimensions;
-  if (data.size) {
-    data.weight = packedWeightForSize(data.size);
-    data.dimensions = packageDimensionsForSize(data.size);
-  }
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     data.sku = await generateProductSku(data);
-    data.variants = await prepareProductVariants(payload.variants, data.sku);
+    data.variants = await prepareProductVariants(payload.variants, data.title);
     try {
       return await Product.create(data);
     } catch (error) {

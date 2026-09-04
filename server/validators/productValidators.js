@@ -17,7 +17,7 @@ export const productQueryValidator = [
 const productFields = [
   body("slug").optional().trim().isSlug().withMessage("Slug must be URL friendly."),
   body("discountPrice").optional().isFloat({ gt: 0 }).withMessage("Discount price must be greater than zero."),
-  body("stock").optional().isInt({ min: 0 }).withMessage("Stock cannot be negative."),
+  body("stock").optional().isFloat({ min: 0 }).withMessage("Total product stock in litres cannot be negative."),
   body("images").optional().isArray({ min: 1 }).withMessage("At least one product image is required."),
   body("images.*.url").optional().isURL().withMessage("Product image URL must be valid."),
   body("discountPrice").optional().custom((value, { req }) => req.body.price === undefined || Number(value) < Number(req.body.price)).withMessage("Discount price must be lower than the regular price."),
@@ -29,8 +29,11 @@ const productFields = [
   body("variants.*.size").optional({ checkFalsy: false }).trim().notEmpty().withMessage("Variant size is required.").bail().custom((value) => { sizeInLitres(value); return true; }),
   body("variants.*.price").optional({ checkFalsy: false }).isFloat({ gt: 0 }).withMessage("Variant price must be greater than zero."),
   body("variants.*.mrp").optional({ checkFalsy: false }).isFloat({ gt: 0 }).withMessage("Variant MRP must be greater than zero.").bail().custom((value, { req, pathValues }) => Number(value) >= Number(req.body.variants?.[pathValues[0]]?.price)).withMessage("Variant MRP cannot be lower than its price."),
-  body("variants.*.stock").optional({ checkFalsy: false }).isFloat({ min: 0 }).withMessage("Variant stock in litres cannot be negative."),
-  body("variants.*.images").optional().isArray().withMessage("Variant images must be an array."),
+  body("variants.*.shippingWeight").isFloat({ gt: 0 }).withMessage("Variant weight in kilograms must be greater than zero."),
+  body("variants.*.dimensions.length").isFloat({ gt: 0 }).withMessage("Variant length in centimeters must be greater than zero."),
+  body("variants.*.dimensions.width").isFloat({ gt: 0 }).withMessage("Variant width in centimeters must be greater than zero."),
+  body("variants.*.dimensions.height").isFloat({ gt: 0 }).withMessage("Variant height in centimeters must be greater than zero."),
+  body("variants.*.images").isArray({ min: 1 }).withMessage("At least one variant image is required."),
   body("variants.*.images.*.url").optional().isURL().withMessage("Variant image URL must be valid."),
 ];
 
@@ -39,6 +42,8 @@ export const productValidator = [
   body("description").trim().notEmpty().withMessage("Description is required."),
   body("price").isFloat({ gt: 0 }).withMessage("Price must be greater than zero."),
   body("category").isMongoId().withMessage("Valid category is required."),
+  body("stock").isFloat({ min: 0 }).withMessage("Total product stock in litres is required."),
+  body("variants").isArray({ min: 1 }).withMessage("At least one product variant is required."),
   body("size").trim().notEmpty().withMessage("Product size is required.").bail().custom((value) => { sizeInLitres(value); return true; }),
   ...productFields,
 ];

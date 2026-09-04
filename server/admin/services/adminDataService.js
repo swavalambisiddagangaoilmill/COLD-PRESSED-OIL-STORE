@@ -20,7 +20,6 @@ import { createProductWithGeneratedSku, prepareProductVariants } from "../../ser
 import { sendOrderCancellationOnce, sendOrderConfirmationEmail } from "../../services/emailService.js";
 import { createCategory, listCategories as listCanonicalCategories, requireCanonicalCategory, updateCategory } from "../../services/categoryService.js";
 import { priceProducts } from "../../services/offerPricingService.js";
-import { sizeInLitres } from "../../utils/shippingDefaults.js";
 import mongoose from "mongoose";
 
 const orderTransitions = {
@@ -96,7 +95,7 @@ export async function updateOrderStatus(id, nextStatus) {
   if (nextStatus === "confirmed") await sendConfirmationOnce(order);
   if (nextStatus === "cancelled" && !order.inventoryRestoredAt) {
     try {
-      await Product.bulkWrite(order.products.map((item) => ({ updateOne: item.variant ? { filter: { _id: item.product, "variants._id": item.variant }, update: { $inc: { "variants.$.stock": item.requiredStockLitres || item.quantity } } } : { filter: { _id: item.product }, update: { $inc: { stock: item.quantity } } } })));
+      await Product.bulkWrite(order.products.map((item) => ({ updateOne: { filter: { _id: item.product }, update: { $inc: { stock: item.requiredStockLitres || item.quantity } } } })));
       order.inventoryRestoredAt = new Date();
       await order.save();
       const restoredProducts = await Product.find({ _id: { $in: order.products.map((item) => item.product) } });
@@ -146,7 +145,7 @@ export async function saveProduct(payload, id) {
   if (data.category) await requireCanonicalCategory(data.category);
   const current = id ? await Product.findById(id) : null;
   if (id && !current) throw new ApiError("Product not found.", 404);
-  if (id && Array.isArray(data.variants)) data.variants = await prepareProductVariants(data.variants, current.sku, current.variants || []);
+  if (id && Array.isArray(data.variants)) data.variants = await prepareProductVariants(data.variants, data.title || current.title, current.variants || []);
   const product = id ? await Product.findByIdAndUpdate(id, data, { new: true, runValidators: true }).populate("category", "name slug") : await createProductWithGeneratedSku(data);
   return id ? product : product.populate("category", "name slug");
 }
@@ -191,45 +190,30 @@ export async function bulkPriceApply(payload) {
     else if (payload.operation === "set_discount_percentage") product.discountPrice = Math.max(0, Math.round(product.price * (1 - value / 100)));
     else if (payload.operation === "set_exact_discount") product.discountPrice = Math.max(0, Math.round(value));
     else if (payload.operation === "remove_discount") product.discountPrice = undefined;
-    else if (payload.operation === "add_stock") product.stock += Math.max(0, Math.trunc(value));
-    else if (payload.operation === "reduce_stock") product.stock = Math.max(0, product.stock - Math.max(0, Math.trunc(value)));
-    else if (payload.operation === "set_stock") product.stock = Math.max(0, Math.trunc(value));
+    else if (payload.operation === "add_stock") product.stock += Math.max(0, value);
+    else if (payload.operation === "reduce_stock") product.stock = Math.max(0, product.stock - Math.max(0, value));
+    else if (payload.operation === "set_stock") product.stock = Math.max(0, value);
     else if (payload.operation === "activate") product.isActive = true;
     else if (payload.operation === "deactivate") product.isActive = false;
     else if (payload.operation === "archive") { product.isArchived = true; product.isActive = false; }
     else if (payload.operation === "mark_featured") product.featured = true;
     else if (payload.operation === "remove_featured") product.featured = false;
     else if (payload.operation === "move_category" && payload.category) product.category = payload.category;
-    else if (payload.operation === "set_weight") product.weight = Math.max(0, value);
-    else if (payload.operation === "set_dimensions") product.dimensions = { length: Number(payload.length) || 0, width: Number(payload.width) || 0, height: Number(payload.height) || 0 };
     else product.price = calculatePrice(product, payload.operation, value);
     return product.save();
   }));
   return { updated: products.length };
 }
 
-export async function updateInventory(id, { mode, quantity, variantId }) {
+export async function updateInventory(id, { mode, quantity }) {
   const product = await Product.findById(id);
   if (!product) throw new ApiError("Product not found.", 404);
   const qty = Number(quantity);
   if (!Number.isFinite(qty) || qty < 0) throw new ApiError("Stock litres must be zero or more.", 400);
-  const variant = variantId ? product.variants?.id(variantId) : null;
-  if (variantId && !variant) throw new ApiError("Selected variant does not belong to this product.", 400);
-  const target = variant || product;
-  if (mode === "reduce" && qty > target.stock) throw new ApiError("Litres cannot reduce stock below zero.", 400);
-  if (variant) {
-    const next = mode === "set" ? qty : mode === "reduce" ? target.stock - qty : target.stock + qty;
-    const updated = await Product.findOneAndUpdate(
-      { _id: id, variants: { $elemMatch: { _id: variantId, ...(mode === "reduce" ? { stock: { $gte: qty } } : {}) } } },
-      { $set: { "variants.$.stock": next, "variants.$.litres": Number(variant.litres || sizeInLitres(variant.size)), "variants.$.stockUnit": "LITRES" } },
-      { new: true }
-    );
-    if (!updated) throw new ApiError("Variant stock changed concurrently. Refresh and retry.", 409);
-    return updated;
-  }
-  target.stock = mode === "set" ? qty : mode === "reduce" ? target.stock - qty : target.stock + qty;
-  await product.save();
-  return product;
+  const update = mode === "set" ? { $set: { stock: qty } } : { $inc: { stock: mode === "reduce" ? -qty : qty } };
+  const updated = await Product.findOneAndUpdate({ _id: id, ...(mode === "reduce" ? { stock: { $gte: qty } } : {}) }, update, { new: true, runValidators: true });
+  if (!updated) throw new ApiError("Product stock changed concurrently. Refresh and retry.", 409);
+  return updated;
 }
 
 

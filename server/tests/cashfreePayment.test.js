@@ -19,7 +19,7 @@ test.afterEach(() => { global.fetch = original.fetch; Product.find = original.pr
 test("Cashfree session is created server-side and response exposes no secret", async () => {
   Object.assign(env.cashfree, { environment: "sandbox", clientId: "client-id", clientSecret: "client-secret", apiVersion: "2025-01-01" });
   Object.assign(env.shiprocket, { enabled: true, email: "shiprocket@example.com", password: "secret", pickupLocation: "Primary", pickupPostcode: "572106" });
-  Product.find = async () => [{ _id: { toString: () => "64b000000000000000000001" }, title: "Oil", stock: 10, price: 650, onlinePaymentEnabled: true }];
+  Product.find = async () => [{ _id: { toString: () => "64b000000000000000000001" }, title: "Oil", stock: 10, price: 650, onlinePaymentEnabled: true, variants: [{ _id: "64b000000000000000000002", size: "1L", litres: 1, price: 650, shippingWeight: 1.1, dimensions: { length: 10, width: 11, height: 30 }, images: [] }] }];
   User.findById = async () => ({ _id: "user-id", name: "Customer", email: "customer@example.com", phone: "9876543210" });
   let stored, sent;
   PaymentCheckout.create = async (value) => { stored = value; return value; };
@@ -29,7 +29,7 @@ test("Cashfree session is created server-side and response exposes no secret", a
     sent = { headers: options.headers, body: JSON.parse(options.body) };
     return { ok: true, json: async () => ({ order_id: sent.body.order_id, order_amount: sent.body.order_amount, order_currency: "INR", cf_order_id: "123", payment_session_id: "safe-session" }) };
   };
-  const result = await createPaymentOrder("user-id", { order: { products: [{ product: "64b000000000000000000001", quantity: 1 }], shippingAddress: { phone: "9876543210", postalCode: "560001" } }, customer: {} });
+  const result = await createPaymentOrder("user-id", { order: { products: [{ product: "64b000000000000000000001", variant: "64b000000000000000000002", quantity: 1 }], shippingAddress: { phone: "9876543210", postalCode: "560001" } }, customer: {} });
   assert.equal(sent.headers["x-client-secret"], "client-secret");
   assert.equal(result.paymentSessionId, "safe-session");
   assert.equal(JSON.stringify(result).includes("client-secret"), false);
