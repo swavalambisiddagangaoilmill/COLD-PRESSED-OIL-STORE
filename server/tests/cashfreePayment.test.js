@@ -7,17 +7,18 @@ import PaymentCheckout from "../models/PaymentCheckout.js";
 import Product from "../models/Product.js";
 import User from "../models/User.js";
 import Offer from "../models/Offer.js";
+import StoreSettings from "../models/StoreSettings.js";
 import { createPaymentOrder, processCashfreeWebhook, verifyPaymentAndCreateOrder } from "../services/paymentService.js";
 
-const original = { fetch: global.fetch, productFind: Product.find, offerFind: Offer.find, userFind: User.findById, userUpdate: User.updateOne, checkoutCreate: PaymentCheckout.create, checkoutFind: PaymentCheckout.findOne, checkoutUpdate: PaymentCheckout.updateOne, orderFind: Order.findOne, orderUpdate: Order.updateOne };
+const original = { fetch: global.fetch, productFind: Product.find, offerFind: Offer.find, settingsFind: StoreSettings.findOne, userFind: User.findById, userUpdate: User.updateOne, checkoutCreate: PaymentCheckout.create, checkoutFind: PaymentCheckout.findOne, checkoutUpdate: PaymentCheckout.updateOne, orderFind: Order.findOne, orderUpdate: Order.updateOne };
 const checkout = { _id: "checkout-id", user: "user-id", status: "created", amount: 650, currency: "INR", cashfreeOrderId: "cf_11111111-1111-4111-8111-111111111111", orderPayload: { products: [], shippingAddress: {} } };
 
-test.beforeEach(() => { Offer.find = () => ({ lean: async () => [] }); });
-test.afterEach(() => { global.fetch = original.fetch; Product.find = original.productFind; Offer.find = original.offerFind; User.findById = original.userFind; User.updateOne = original.userUpdate; PaymentCheckout.create = original.checkoutCreate; PaymentCheckout.findOne = original.checkoutFind; PaymentCheckout.updateOne = original.checkoutUpdate; Order.findOne = original.orderFind; Order.updateOne = original.orderUpdate; });
+test.beforeEach(() => { Offer.find = () => ({ lean: async () => [] }); StoreSettings.findOne = () => ({ select: () => ({ lean: async () => ({ shiprocketEnabled: true }) }) }); });
+test.afterEach(() => { global.fetch = original.fetch; Product.find = original.productFind; Offer.find = original.offerFind; StoreSettings.findOne = original.settingsFind; User.findById = original.userFind; User.updateOne = original.userUpdate; PaymentCheckout.create = original.checkoutCreate; PaymentCheckout.findOne = original.checkoutFind; PaymentCheckout.updateOne = original.checkoutUpdate; Order.findOne = original.orderFind; Order.updateOne = original.orderUpdate; });
 
 test("Cashfree session is created server-side and response exposes no secret", async () => {
   Object.assign(env.cashfree, { environment: "sandbox", clientId: "client-id", clientSecret: "client-secret", apiVersion: "2025-01-01" });
-  Object.assign(env.shiprocket, { email: "shiprocket@example.com", password: "secret", pickupLocation: "Primary", pickupPostcode: "572106" });
+  Object.assign(env.shiprocket, { enabled: true, email: "shiprocket@example.com", password: "secret", pickupLocation: "Primary", pickupPostcode: "572106" });
   Product.find = async () => [{ _id: { toString: () => "64b000000000000000000001" }, title: "Oil", stock: 10, price: 650, onlinePaymentEnabled: true }];
   User.findById = async () => ({ _id: "user-id", name: "Customer", email: "customer@example.com", phone: "9876543210" });
   let stored, sent;

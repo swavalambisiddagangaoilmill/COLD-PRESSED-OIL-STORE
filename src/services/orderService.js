@@ -13,7 +13,3 @@ export function fetchOrderDetails(id) {
 export function fetchOrderTracking(id) {
   return apiRequest(API_ENDPOINTS.orderTracking(id));
 }
-
-export function advanceMockShipment(id) {
-  return apiRequest(API_ENDPOINTS.adminAdvanceMockShipment(id), { method: "POST" });
-}

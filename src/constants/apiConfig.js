@@ -35,7 +35,6 @@ export const API_ENDPOINTS = {
   myOrders: "/orders/my",
   order: (id) => `/orders/${id}`,
   orderTracking: (id) => `/orders/${id}/tracking`,
-  adminAdvanceMockShipment: (id) => `/admin/orders/${id}/mock-shipment/next`,
   paymentIntent: "/payments/intent",
   paymentVerify: "/payments/verify",
   contact: "/contact",

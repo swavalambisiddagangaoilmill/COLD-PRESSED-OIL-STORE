@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { body, param } from "express-validator";
 import { getStats, getUsers, removeUser, updateRole } from "../controllers/adminController.js";
-import { advanceMockShipmentHandler, getAllOrdersHandler, readyToShipHandler, updateOrderStatusHandler } from "../controllers/orderController.js";
+import { getAllOrdersHandler, readyToShipHandler, updateOrderStatusHandler } from "../controllers/orderController.js";
 import { createCategoryHandler, deleteCategoryHandler, updateCategoryHandler } from "../controllers/categoryController.js";
 import { createProductHandler, deleteProductHandler, updateProductHandler } from "../controllers/productController.js";
 import { adminOnly } from "../middleware/admin.js";
@@ -31,7 +31,6 @@ router.delete("/users/:id", userIdValidator, validate, removeUser);
 router.get("/orders", getAllOrdersHandler);
 router.put("/orders/:id/status", orderIdValidator, updateOrderStatusValidator, validate, updateOrderStatusHandler);
 router.post("/orders/:id/ready-to-ship", orderIdValidator, validate, readyToShipHandler);
-router.post("/orders/:id/mock-shipment/next", orderIdValidator, validate, advanceMockShipmentHandler);
 router.post("/products", productValidator, validate, createProductHandler);
 router.put("/products/:id", productIdValidator, productUpdateValidator, validate, updateProductHandler);
 router.delete("/products/:id", productIdValidator, validate, deleteProductHandler);

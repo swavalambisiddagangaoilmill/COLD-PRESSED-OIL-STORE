@@ -1,6 +1,5 @@
 ﻿// Renders production error, auth, offline, and reliability state pages.
-import { Copy, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { RotateCcw } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import Breadcrumb from "../components/common/Breadcrumb.jsx";
 import Button from "../components/ui/Button.jsx";
@@ -25,15 +24,7 @@ const defaults = {
 
 export default function StatusPage({ code = "404", title, message, retry = false }) {
   const location = useLocation();
-  const [copied, setCopied] = useState(false);
   const [defaultTitle, defaultMessage] = defaults[code] || defaults["404"];
-  const orderId = "SS-OIL-MILL-DEMO-1001";
-
-  const copyOrderId = async () => {
-    await navigator.clipboard.writeText(orderId);
-    setCopied(true);
-  };
-
   const isLoginRequired = String(code) === "401";
   const isOrderState = String(code).startsWith("payment") || code === "order-cancelled";
 
@@ -54,9 +45,6 @@ export default function StatusPage({ code = "404", title, message, retry = false
                   <span>Payment review</span>
                   <span>Fresh batch dispatch</span>
                 </div>
-                <button type="button" onClick={copyOrderId} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-leaf">
-                  <Copy size={15} /> {copied ? "Copied" : orderId}
-                </button>
               </div>
             )}
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">

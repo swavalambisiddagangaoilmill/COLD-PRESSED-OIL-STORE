@@ -28,7 +28,6 @@ export const adminApi = {
   bulkReadyToShip: (orderIds) => apiRequest(`${base}/fulfillment/ready`, { method: "POST", body: JSON.stringify({ orderIds }) }),
   downloadFulfillmentExport,
   handoverShipment: (id) => apiRequest(`${base}/orders/${id}/handover`, { method: "POST" }),
-  mockNext: (id) => apiRequest(`${base}/orders/${id}/mock-shipment/next`, { method: "POST" }),
   products: (query = "") => apiRequest(`${base}/products${query}`),
   saveProduct: (payload, id) => apiRequest(id ? `${base}/products/${id}` : `${base}/products`, { method: id ? "PUT" : "POST", body: JSON.stringify(payload) }),
   archiveProduct: (id) => apiRequest(`${base}/products/${id}`, { method: "DELETE" }),

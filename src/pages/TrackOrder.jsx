@@ -1,12 +1,11 @@
 ﻿// Displays shipment tracking details for real and development mock shipments.
-import { ArrowLeft, CheckCircle, Circle, Package, Truck } from "lucide-react";
+import { ArrowLeft, CheckCircle, Circle, Package } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Breadcrumb from "../components/common/Breadcrumb.jsx";
 import Button from "../components/ui/Button.jsx";
 import Container from "../components/ui/Container.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
-import { advanceMockShipment, fetchOrderTracking } from "../services/orderService.js";
+import { fetchOrderTracking } from "../services/orderService.js";
 
 const fallbackSteps = [
   { status: "ready_for_pickup", label: "Ready to Ship" },
@@ -23,10 +22,8 @@ function formatDate(value) {
 
 export default function TrackOrder() {
   const { id } = useParams();
-  const { user } = useAuth();
   const [tracking, setTracking] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [advancing, setAdvancing] = useState(false);
   const [error, setError] = useState("");
 
   async function loadTracking() {
@@ -46,20 +43,6 @@ export default function TrackOrder() {
   const order = tracking?.order;
   const steps = useMemo(() => tracking?.steps?.length ? tracking.steps : fallbackSteps, [tracking]);
   const currentIndex = Math.max(0, steps.findIndex((step) => step.status === order?.shippingStatus));
-  const canAdvance = order?.isMockShipment && user?.role === "admin" && order?.shippingStatus !== "delivered";
-
-  const handleAdvance = async () => {
-    setAdvancing(true);
-    setError("");
-    try {
-      const data = await advanceMockShipment(id);
-      setTracking((current) => ({ ...(current || {}), order: data.order, steps: current?.steps || fallbackSteps }));
-    } catch (err) {
-      setError(err.message || "Unable to advance mock shipment.");
-    } finally {
-      setAdvancing(false);
-    }
-  };
 
   return (
     <>
@@ -78,14 +61,14 @@ export default function TrackOrder() {
               </div>
               <div className="rounded-2xl bg-cream p-4 text-sm">
                 <p className="font-bold text-ink">AWB {order.awbCode || "Pending"}</p>
-                <p className="mt-1 text-ink/55">{order.isMockShipment ? "Development mock shipment" : "Live shipment"}</p>
+                <p className="mt-1 text-ink/55">Live shipment</p>
               </div>
             </div>
 
             <div className="mt-8 grid gap-4">
               {steps.map((step, index) => {
                 const done = index <= currentIndex;
-                const history = (order.mockShippingHistory || []).find((item) => item.status === step.status);
+                const history = (order.statusHistory || []).find((item) => item.status === step.status);
                 return <div key={step.status} className="grid grid-cols-[36px_1fr] gap-4">
                   <div className="flex flex-col items-center">
                     <span className={`grid h-9 w-9 place-items-center rounded-full ${done ? "bg-leaf text-white" : "bg-linen text-ink/35"}`}>{done ? <CheckCircle size={18} /> : <Circle size={18} />}</span>
@@ -99,10 +82,6 @@ export default function TrackOrder() {
               })}
             </div>
 
-            {canAdvance && <div className="mt-8 rounded-2xl bg-cream p-4 sm:flex sm:items-center sm:justify-between sm:gap-4">
-              <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-full bg-white text-leaf"><Truck size={18} /></span><p className="text-sm font-semibold text-ink/65">Development admin testing: move this mock shipment to the next status.</p></div>
-              <Button type="button" loading={advancing} onClick={handleAdvance} className="mt-4 sm:mt-0">Move to Next Status</Button>
-            </div>}
           </div>}
         </Container>
       </section>

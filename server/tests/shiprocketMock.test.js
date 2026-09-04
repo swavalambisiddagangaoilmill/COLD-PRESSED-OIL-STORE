@@ -2,14 +2,15 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { env } from "../config/env.js";
 import Order from "../models/Order.js";
-import { advanceMockShipment, createReadyToShipShipment, getShipmentTracking, markShipmentHandedOver, syncShiprocketWebhook } from "../services/shiprocketService.js";
+import StoreSettings from "../models/StoreSettings.js";
+import { createReadyToShipShipment, markShipmentHandedOver, syncShiprocketWebhook } from "../services/shiprocketService.js";
 
 const originalFindById = Order.findById;
 const originalFindOne = Order.findOne;
 const originalFindOneAndUpdate = Order.findOneAndUpdate;
 const originalFetch = globalThis.fetch;
-const originalMock = env.shiprocket.mock;
 const originalShiprocket = { ...env.shiprocket };
+const originalSettingsFind = StoreSettings.findOne;
 
 function queryFor(order) {
   return {
@@ -34,49 +35,20 @@ function mockOrder() {
   };
 }
 
-beforeEach(() => { env.shiprocket.mock = true; });
+beforeEach(() => { env.shiprocket.enabled = true; StoreSettings.findOne = () => ({ select: () => ({ lean: async () => ({ shiprocketEnabled: true }) }) }); });
 
 afterEach(() => {
-  Object.assign(env.shiprocket, originalShiprocket, { mock: originalMock });
+  Object.assign(env.shiprocket, originalShiprocket);
+  StoreSettings.findOne = originalSettingsFind;
   Order.findById = originalFindById;
   Order.findOne = originalFindOne;
   Order.findOneAndUpdate = originalFindOneAndUpdate;
   globalThis.fetch = originalFetch;
 });
 
-test("mock Ready to Shipping lifecycle never calls real Shiprocket APIs", async () => {
-  const order = mockOrder();
-  Order.findById = () => queryFor(order);
-  let networkCalls = 0;
-  globalThis.fetch = async () => { networkCalls += 1; throw new Error("Real Shiprocket API must not be called in mock mode"); };
-
-  const ready = await createReadyToShipShipment(order._id);
-  assert.equal(ready.isMockShipment, true);
-  assert.equal(ready.shippingStatus, "ready_for_pickup");
-  assert.match(ready.awbCode, /^MOCK-AWB-/);
-
-  const tracking = await getShipmentTracking(order._id, { role: "admin" });
-  assert.equal(tracking.steps.length, 6);
-
-  const handedOver = await markShipmentHandedOver(order._id);
-  assert.equal(handedOver.shippingStatus, "picked_up");
-  assert.ok(handedOver.handedOverAt instanceof Date);
-
-  const shipped = await advanceMockShipment(order._id);
-  assert.equal(shipped.shippingStatus, "shipped");
-  assert.equal(shipped.orderStatus, "shipped");
-  assert.equal(networkCalls, 0);
-});
-
-test("mock-only controls remain blocked when live mode is selected", async () => {
-  env.shiprocket.mock = false;
-  Order.findById = () => queryFor(mockOrder());
-  await assert.rejects(advanceMockShipment("64b000000000000000000020"), /Mock Shiprocket mode is disabled/);
-});
-
 test("live Ready creates an order and AWB without generating pickup", async () => {
   Object.assign(env.shiprocket, {
-    mock: false,
+    enabled: true,
     email: "shiprocket@example.com",
     password: "secret",
     pickupLocation: "Primary",
@@ -117,7 +89,7 @@ test("live Ready creates an order and AWB without generating pickup", async () =
 });
 
 test("concurrent live Ready requests are blocked before a duplicate Shiprocket call", async () => {
-  Object.assign(env.shiprocket, { mock: false, email: "shiprocket@example.com", password: "secret", pickupLocation: "Primary", pickupPostcode: "572106" });
+  Object.assign(env.shiprocket, { enabled: true, email: "shiprocket@example.com", password: "secret", pickupLocation: "Primary", pickupPostcode: "572106" });
   const order = mockOrder();
   Order.findById = () => queryFor(order);
   Order.findOneAndUpdate = () => queryFor(null);

@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 
 const isProduction = process.env.NODE_ENV === "production";
-const shiprocketMock = String(process.env.SHIPROCKET_MOCK || "false").trim().toLowerCase() === "true";
+const shiprocketEnabledValue = String(process.env.SHIPROCKET_ENABLED || "").trim().toLowerCase();
+const shiprocketEnabled = shiprocketEnabledValue === "true";
 const booleanValue = (value, fallback = false) => value == null ? fallback : String(value).trim().toLowerCase() === "true";
 const positiveNumber = (value, fallback) => {
   const parsed = Number(value);
@@ -63,7 +64,7 @@ export const env = {
     apiSecret: process.env.CLOUDINARY_API_SECRET || process.env.CLOUDINARY_SECRET || "",
   },
   shiprocket: {
-    mock: shiprocketMock,
+    enabled: shiprocketEnabled,
     email: process.env.SHIPROCKET_EMAIL || "",
     password: process.env.SHIPROCKET_PASSWORD || "",
     pickupLocation: process.env.SHIPROCKET_PICKUP_LOCATION || "",
@@ -87,5 +88,10 @@ if (isProduction) {
   ];
   const missing = required.filter(([, value]) => !value).map(([key]) => key);
   if (missing.length) throw new Error(`Missing production environment variables: ${missing.join(", ")}`);
+  if (!["true", "false"].includes(shiprocketEnabledValue)) throw new Error("SHIPROCKET_ENABLED must be explicitly set to true or false in production.");
+  if (shiprocketEnabled) {
+    const shippingMissing = [["SHIPROCKET_EMAIL", env.shiprocket.email], ["SHIPROCKET_PASSWORD", env.shiprocket.password], ["SHIPROCKET_PICKUP_LOCATION", env.shiprocket.pickupLocation]].filter(([, value]) => !value).map(([key]) => key);
+    if (shippingMissing.length) throw new Error(`Missing production Shiprocket variables: ${shippingMissing.join(", ")}`);
+  }
 }
 

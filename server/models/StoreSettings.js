@@ -19,6 +19,7 @@ const settingsSchema = new mongoose.Schema(
     defaultPackageLength: { type: Number, default: 10, min: 0 },
     defaultPackageWidth: { type: Number, default: 10, min: 0 },
     defaultPackageHeight: { type: Number, default: 10, min: 0 },
+    shiprocketEnabled: { type: Boolean, default: true },
     codEnabled: { type: Boolean, default: true },
     onlinePaymentEnabled: { type: Boolean, default: true },
     maintenanceMode: { type: Boolean, default: false },

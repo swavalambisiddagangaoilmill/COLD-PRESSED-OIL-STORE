@@ -47,9 +47,9 @@ function configurationSnapshot() {
     cloudinary: hasAll([env.cloudinary.cloudName, env.cloudinary.apiKey, env.cloudinary.apiSecret])
       ? status("cloudinary", "degraded", "Configured; connectivity has not been checked yet.")
       : status("cloudinary", "not_configured", "Not configured."),
-    shiprocket: env.shiprocket.mock
-      ? status("shiprocket", "degraded", "Mock mode enabled; no live Shiprocket calls.")
-      : hasAll([env.shiprocket.email, env.shiprocket.password])
+    shiprocket: !env.shiprocket.enabled
+      ? status("shiprocket", "offline", "Disabled by production safety switch.")
+      : hasAll([env.shiprocket.email, env.shiprocket.password, env.shiprocket.pickupLocation])
         ? status("shiprocket", "degraded", "Configured; connectivity has not been checked yet.")
         : status("shiprocket", "not_configured", "Not configured."),
     ai: status("ai", "degraded", "Built-in fallback responses only; no external AI provider configured."),
@@ -140,7 +140,7 @@ async function checkCloudinary() {
 }
 
 async function checkShiprocket() {
-  if (env.shiprocket.mock) return status("shiprocket", "degraded", "Development mock mode; no live connection.");
+  if (!env.shiprocket.enabled) return status("shiprocket", "offline", "Disabled by production safety switch.");
   if (!hasAll([env.shiprocket.email, env.shiprocket.password])) return status("shiprocket", "not_configured", "Not configured.");
   try {
     const response = await fetchWithTimeout("https://apiv2.shiprocket.in/v1/external/auth/login", {

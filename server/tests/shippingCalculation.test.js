@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { calculateCheckoutTotals } from "../services/couponService.js";
-import { selectCourier } from "../services/shiprocketService.js";
+import { assertShiprocketEnabled, selectCourier } from "../services/shiprocketService.js";
+import { env } from "../config/env.js";
 import { roundCustomerShipping, shipmentWeight } from "../services/shippingQuoteService.js";
 import Order from "../models/Order.js";
 
@@ -11,10 +12,18 @@ test("variant quantities determine shipment weight", () => {
   assert.equal(shipmentWeight([{ litreSize: 1, quantity: 2 }, { litreSize: 5, quantity: 1 }, { litreSize: 16.5, quantity: 1 }]), 23.5);
 });
 
-test("customer shipping rounds upward to the next ten", () => {
+test("customer shipping rounds upward to the next five rupees", () => {
   assert.equal(roundCustomerShipping(98), 100);
+  assert.equal(roundCustomerShipping(101), 105);
+  assert.equal(roundCustomerShipping(554), 555);
   assert.equal(roundCustomerShipping(555), 560);
-  assert.equal(roundCustomerShipping(601), 610);
+});
+
+test("disabled Shiprocket safety switch blocks shipping without a fallback", async () => {
+  const enabled = env.shiprocket.enabled;
+  env.shiprocket.enabled = false;
+  await assert.rejects(() => assertShiprocketEnabled(), /temporarily unavailable/);
+  env.shiprocket.enabled = enabled;
 });
 
 test("courier selection prefers lowest cost and faster near-equal option", () => {

@@ -25,7 +25,13 @@ services:
         sync: false
       - key: CASHFREE_API_VERSION
         value: 2025-01-01
-      - key: SHIPROCKET_MOCK
+      - key: SHIPROCKET_ENABLED
         value: "true"
+      - key: SHIPROCKET_EMAIL
+        sync: false
+      - key: SHIPROCKET_PASSWORD
+        sync: false
+      - key: SHIPROCKET_PICKUP_LOCATION
+        sync: false
       - key: JWT_SECRET
         generateValue: true

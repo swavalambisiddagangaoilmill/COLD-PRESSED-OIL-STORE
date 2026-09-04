@@ -35,7 +35,6 @@ router.get("/fulfillment/export", requireAdminPermission("shipping.read"), contr
 router.put("/orders/:id/status", requireAdminPermission("orders.update"), controller.orderStatus);
 router.post("/orders/:id/ready-to-ship", requireAdminPermission("orders.ship"), controller.orderReadyToShip);
 router.post("/orders/:id/handover", requireAdminPermission("shipping.manage"), controller.orderHandover);
-router.post("/orders/:id/mock-shipment/next", requireAdminPermission("shipping.manage"), controller.mockShippingNext);
 router.get("/products", requireAdminPermission("products.read"), productQueryValidator, validate, controller.products);
 router.post("/products", requireAdminPermission("products.create"), productValidator, validate, controller.saveProduct);
 router.put("/products/:id", requireAdminPermission("products.update"), productIdValidator, productUpdateValidator, validate, controller.saveProduct);

@@ -9,6 +9,7 @@ import { calculateCheckoutTotals, consumeCouponUsageForOrder, normalizeCouponCod
 import { priceProducts } from "./offerPricingService.js";
 import { requiredStockLitres as calculateRequiredLitres, variantLitres } from "./variantInventoryService.js";
 import { calculateShippingQuote } from "./shippingQuoteService.js";
+import { sendOrderCancellationOnce } from "./emailService.js";
 
 const orderTransitions = {
   placed: ["confirmed", "cancelled"],
@@ -134,6 +135,7 @@ export async function updateOrderStatus(orderId, payload) {
   if (nextStatus === "shipped" && !["picked_up", "in_transit", "out_for_delivery"].includes(order.shippingStatus)) order.shippingStatus = "shipped";
   if (nextStatus === "delivered") order.shippingStatus = "delivered";
   await order.save();
+  if (nextStatus === "cancelled") await sendOrderCancellationOnce(order);
   const notification = nextStatus === "cancelled" ? { type: "order_cancelled", title: "Order Cancelled", description: `Order ${order._id} was cancelled.` } : nextStatus === "delivered" ? { type: "order_delivered", title: "Order Delivered", description: `Order ${order._id} was delivered.` } : null;
   if (notification) await Promise.allSettled([createAdminNotification({ category: "orders", ...notification, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } })]);
   return order;

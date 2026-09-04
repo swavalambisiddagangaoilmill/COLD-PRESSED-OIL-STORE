@@ -2,20 +2,19 @@
 import crypto from "node:crypto";
 import { env } from "../config/env.js";
 import Order from "../models/Order.js";
+import StoreSettings from "../models/StoreSettings.js";
 import { ApiError } from "../utils/ApiError.js";
 import { logExternalFailure } from "./serviceStatusService.js";
 import { sendShipmentReadyEmail } from "./emailService.js";
 
 const API_BASE = "https://apiv2.shiprocket.in/v1/external";
-const MOCK_STEPS = [
-  { status: "ready_for_pickup", label: "Ready to Ship" },
-  { status: "picked_up", label: "Picked Up" },
-  { status: "shipped", label: "Shipped" },
-  { status: "in_transit", label: "In Transit" },
-  { status: "out_for_delivery", label: "Out for Delivery" },
-  { status: "delivered", label: "Delivered" },
-];
 let authCache = { token: "", expiresAt: 0 };
+
+export async function assertShiprocketEnabled() {
+  if (!env.shiprocket.enabled) throw new ApiError("Shipping is temporarily unavailable.", 503);
+  const settings = await StoreSettings.findOne({ key: "store" }).select("shiprocketEnabled").lean();
+  if (settings?.shiprocketEnabled === false) throw new ApiError("Shipping is temporarily unavailable.", 503);
+}
 
 function requireConfig() {
   const missing = [];
@@ -168,6 +167,7 @@ export function selectCourier(serviceability) {
 }
 
 export async function getShippingRate({ deliveryPincode, weight, paymentMethod = "prepaid", declaredValue = 0 }) {
+  await assertShiprocketEnabled();
   if (!/^\d{6}$/.test(String(deliveryPincode || ""))) throw new ApiError("Enter a valid 6-digit delivery PIN code.", 400);
   if (!(Number(weight) > 0)) throw new ApiError("Shipment weight is required.", 400);
   const data = await shiprocketRequest(`/courier/serviceability/?pickup_postcode=572106&delivery_postcode=${encodeURIComponent(deliveryPincode)}&weight=${Number(weight).toFixed(2)}&cod=${paymentMethod === "cod" ? 1 : 0}&declared_value=${Math.max(1, Math.round(declaredValue))}`);
@@ -212,14 +212,6 @@ async function sendShipmentEmailOnce(order) {
   await order.save({ validateBeforeSave: false });
 }
 
-function getMockTrackingUrl(orderId) {
-  return `/track/${orderId}`;
-}
-
-function createMockAwb() {
-  return `MOCK-AWB-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
-}
-
 function parseEstimatedDelivery(value) {
   if (!value) return null;
   const date = new Date(value);
@@ -251,57 +243,19 @@ async function failShipment(order, error, status = "failed") {
   throw error;
 }
 
-function applyMockStep(order, stepIndex) {
-  const safeIndex = Math.min(Math.max(stepIndex, 0), MOCK_STEPS.length - 1);
-  const step = MOCK_STEPS[safeIndex];
-  order.mockShippingStep = safeIndex;
-  order.shippingStatus = step.status;
-  order.pickupStatus = safeIndex >= 1 ? "Pickup completed" : "Pickup requested";
-  order.orderStatus = step.status === "delivered" ? "delivered" : ["shipped", "in_transit", "out_for_delivery"].includes(step.status) ? "shipped" : "packed";
-  order.mockShippingHistory = [...(order.mockShippingHistory || []), { status: step.status, label: step.label, createdAt: new Date() }];
-  recordStatus(order, step.status, "mock");
-}
-
-async function createMockReadyToShipShipment(order) {
-  if (order.awbCode && order.isMockShipment) return order;
-  order.isMockShipment = true;
-  order.shiprocketOrderId = order.shiprocketOrderId || `MOCK-SR-${order._id}`;
-  order.shiprocketShipmentId = order.shiprocketShipmentId || `MOCK-SHIP-${order._id}`;
-  order.awbCode = order.awbCode || createMockAwb();
-  order.courierName = "Swavalambi Siddaganga Oil Mill Test Courier";
-  order.trackingUrl = getMockTrackingUrl(order._id);
-  order.labelUrl = getMockTrackingUrl(order._id);
-  order.manifestUrl = getMockTrackingUrl(order._id);
-  order.readyToShipAt = new Date();
-  order.shippingFailureReason = "";
-  order.mockShippingHistory = [];
-  applyMockStep(order, 0);
-  await order.save();
-  return order;
-}
-
-export async function advanceMockShipment(orderId) {
-  if (!env.shiprocket.mock) throw new ApiError("Mock Shiprocket mode is disabled.", 400);
-  const order = await loadOrder(orderId);
-  if (!order.isMockShipment) throw new ApiError("This order is not using mock shipment tracking.", 400);
-  applyMockStep(order, (order.mockShippingStep || 0) + 1);
-  await order.save();
-  return order;
-}
-
 export async function getShipmentTracking(orderId, user) {
   const order = await Order.findById(orderId).populate("user", "name email");
   if (!order) throw new ApiError("Order not found.", 404);
   if (user.role !== "admin" && order.user._id.toString() !== user._id.toString()) throw new ApiError("You cannot access this tracking details.", 403);
-  return { order, steps: order.isMockShipment ? MOCK_STEPS : [] };
+  return { order, steps: [] };
 }
 
 export async function createReadyToShipShipment(orderId) {
+  await assertShiprocketEnabled();
   let order = await loadOrder(orderId);
   if (order.orderStatus === "cancelled") throw new ApiError("Cancelled orders cannot be shipped.", 400);
   if (order.orderStatus === "placed") throw new ApiError("Confirm the order before preparing its shipment.", 400);
   if (order.paymentMethod !== "cod" && order.paymentStatus !== "paid") throw new ApiError("Online payment orders must be paid before sending to Shiprocket.", 400);
-  if (env.shiprocket.mock) return createMockReadyToShipShipment(order);
   if (order.awbCode) { await sendShipmentEmailOnce(order); return order; }
 
   const attemptAt = new Date();
@@ -364,12 +318,9 @@ export async function markShipmentHandedOver(orderId) {
   if (["picked_up", "shipped", "in_transit", "out_for_delivery", "delivered"].includes(order.shippingStatus)) return order;
   if (order.orderStatus === "cancelled" || order.shippingStatus === "cancelled") throw new ApiError("Cancelled orders cannot be handed over.", 400);
   if (order.shippingStatus !== "ready_for_pickup" || !order.awbCode) throw new ApiError("The shipment must be ready with an AWB before handover.", 400);
-  if (order.isMockShipment) applyMockStep(order, 1);
-  else {
-    // Physical handover is recorded separately; customer pickup status remains
-    // pending until Shiprocket confirms pickup through its signed webhook.
-    order.shippingStatus = "ready_for_pickup";
-  }
+  // Physical handover is recorded separately; customer pickup status remains
+  // pending until Shiprocket confirms pickup through its signed webhook.
+  order.shippingStatus = "ready_for_pickup";
   order.pickupStatus = "Handed over to Shiprocket";
   order.handedOverAt = order.handedOverAt || new Date();
   await order.save();

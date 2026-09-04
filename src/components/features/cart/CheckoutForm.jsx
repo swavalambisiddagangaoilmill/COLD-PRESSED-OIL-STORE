@@ -56,7 +56,7 @@ function formatOrderForSuccess(order, shippingAddress, items, total, profile) {
 
 export default function CheckoutForm() {
   const navigate = useNavigate();
-  const { items, totals, completePurchase, revalidateCart, appliedCoupon, setShippingQuote } = useCart();
+  const { items, totals, completePurchase, revalidateCart, appliedCoupon, shippingQuote, setShippingQuote } = useCart();
   const { showToast, showCritical } = useToast();
   const formRef = useRef(null);
   const submissionInFlightRef = useRef(false);
@@ -67,6 +67,7 @@ export default function CheckoutForm() {
   const [error, setError] = useState("");
   const [pin, setPin] = useState("");
   const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingError, setShippingError] = useState("");
 
   const processing = Boolean(processingStep);
   const codAvailable = items.every((item) => item.codEnabled !== false);
@@ -89,10 +90,11 @@ export default function CheckoutForm() {
     if (!onlineAvailable && paymentMethod !== "cod") setPaymentMethod(codAvailable ? "cod" : "online");
   }, [codAvailable, onlineAvailable, paymentMethod]);
   useEffect(() => {
-    if (!/^\d{6}$/.test(pin) || !items.length || !getAuthToken()) { setShippingQuote(null); return undefined; }
+    if (!/^\d{6}$/.test(pin) || !items.length || !getAuthToken()) { setShippingQuote(null); setShippingError(""); return undefined; }
     let active = true;
     setShippingLoading(true);
-    const timer = window.setTimeout(() => getShippingQuote({ products: items.map((item) => ({ product: item._id || item.id, variant: item.variantId || undefined, quantity: item.quantity })), deliveryPincode: pin, paymentMethod: paymentMethod === "cod" ? "cod" : "cashfree", couponCode: appliedCoupon?.code }).then((data) => active && setShippingQuote(data.quote)).catch((err) => { if (active) { setShippingQuote(null); setError(err.message || "Shipping is unavailable for this PIN code."); } }).finally(() => active && setShippingLoading(false)), 400);
+    setShippingError("");
+    const timer = window.setTimeout(() => getShippingQuote({ products: items.map((item) => ({ product: item._id || item.id, variant: item.variantId || undefined, quantity: item.quantity })), deliveryPincode: pin, paymentMethod: paymentMethod === "cod" ? "cod" : "cashfree", couponCode: appliedCoupon?.code }).then((data) => { if (active) { setShippingQuote(data.quote); setShippingError(""); } }).catch(() => { if (active) { setShippingQuote(null); setShippingError("Unable to calculate shipping for this PIN code. Please try again."); } }).finally(() => active && setShippingLoading(false)), 400);
     return () => { active = false; window.clearTimeout(timer); };
   }, [appliedCoupon?.code, items, paymentMethod, pin, setShippingQuote]);
   const applyAddress = (address) => {
@@ -185,6 +187,7 @@ export default function CheckoutForm() {
     let checkoutStage = "checkout_processing";
     const setCheckoutStage = (stage) => { checkoutStage = stage; };
     try {
+      if (shippingLoading || !shippingQuote) { setShippingError("Unable to calculate shipping for this PIN code. Please try again."); return; }
       setCheckoutStage("cart_preflight");
       const validated = await revalidateCart({ notify: true });
       if (!validated.items.length) { showToast("Your cart has no available products.", "warning", null, { id: "checkout-empty" }); return; }
@@ -252,7 +255,7 @@ export default function CheckoutForm() {
       </div>
       <div className="mt-8">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold"><Truck size={20} /> Shipping</h2>
-        <div className="flex items-center justify-between rounded-2xl border border-leaf/30 bg-leaf/5 p-4"><span className="font-semibold">Shipping</span><span className="font-bold">{shippingLoading ? "Calculating…" : totals.shippingPending ? "Enter PIN code" : formatCurrency(totals.shipping)}</span></div>
+        <div className="flex items-center justify-between rounded-2xl border border-leaf/30 bg-leaf/5 p-4"><span className="font-semibold">Shipping</span><span className={`font-bold ${shippingError ? "text-danger" : ""}`}>{shippingLoading ? "Calculating…" : shippingError || (totals.shippingPending ? "Enter PIN code" : formatCurrency(totals.shipping))}</span></div>
       </div>
       <div className="mt-8">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold"><CreditCard size={20} /> Payment</h2>
@@ -268,7 +271,7 @@ export default function CheckoutForm() {
         </div>
       </div>
       <label className="mt-6 flex items-start gap-3 text-sm leading-6 text-ink/65"><input type="checkbox" required className="mt-1" /><span>I agree to the <Link to="/legal/terms" onClick={(event) => event.stopPropagation()} className="font-bold text-leaf underline-offset-2 hover:underline">Terms & Conditions</Link>, <Link to="/legal/privacy" onClick={(event) => event.stopPropagation()} className="font-bold text-leaf underline-offset-2 hover:underline">Privacy Policy</Link>, <Link to="/legal/refund" onClick={(event) => event.stopPropagation()} className="font-bold text-leaf underline-offset-2 hover:underline">Refund Policy</Link>, and <Link to="/legal/cancellation" onClick={(event) => event.stopPropagation()} className="font-bold text-leaf underline-offset-2 hover:underline">Cancellation Policy</Link>.</span></label>
-      <Button type="submit" className="mt-8 w-full" disabled={processing}>{buttonText}</Button>
+      <Button type="submit" className="mt-8 w-full" disabled={processing || shippingLoading || !shippingQuote}>{buttonText}</Button>
     </form>
   );
 }

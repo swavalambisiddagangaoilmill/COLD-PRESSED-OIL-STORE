@@ -9,7 +9,7 @@ import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";
 import StoreSettings from "../../models/StoreSettings.js";
 import User from "../../models/User.js";
-import { createReadyToShipShipment, advanceMockShipment, markShipmentHandedOver } from "../../services/shiprocketService.js";
+import { createReadyToShipShipment, markShipmentHandedOver } from "../../services/shiprocketService.js";
 import { createAdminNotification, createInventoryNotifications } from "../../services/adminNotificationService.js";
 import { normalizeCouponCode } from "../../services/couponService.js";
 import { deleteImage } from "../../services/uploadService.js";
@@ -17,7 +17,7 @@ import { ApiError } from "../../utils/ApiError.js";
 import { slugify } from "../../utils/slugify.js";
 import { withOrderTotals } from "../../utils/orderTotals.js";
 import { createProductWithGeneratedSku, prepareProductVariants } from "../../services/productSkuService.js";
-import { sendOrderConfirmationEmail } from "../../services/emailService.js";
+import { sendOrderCancellationOnce, sendOrderConfirmationEmail } from "../../services/emailService.js";
 import { createCategory, listCategories as listCanonicalCategories, requireCanonicalCategory, updateCategory } from "../../services/categoryService.js";
 import { priceProducts } from "../../services/offerPricingService.js";
 import { sizeInLitres } from "../../utils/shippingDefaults.js";
@@ -37,7 +37,7 @@ export async function getSettings() {
 }
 
 export async function updateSettings(payload) {
-  const allowed = ["storeName", "currency", "supportEmail", "supportPhone", "whatsappNumber", "minimumOrderAmount", "orderPrefix", "lowStockThreshold", "allowOutOfStockVisibility", "preventOutOfStockCheckout", "freeDeliveryThreshold", "defaultPackagingWeight", "defaultPackageLength", "defaultPackageWidth", "defaultPackageHeight", "codEnabled", "onlinePaymentEnabled", "maintenanceMode", "announcementBarEnabled", "customerRegistrationEnabled", "newsletterEnabled", "factoryAddress", "businessHours", "googleMapsLink"];
+  const allowed = ["storeName", "currency", "supportEmail", "supportPhone", "whatsappNumber", "minimumOrderAmount", "orderPrefix", "lowStockThreshold", "allowOutOfStockVisibility", "preventOutOfStockCheckout", "freeDeliveryThreshold", "defaultPackagingWeight", "defaultPackageLength", "defaultPackageWidth", "defaultPackageHeight", "shiprocketEnabled", "codEnabled", "onlinePaymentEnabled", "maintenanceMode", "announcementBarEnabled", "customerRegistrationEnabled", "newsletterEnabled", "factoryAddress", "businessHours", "googleMapsLink"];
   const updates = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
   return StoreSettings.findOneAndUpdate({ key: "store" }, updates, { upsert: true, new: true, runValidators: true });
 }
@@ -79,6 +79,7 @@ export async function updateOrderStatus(id, nextStatus) {
   if (!order) throw new ApiError("Order not found.", 404);
   if (order.orderStatus === nextStatus) {
     if (nextStatus === "confirmed" && !order.confirmationEmailSentAt) await sendConfirmationOnce(order);
+    if (nextStatus === "cancelled" && !order.cancellationEmailSentAt) await sendOrderCancellationOnce(order);
     return order;
   }
   if (!orderTransitions[order.orderStatus]?.includes(nextStatus)) throw new ApiError("Invalid order status transition.", 400);
@@ -109,6 +110,7 @@ export async function updateOrderStatus(id, nextStatus) {
   }
   const notification = nextStatus === "cancelled" ? { type: "order_cancelled", title: "Order Cancelled", description: `Order ${order._id} was cancelled.` } : nextStatus === "delivered" ? { type: "order_delivered", title: "Order Delivered", description: `Order ${order._id} was delivered.` } : null;
   if (notification) await Promise.allSettled([createAdminNotification({ category: "orders", ...notification, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/orders" } })]);
+  if (nextStatus === "cancelled") await sendOrderCancellationOnce(order);
   return order;
 }
 
@@ -123,7 +125,6 @@ async function sendConfirmationOnce(order) {
 
 export async function readyToShip(id) { return createReadyToShipShipment(id); }
 export async function handoverShipment(id) { return markShipmentHandedOver(id); }
-export async function nextMockShipping(id) { return advanceMockShipment(id); }
 
 export async function listProducts(query) {
   const page = Number(query.page) || 1; const limit = Math.min(Number(query.limit) || 20, 100);

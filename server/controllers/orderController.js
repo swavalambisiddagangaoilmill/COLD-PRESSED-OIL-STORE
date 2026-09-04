@@ -2,7 +2,7 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendSuccess } from "../utils/apiResponse.js";
 import { createOrder, getAllOrders, getMyOrders, getOrderForUser, updateOrderStatus } from "../services/orderService.js";
-import { advanceMockShipment, createReadyToShipShipment, getShipmentTracking, syncShiprocketWebhook } from "../services/shiprocketService.js";
+import { createReadyToShipShipment, getShipmentTracking, syncShiprocketWebhook } from "../services/shiprocketService.js";
 import { writeAuditLog } from "../admin/utils/audit.js";
 import { getCheckoutShippingQuote } from "../services/paymentService.js";
 
@@ -47,9 +47,4 @@ export const shiprocketWebhookHandler = asyncHandler(async (req, res) => {
 export const getOrderTrackingHandler = asyncHandler(async (req, res) => {
   const tracking = await getShipmentTracking(req.params.id, req.user);
   sendSuccess(res, 200, "Tracking fetched successfully", tracking);
-});
-
-export const advanceMockShipmentHandler = asyncHandler(async (req, res) => {
-  const order = await advanceMockShipment(req.params.id);
-  sendSuccess(res, 200, "Mock shipment advanced successfully", { order });
 });

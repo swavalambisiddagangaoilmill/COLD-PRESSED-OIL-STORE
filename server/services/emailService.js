@@ -134,6 +134,43 @@ export function sendOrderConfirmationEmail(order) {
   });
 }
 
+export function safeOrderCancellationReason(reason = "") {
+  const value = String(reason).toLowerCase();
+  if (/stock|out of stock|inventory|product unavailable|requested quantity/.test(value)) return "Product unavailable/out of stock";
+  if (/shipping|shiprocket|courier|serviceability|pincode|delivery unavailable/.test(value)) return "Shipping unavailable";
+  return "Order processing failure";
+}
+
+export function sendOrderCancellationEmail(order, reason) {
+  if (!order?.user?.email) return Promise.resolve({ skipped: true, reason: "CUSTOMER_EMAIL_MISSING" });
+  const orderId = String(order._id);
+  const customerName = order.user.name || order.shippingAddress?.fullName || "Customer";
+  const safeReason = safeOrderCancellationReason(reason || order.cancellationReason || order.shippingFailureReason);
+  const reasonCopy = safeReason === "Product unavailable/out of stock"
+    ? "One or more products in your order became unavailable."
+    : safeReason === "Shipping unavailable"
+      ? "Shipping service was unavailable for this order."
+      : "We encountered an issue while processing your order.";
+  const body = `${paragraph(`Hi ${escapeHtml(customerName)},`)}${paragraph(`We’re sorry, but we were unable to place your order <strong>#${escapeHtml(orderId)}</strong> successfully.`)}${paragraph(reasonCopy)}${paragraph("This may have happened due to product stock availability, shipping service availability, or another issue while processing the order.")}${paragraph("Please try placing the order again, or visit our store directly for assistance.")}${paragraph("We sincerely apologize for the inconvenience and appreciate your understanding.")}${paragraph("Thank you for choosing us.<br><strong>Swavalambi Siddaganga Oil Mill</strong>", "margin-bottom:0")}`;
+  return sendMail({
+    to: order.user.email,
+    subject: `Update on Your Order #${orderId}`,
+    text: `Hi ${customerName},\n\nWe’re sorry, but we were unable to place your order #${orderId} successfully.\n\n${reasonCopy}\n\nThis may have happened due to product stock availability, shipping service availability, or another issue while processing the order.\n\nPlease try placing the order again, or visit our store directly for assistance.\n\nWe sincerely apologize for the inconvenience and appreciate your understanding.\n\nThank you for choosing us.\nSwavalambi Siddaganga Oil Mill`,
+    html: htmlLayout("Order update", body, `Update on your order #${orderId}.`),
+    idempotencyKey: `order-cancelled/${orderId}`,
+  });
+}
+
+export async function sendOrderCancellationOnce(order, reason) {
+  if (!order || order.cancellationEmailSentAt) return { skipped: true, reason: "ALREADY_SENT" };
+  await order.populate?.("user", "name email");
+  const result = await sendOrderCancellationEmail(order, reason);
+  if (result?.skipped) return result;
+  order.cancellationEmailSentAt = new Date();
+  await order.save({ validateBeforeSave: false });
+  return result;
+}
+
 export function sendShipmentReadyEmail(order) {
   if (!order?.user?.email || !order.awbCode) return Promise.resolve({ skipped: true, reason: "TRACKING_DETAILS_MISSING" });
   const orderId = String(order._id);
