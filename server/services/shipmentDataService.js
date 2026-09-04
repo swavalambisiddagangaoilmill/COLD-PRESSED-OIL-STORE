@@ -22,7 +22,11 @@ function primaryDimensions(lines) {
 export function shipmentDataFromProducts(items = []) {
   if (!items.length) throw new ApiError("At least one shipment item is required.", 400);
   const lines = items.map((item) => {
-    const variant = item.product?.variants?.find((entry) => String(entry._id) === String(item.variant));
+    const variants = item.product?.variants || [];
+    const variant = item.variant
+      ? variants.find((entry) => String(entry._id) === String(item.variant))
+      : variants.find((entry) => entry.isActive !== false && entry.size === item.product?.size)
+        || variants.find((entry) => entry.isActive !== false);
     if (!variant) throw new ApiError("A valid product variant is required for shipping.", 400);
     const quantity = positive(item.quantity, "Quantity");
     return {
