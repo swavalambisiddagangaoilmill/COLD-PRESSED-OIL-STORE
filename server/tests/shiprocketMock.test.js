@@ -3,7 +3,7 @@ import { afterEach, beforeEach, test } from "node:test";
 import { env } from "../config/env.js";
 import Order from "../models/Order.js";
 import StoreSettings from "../models/StoreSettings.js";
-import { cancelShiprocketShipment, createReadyToShipShipment, getShipmentTracking, markShipmentHandedOver, normalizeShiprocketStatus, requestShipmentPickup, resetShiprocketAuthForTests, syncShiprocketWebhook } from "../services/shiprocketService.js";
+import { cancelShiprocketShipment, createReadyToShipShipment, extractCreatedShipmentIdentifiers, getShipmentTracking, markShipmentHandedOver, normalizeShiprocketStatus, requestShipmentPickup, resetShiprocketAuthForTests, syncShiprocketWebhook } from "../services/shiprocketService.js";
 
 const originalFindById = Order.findById;
 const originalFindOne = Order.findOne;
@@ -234,6 +234,66 @@ test("already-booked orders return without provider calls", async () => {
   globalThis.fetch = async () => { providerCalls += 1; throw new Error("must not call provider"); };
   assert.equal(await createReadyToShipShipment(order._id), order);
   assert.equal(providerCalls, 0);
+});
+
+test("Create Order identifiers support the official response and provider wrappers", () => {
+  assert.deepEqual(extractCreatedShipmentIdentifiers({ order_id: 16161616, shipment_id: 15151515, status: "NEW", status_code: 1 }), { orderId: "16161616", shipmentId: "15151515", awbCode: "", courierName: "" });
+  assert.deepEqual(extractCreatedShipmentIdentifiers({ response: { data: { order_id: 16161616, shipment_id: 15151515 } } }), { orderId: "16161616", shipmentId: "15151515", awbCode: "", courierName: "" });
+  assert.deepEqual(extractCreatedShipmentIdentifiers({ order_id: 16161616, status: "NEW" }), { orderId: "16161616", shipmentId: "", awbCode: "", courierName: "" });
+});
+
+test("missing shipment id is reconciled from the persisted Shiprocket order before AWB assignment", async () => {
+  Object.assign(env.shiprocket, { enabled: true, email: "shiprocket@example.com", password: "secret", pickupLocation: "Primary", pickupPostcode: "572106" });
+  const order = mockOrder();
+  Order.findById = () => queryFor(order);
+  Order.findOneAndUpdate = () => queryFor(order);
+  let createCalls = 0;
+  globalThis.fetch = async (url) => {
+    const body = url.endsWith("/auth/login") ? { token: "token" }
+      : url.includes("serviceability") ? { data: { available_courier_companies: [{ courier_company_id: 42, rate: 50 }] } }
+        : url.endsWith("/orders/create/adhoc") ? (createCalls += 1, { order_id: 16161616, status: "NEW", status_code: 1 })
+          : url.endsWith("/orders/show/16161616") ? { data: { id: 16161616, shipments: [{ id: 15151515 }] } }
+            : { response: { data: { awb_code: "AWB123", courier_name: "Surface" } } };
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+  };
+  const result = await createReadyToShipShipment(order._id);
+  assert.equal(createCalls, 1);
+  assert.equal(result.shiprocketOrderId, "16161616");
+  assert.equal(result.shiprocketShipmentId, "15151515");
+  assert.equal(result.awbCode, "AWB123");
+});
+
+test("ambiguous Create Order timeout reconciles once and never repeats creation", async () => {
+  Object.assign(env.shiprocket, { enabled: true, email: "shiprocket@example.com", password: "secret", pickupLocation: "Primary", pickupPostcode: "572106" });
+  const order = mockOrder();
+  Order.findById = () => queryFor(order);
+  Order.findOneAndUpdate = () => queryFor(order);
+  let createCalls = 0;
+  globalThis.fetch = async (url) => {
+    if (url.endsWith("/auth/login")) return { ok: true, status: 200, text: async () => JSON.stringify({ token: "token" }) };
+    if (url.includes("serviceability")) return { ok: true, status: 200, text: async () => JSON.stringify({ data: { available_courier_companies: [{ courier_company_id: 42, rate: 50 }] } }) };
+    if (url.endsWith("/orders/create/adhoc")) { createCalls += 1; throw new DOMException("Timed out", "TimeoutError"); }
+    if (url.includes("/orders?filter=")) return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: 16161616, channel_order_id: order._id, shipments: [{ id: 15151515 }] }] }) };
+    return { ok: true, status: 200, text: async () => JSON.stringify({ response: { data: { awb_code: "AWB123" } } }) };
+  };
+  const result = await createReadyToShipShipment(order._id);
+  assert.equal(createCalls, 1);
+  assert.equal(result.shiprocketShipmentId, "15151515");
+  assert.equal(result.awbCode, "AWB123");
+});
+
+test("authentication failure stops before order creation", async () => {
+  Object.assign(env.shiprocket, { enabled: true, email: "shiprocket@example.com", password: "wrong", pickupLocation: "Primary", pickupPostcode: "572106" });
+  const order = mockOrder();
+  Order.findById = () => queryFor(order);
+  Order.findOneAndUpdate = () => queryFor(order);
+  let createCalls = 0;
+  globalThis.fetch = async (url) => {
+    if (url.endsWith("/orders/create/adhoc")) createCalls += 1;
+    return { ok: false, status: 401, text: async () => JSON.stringify({ message: "Unauthenticated" }) };
+  };
+  await assert.rejects(createReadyToShipShipment(order._id), /serviceability check failed/i);
+  assert.equal(createCalls, 0);
 });
 
 test("invalid PIN and missing snapshot data fail before Shiprocket calls", async () => {

@@ -191,7 +191,9 @@ export async function getShippingRate({ deliveryPincode, weight, dimensions, pay
 function positiveDimension(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) throw new ApiError("Shipment dimensions are required.", 400);
-  return encodeURIComponent(number);
+  // Shiprocket's serviceability API accepts dimensions as integer centimetres.
+  // Round outward so decimal measurements never understate the package size.
+  return encodeURIComponent(Math.ceil(number));
 }
 
 function getTrackingUrl(awbCode) {
@@ -305,6 +307,44 @@ function parseEstimatedDelivery(value) {
 
 function extractAwb(assignResponse) {
   return assignResponse?.response?.data?.awb_code || assignResponse?.data?.awb_code || assignResponse?.awb_code || "";
+}
+
+function responseStructure(value, depth = 0) {
+  if (!value || typeof value !== "object" || depth > 2) return typeof value;
+  if (Array.isArray(value)) return { type: "array", length: value.length, item: value[0] ? responseStructure(value[0], depth + 1) : undefined };
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, entry && typeof entry === "object" ? responseStructure(entry, depth + 1) : typeof entry]));
+}
+
+export function extractCreatedShipmentIdentifiers(response) {
+  const candidates = [response, response?.data, response?.response, response?.response?.data].filter((value) => value && typeof value === "object");
+  for (const value of candidates) {
+    const shipment = Array.isArray(value.shipments) ? value.shipments[0] : value.shipment;
+    const orderId = value.order_id ?? value.shiprocket_order_id ?? value.id;
+    const shipmentId = value.shipment_id ?? value.shipmentId ?? shipment?.shipment_id ?? shipment?.id;
+    if (orderId || shipmentId) return { orderId: orderId ? String(orderId) : "", shipmentId: shipmentId ? String(shipmentId) : "", awbCode: String(value.awb_code ?? value.awb ?? shipment?.awb_code ?? shipment?.awb ?? ""), courierName: String(value.courier_name ?? shipment?.courier_name ?? "") };
+  }
+  return { orderId: "", shipmentId: "", awbCode: "", courierName: "" };
+}
+
+function listedOrders(response) {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.data?.data)) return response.data.data;
+  if (Array.isArray(response?.orders)) return response.orders;
+  return [];
+}
+
+async function reconcileCreatedShipment(order) {
+  let record;
+  if (order.shiprocketOrderId) {
+    const response = await shiprocketRequest(`/orders/show/${encodeURIComponent(order.shiprocketOrderId)}`);
+    record = response?.data || response;
+  } else {
+    const reference = String(order._id);
+    const response = await shiprocketRequest(`/orders?filter=${encodeURIComponent(reference)}&per_page=20`);
+    record = listedOrders(response).find((item) => [item.channel_order_id, item.customer_order_id, item.order_id].some((value) => String(value || "") === reference));
+  }
+  return record ? extractCreatedShipmentIdentifiers(record) : { orderId: "", shipmentId: "", awbCode: "", courierName: "" };
 }
 
 function extractCourierName(assignResponse, fallback) {
@@ -448,19 +488,72 @@ export async function createReadyToShipShipment(orderId) {
       "Shiprocket serviceability check failed. Verify the delivery PIN and try again.",
     );
     const courier = selectCourier(serviceability);
-    if (!order.shiprocketShipmentId) {
-      const created = await shipmentStep(
-        () => shiprocketRequest("/orders/create/adhoc", { method: "POST", body: buildOrderPayload(order, packageDetails) }),
-        "Shiprocket order creation failed. No shipment was booked.",
+    if (!order.shiprocketShipmentId && (order.shiprocketOrderId || order.shipmentCreationOutcomeUnknownAt)) {
+      const reconciled = await shipmentStep(
+        () => reconcileCreatedShipment(order),
+        "Unable to reconcile the previous Shiprocket booking. No duplicate order was created.",
       );
-      order.shiprocketOrderId = created.order_id || created.shiprocket_order_id || created.data?.order_id || order.shiprocketOrderId;
-      order.shiprocketShipmentId = created.shipment_id || created.data?.shipment_id || order.shiprocketShipmentId;
-      order.shippingStatus = "shiprocket_order_created";
-      recordStatus(order, "shiprocket_order_created");
+      order.shiprocketOrderId = reconciled.orderId || order.shiprocketOrderId;
+      order.shiprocketShipmentId = reconciled.shipmentId || order.shiprocketShipmentId;
+      order.awbCode = reconciled.awbCode || order.awbCode;
+      order.courierName = reconciled.courierName || order.courierName;
+      if (!order.shiprocketShipmentId) throw new ApiError("The previous Shiprocket booking could not be reconciled. No duplicate order was created.", 409);
+      order.shippingStatus = order.awbCode ? "awb_assigned" : "shiprocket_order_created";
+      order.shipmentCreationOutcomeUnknownAt = undefined;
       await order.save();
     }
 
+    if (!order.shiprocketShipmentId) {
+      let created;
+      try {
+        created = await shiprocketRequest("/orders/create/adhoc", { method: "POST", body: buildOrderPayload(order, packageDetails) });
+      } catch (createError) {
+        const reconciled = await reconcileCreatedShipment(order).catch(() => null);
+        if (!reconciled?.shipmentId) {
+          if ((createError?.statusCode || 500) >= 500) {
+            order.shipmentCreationOutcomeUnknownAt = new Date();
+            await order.save();
+            throw new ApiError("Shiprocket order creation failed. Its outcome could not be confirmed; retry will reconcile before creating another order.", createError?.statusCode || 502);
+          }
+          throw new ApiError("Shiprocket order creation failed. No shipment was booked.", createError?.statusCode || 400);
+        }
+        created = reconciled;
+      }
+      const identifiers = created.orderId !== undefined ? created : extractCreatedShipmentIdentifiers(created);
+      const providerStatusCode = Number(created?.status_code ?? created?.data?.status_code ?? 0);
+      if (!identifiers.orderId && !identifiers.shipmentId && (providerStatusCode >= 400 || created?.errors || created?.error)) throw new ApiError("Shiprocket order creation failed. No shipment was booked.", 400);
+      order.shiprocketOrderId = identifiers.orderId || order.shiprocketOrderId;
+      order.shiprocketShipmentId = identifiers.shipmentId || order.shiprocketShipmentId;
+      order.awbCode = identifiers.awbCode || order.awbCode;
+      order.courierName = identifiers.courierName || order.courierName;
+      order.shippingStatus = "shiprocket_order_created";
+      recordStatus(order, "shiprocket_order_created");
+      await order.save();
+      if (!order.shiprocketShipmentId) {
+        order.shipmentCreationOutcomeUnknownAt = new Date();
+        await order.save();
+        logExternalFailure("shiprocket", new Error("Create order response did not include a shipment identifier."), { action: "create_order_response", responseStructure: responseStructure(created), shiprocketOrderIdPersisted: Boolean(order.shiprocketOrderId) });
+        const reconciled = await reconcileCreatedShipment(order).catch(() => null);
+        order.shiprocketOrderId = reconciled?.orderId || order.shiprocketOrderId;
+        order.shiprocketShipmentId = reconciled?.shipmentId || order.shiprocketShipmentId;
+        if (order.shiprocketShipmentId) {
+          order.shipmentCreationOutcomeUnknownAt = undefined;
+          await order.save();
+        }
+      }
+    }
+
     if (!order.shiprocketShipmentId) throw new ApiError("Shiprocket did not return a shipment id.", 502);
+
+    if (order.awbCode) {
+      order.shippingStatus = "awb_assigned";
+      order.shipmentBookedAt = order.shipmentBookedAt || new Date();
+      order.shipmentCreationStartedAt = undefined;
+      order.shipmentCreationOutcomeUnknownAt = undefined;
+      await order.save();
+      await sendShipmentEmailOnce(order);
+      return order;
+    }
 
     const assigned = await shipmentStep(
       () => shiprocketRequest("/courier/assign/awb", { method: "POST", body: { shipment_id: order.shiprocketShipmentId, courier_id: courier.courierId } }),
@@ -479,6 +572,7 @@ export async function createReadyToShipShipment(orderId) {
     recordStatus(order, "awb_assigned");
     order.shippingFailureReason = "";
     order.shipmentCreationStartedAt = undefined;
+    order.shipmentCreationOutcomeUnknownAt = undefined;
     await order.save();
     await sendShipmentEmailOnce(order);
     return order;

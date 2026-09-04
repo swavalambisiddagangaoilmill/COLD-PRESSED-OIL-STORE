@@ -137,6 +137,7 @@ const orderSchema = new mongoose.Schema(
     shipmentCancelledAt: { type: Date },
     shipmentCancellationStatus: { type: String },
     shipmentCreationStartedAt: { type: Date },
+    shipmentCreationOutcomeUnknownAt: { type: Date },
     shipmentAttemptCount: { type: Number, default: 0, min: 0 },
     shipmentLastAttemptAt: { type: Date },
     cartCleanupCompletedAt: { type: Date },

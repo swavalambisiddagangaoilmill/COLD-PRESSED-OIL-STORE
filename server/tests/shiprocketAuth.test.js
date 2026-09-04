@@ -92,7 +92,7 @@ test("authentication failures and tokens are not exposed in errors", async () =>
   });
 });
 
-test("serviceability sends configured pickup PIN and exact package data", async () => {
+test("serviceability sends configured pickup PIN, exact weight, and provider-safe dimensions", async () => {
   let requestUrl;
   globalThis.fetch = async (url) => {
     if (url.endsWith("/auth/login")) return jsonResponse(200, { token: "private-token" });
@@ -103,9 +103,9 @@ test("serviceability sends configured pickup PIN and exact package data", async 
   assert.equal(requestUrl.searchParams.get("pickup_postcode"), "572106");
   assert.equal(requestUrl.searchParams.get("delivery_postcode"), "560091");
   assert.equal(requestUrl.searchParams.get("weight"), "6.250");
-  assert.equal(requestUrl.searchParams.get("length"), "21.5");
-  assert.equal(requestUrl.searchParams.get("breadth"), "16.25");
-  assert.equal(requestUrl.searchParams.get("height"), "32.75");
+  assert.equal(requestUrl.searchParams.get("length"), "22");
+  assert.equal(requestUrl.searchParams.get("breadth"), "17");
+  assert.equal(requestUrl.searchParams.get("height"), "33");
 });
 
 test("rate limiting is preserved and is not retried", async () => {
