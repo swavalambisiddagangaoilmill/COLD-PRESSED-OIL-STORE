@@ -186,8 +186,8 @@ export function CartProvider({ children }) {
     if (getAuthToken()) clearCartApi().then((cart) => { setItems(cart); signalCartChange(); }).catch(() => setItems(previousItems));
   };
 
-  const completePurchase = useCallback(async (productIds = []) => {
-    const remaining = removePurchasedItems(itemsRef.current, productIds);
+  const completePurchase = useCallback(async (purchasedItems = []) => {
+    const remaining = removePurchasedItems(itemsRef.current, purchasedItems);
     setAppliedCoupon(null);
     setShippingQuote(null);
     window.sessionStorage.removeItem(COUPON_SESSION_KEY);

@@ -1,12 +1,12 @@
 ﻿// Renders a user-owned order detail view from the backend.
-import { ArrowLeft, Check, ExternalLink, Package } from "lucide-react";
+import { ArrowLeft, Check, Download, Package } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import Breadcrumb from "../components/common/Breadcrumb.jsx";
 import SafeImage from "../components/common/SafeImage.jsx";
 import Button from "../components/ui/Button.jsx";
 import Container from "../components/ui/Container.jsx";
-import { fetchOrderDetails } from "../services/orderService.js";
+import { downloadOrderInvoice, fetchOrderDetails } from "../services/orderService.js";
 import { formatCurrency } from "../utils/formatCurrency.js";
 
 const statusLabels = {
@@ -88,6 +88,7 @@ function safeTrackingUrl(value) {
 
 export default function OrderDetails() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -109,6 +110,8 @@ export default function OrderDetails() {
     loadOrder();
     return () => { active = false; };
   }, [id]);
+
+  useEffect(() => { if (order && searchParams.get("invoice") === "1") downloadOrderInvoice(id).finally(() => { searchParams.delete("invoice"); setSearchParams(searchParams, { replace: true }); }); }, [id, order, searchParams, setSearchParams]);
 
   const effectiveSubtotal = Number(order?.subtotal ?? (order?.products || []).reduce((sum, item) => sum + item.price * item.quantity, 0));
   const productSubtotal = Number(order?.productSubtotal ?? (order?.products || []).reduce((sum, item) => sum + Number(item.basePrice ?? item.price ?? 0) * Number(item.quantity || 1), 0));
@@ -172,8 +175,10 @@ export default function OrderDetails() {
                   <p className="mt-2 text-sm leading-6 text-ink/60">{statusLabels[order.shippingStatus] || "Preparing Shipment"}</p>
                   {order.awbCode && <p className="mt-1 text-sm font-semibold text-ink/60">AWB: {order.awbCode}</p>}
                   {order.estimatedDelivery && <p className="mt-1 text-sm text-ink/55">Estimated delivery: {formatDate(order.estimatedDelivery)}</p>}
-                  {trackingUrl ? <a href={trackingUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-xs font-bold text-white transition hover:bg-leaf">Track Shipment <ExternalLink size={14} /></a> : <p className="mt-3 text-xs font-semibold text-ink/45">Tracking appears here after courier assignment.</p>}
+                  {order.orderStatus !== "placed" && <Link to={`/track/${order._id}`} className="mt-4 inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-xs font-bold text-white transition hover:bg-leaf">Track Order</Link>}
+                  {!trackingUrl && <p className="mt-3 text-xs font-semibold text-ink/45">Tracking becomes active after courier assignment.</p>}
                 </div>
+                <button type="button" onClick={() => downloadOrderInvoice(order._id)} className="mt-4 inline-flex items-center gap-2 rounded-full border border-ink/15 px-4 py-2 text-xs font-bold text-ink transition hover:border-leaf hover:text-leaf"><Download size={14} /> View / Download Invoice</button>
                 {address && <div className="mt-6 rounded-2xl bg-cream p-4"><p className="font-semibold">Delivery Address</p><p className="mt-2 text-sm leading-6 text-ink/60">{address.fullName}, {address.phone}<br />{address.street}, {address.city}, {address.state} {address.postalCode}<br />{address.country || "India"}</p></div>}
                 <p className="mt-5 text-sm leading-6 text-ink/55">Order cancellation is available only when supported by the backend order workflow. This order is currently managed by the store team.</p>
               </aside>

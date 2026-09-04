@@ -12,7 +12,10 @@ export default function AddToCartButton({ product, quantity = 1, className = "",
   const { showToast } = useToast();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [addedRecently, setAddedRecently] = useState(false);
   const [pulse, setPulse] = useState(false);
+  const inFlight = useRef(false);
+  const resetTimer = useRef(null);
   const cancelRef = useRef(null);
   const selectedQuantity = Math.max(1, Number(quantity) || 1);
   const cartQuantity = getItemQuantity(product.id, product.variantId);
@@ -20,12 +23,16 @@ export default function AddToCartButton({ product, quantity = 1, className = "",
   const totalQuantity = cartQuantity + selectedQuantity;
 
   const runCartUpdate = async ({ addMore = false } = {}) => {
-    if (loading) return;
+    if (inFlight.current) return false;
+    inFlight.current = true;
     setLoading(true);
     try {
       if (addMore && inCart) await updateQuantity(product.id, totalQuantity, product.variantId);
       else await addItem(product, selectedQuantity);
       setPulse(true);
+      setAddedRecently(true);
+      window.clearTimeout(resetTimer.current);
+      resetTimer.current = window.setTimeout(() => setAddedRecently(false), 1400);
       showToast(addMore ? "Cart updated" : "Added to Cart", "cart", { label: "View Cart", to: "/cart" }, { id: `cart-${product.id}` });
       window.setTimeout(() => setPulse(false), 420);
       onAdded?.({ quantity: addMore && inCart ? totalQuantity : selectedQuantity, addedQuantity: selectedQuantity, updated: addMore && inCart });
@@ -34,12 +41,13 @@ export default function AddToCartButton({ product, quantity = 1, className = "",
       showToast(customerMessage(error, "Unable to update your cart."), "error", null, { id: `cart-error-${product.id}` });
       return false;
     } finally {
+      inFlight.current = false;
       setLoading(false);
     }
   };
 
   const handleClick = () => {
-    if (loading) return;
+    if (inFlight.current || addedRecently) return;
     if (inCart) {
       setConfirmOpen(true);
       return;
@@ -57,12 +65,14 @@ export default function AddToCartButton({ product, quantity = 1, className = "",
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [confirmOpen]);
 
+  useEffect(() => () => window.clearTimeout(resetTimer.current), []);
+
   return (
     <div className="relative">
       <motion.div animate={{ scale: pulse ? [1, 1.035, 1] : 1 }} transition={{ duration: 0.35 }}>
         <Button disabled={loading || product.stock === 0} loading={loading} className={className} onClick={handleClick}>
-          {inCart ? <Check size={iconSize} /> : <ShoppingBag size={iconSize} />}
-          {inCart ? "Added to Cart" : "Add to Cart"}
+          {addedRecently ? <Check size={iconSize} /> : <ShoppingBag size={iconSize} />}
+          {addedRecently ? "Added to Cart" : "Add to Cart"}
         </Button>
       </motion.div>
       <AnimatePresence>
@@ -74,13 +84,10 @@ export default function AddToCartButton({ product, quantity = 1, className = "",
                 <button type="button" aria-label="Close cart update confirmation" disabled={loading} onClick={() => setConfirmOpen(false)} className="grid h-9 w-9 place-items-center rounded-full bg-linen text-ink transition hover:text-danger disabled:opacity-50"><X size={16} /></button>
               </div>
               <h2 id={`cart-confirm-${product.id}`} className="mt-4 font-serif text-3xl font-semibold">Already in your cart</h2>
-              <p className="mt-3 leading-7 text-ink/65">{cartQuantity} quantity of this product is already in your cart.</p>
-              <p className="mt-2 leading-7 text-ink/65">You are adding {selectedQuantity} more.</p>
-              <p className="mt-2 font-semibold leading-7 text-ink">Total quantity after this action will be {totalQuantity}.</p>
-              <p className="mt-2 leading-7 text-ink/65">Do you want to update your cart?</p>
+              <p className="mt-3 leading-7 text-ink/65">This product is already in your cart with quantity {cartQuantity}. Are you sure you want to add it again?</p>
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
                 <button ref={cancelRef} type="button" disabled={loading} onClick={() => setConfirmOpen(false)} className="inline-flex min-h-12 items-center justify-center rounded-full bg-linen px-5 text-sm font-bold text-ink transition hover:text-leaf disabled:opacity-50">Cancel</button>
-                <button type="button" disabled={loading} onClick={async () => { if (await runCartUpdate({ addMore: true })) setConfirmOpen(false); }} className="inline-flex min-h-12 items-center justify-center rounded-full bg-ink px-5 text-sm font-bold text-white transition hover:bg-leaf disabled:opacity-60">{loading ? "Updating..." : "Yes, Update Cart"}</button>
+                <button type="button" disabled={loading} onClick={async () => { if (await runCartUpdate({ addMore: true })) setConfirmOpen(false); }} className="inline-flex min-h-12 items-center justify-center rounded-full bg-ink px-5 text-sm font-bold text-white transition hover:bg-leaf disabled:opacity-60">{loading ? "Adding..." : "Add Again"}</button>
               </div>
             </motion.div>
           </motion.div>

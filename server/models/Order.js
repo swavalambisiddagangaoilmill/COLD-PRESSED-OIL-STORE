@@ -140,6 +140,7 @@ const orderSchema = new mongoose.Schema(
     shipmentAttemptCount: { type: Number, default: 0, min: 0 },
     shipmentLastAttemptAt: { type: Date },
     cartCleanupCompletedAt: { type: Date },
+    cartCleanupStartedAt: { type: Date },
     inventoryRestoredAt: { type: Date },
   },
   { timestamps: true, toJSON: { transform(_doc, value) { delete value.shiprocketShippingCost; delete value.selectedCourierId; delete value.selectedCourierService; delete value.labelUrl; delete value.manifestUrl; delete value.manifestPrintUrl; delete value.shiprocketInvoiceUrl; return value; } } }

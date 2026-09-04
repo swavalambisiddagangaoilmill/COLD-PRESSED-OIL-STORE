@@ -19,6 +19,7 @@ const defaults = {
   "payment-success": ["Payment Successful", "Your order has been received."],
   "payment-failure": ["Payment Failed", "Your payment could not be completed."],
   "payment-pending": ["Payment Pending", "We are waiting for payment confirmation."],
+  "payment-return": ["Payment Submitted", "You can close this page and return to the device where you started checkout. Your order will be confirmed there after secure payment verification."],
   "order-cancelled": ["Order Cancelled", "This order has been cancelled."],
 };
 

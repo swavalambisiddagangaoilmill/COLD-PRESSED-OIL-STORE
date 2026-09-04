@@ -5,6 +5,7 @@ import { createOrder, getAllOrders, getMyOrders, getOrderForUser, updateOrderSta
 import { createReadyToShipShipment, getShipmentTracking, syncShiprocketWebhook } from "../services/shiprocketService.js";
 import { writeAuditLog } from "../admin/utils/audit.js";
 import { getCheckoutShippingQuote } from "../services/paymentService.js";
+import { createInvoicePdfBuffer, invoiceNumberFor } from "../services/invoiceService.js";
 
 export const getShippingQuoteHandler = asyncHandler(async (req, res) => sendSuccess(res, 200, "Shipping calculated successfully", { quote: await getCheckoutShippingQuote(req.user._id, req.body) }));
 
@@ -21,6 +22,13 @@ export const getMyOrdersHandler = asyncHandler(async (req, res) => {
 export const getOrderHandler = asyncHandler(async (req, res) => {
   const order = await getOrderForUser(req.params.id, req.user);
   sendSuccess(res, 200, "Order fetched successfully", { order });
+});
+
+export const getOrderInvoiceHandler = asyncHandler(async (req, res) => {
+  const order = await getOrderForUser(req.params.id, req.user);
+  const pdf = await createInvoicePdfBuffer(order);
+  res.set({ "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="Invoice-${invoiceNumberFor(order)}.pdf"`, "Cache-Control": "private, no-store, max-age=0", Pragma: "no-cache" });
+  res.send(pdf);
 });
 
 export const getAllOrdersHandler = asyncHandler(async (_req, res) => {

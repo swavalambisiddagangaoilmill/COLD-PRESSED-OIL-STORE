@@ -16,9 +16,20 @@ export async function reconcileGuestCart(items = []) {
   return reconcileCartWithCatalog(items, products);
 }
 
-export function removePurchasedItems(items = [], productIds = []) {
-  const purchased = new Set(productIds.map(String));
-  return items.filter((item) => !purchased.has(String(item?._id || item?.id)));
+export function removePurchasedItems(items = [], purchasedItems = []) {
+  const purchased = new Map();
+  purchasedItems.forEach((entry) => {
+    const product = typeof entry === "object" ? entry?._id || entry?.id || entry?.product : entry;
+    const variant = typeof entry === "object" ? entry?.variantId || entry?.variant : "";
+    if (!product) return;
+    const key = `${product}:${variant || ""}`;
+    purchased.set(key, (purchased.get(key) || 0) + Math.max(1, Number(entry?.quantity) || 1));
+  });
+  return items.flatMap((item) => {
+    const key = `${item?._id || item?.id}:${item?.variantId || item?.variant || ""}`;
+    const quantity = Number(item.quantity) - (purchased.get(key) || 0);
+    return quantity > 0 ? [{ ...item, quantity }] : [];
+  });
 }
 
 export function reconcileCartWithCatalog(items = [], products = []) {

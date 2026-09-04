@@ -63,6 +63,7 @@ export default function AppRoutes() {
         <Route path="/payment/success" element={<StatusPage code="payment-success" />} />
         <Route path="/payment/failure" element={<StatusPage code="payment-failure" retry />} />
         <Route path="/payment/pending" element={<StatusPage code="payment-pending" />} />
+        <Route path="/payment/return" element={<StatusPage code="payment-return" />} />
         <Route path="/order/cancelled" element={<StatusPage code="order-cancelled" />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

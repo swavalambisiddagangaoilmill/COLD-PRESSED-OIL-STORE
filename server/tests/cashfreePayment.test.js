@@ -8,14 +8,14 @@ import Product from "../models/Product.js";
 import User from "../models/User.js";
 import Offer from "../models/Offer.js";
 import StoreSettings from "../models/StoreSettings.js";
-import { createPaymentOrder, processCashfreeWebhook, verifyPaymentAndCreateOrder } from "../services/paymentService.js";
+import { createPaymentOrder, getPaymentCheckoutStatus, processCashfreeWebhook, verifyPaymentAndCreateOrder } from "../services/paymentService.js";
 import { resetShiprocketAuthForTests } from "../services/shiprocketService.js";
 
-const original = { fetch: global.fetch, productFind: Product.find, offerFind: Offer.find, settingsFind: StoreSettings.findOne, userFind: User.findById, userUpdate: User.updateOne, checkoutCreate: PaymentCheckout.create, checkoutFind: PaymentCheckout.findOne, checkoutUpdate: PaymentCheckout.updateOne, orderFind: Order.findOne, orderUpdate: Order.updateOne };
+const original = { fetch: global.fetch, productFind: Product.find, offerFind: Offer.find, settingsFind: StoreSettings.findOne, userFind: User.findById, userUpdate: User.updateOne, checkoutCreate: PaymentCheckout.create, checkoutFind: PaymentCheckout.findOne, checkoutUpdate: PaymentCheckout.updateOne, orderFind: Order.findOne, orderFindById: Order.findById, orderFindOneAndUpdate: Order.findOneAndUpdate, orderUpdate: Order.updateOne };
 const checkout = { _id: "checkout-id", user: "user-id", status: "created", amount: 650, currency: "INR", cashfreeOrderId: "cf_11111111-1111-4111-8111-111111111111", orderPayload: { products: [], shippingAddress: {} } };
 
 test.beforeEach(() => { resetShiprocketAuthForTests(); Offer.find = () => ({ lean: async () => [] }); StoreSettings.findOne = () => ({ select: () => ({ lean: async () => ({ shiprocketEnabled: true }) }) }); });
-test.afterEach(() => { resetShiprocketAuthForTests(); global.fetch = original.fetch; Product.find = original.productFind; Offer.find = original.offerFind; StoreSettings.findOne = original.settingsFind; User.findById = original.userFind; User.updateOne = original.userUpdate; PaymentCheckout.create = original.checkoutCreate; PaymentCheckout.findOne = original.checkoutFind; PaymentCheckout.updateOne = original.checkoutUpdate; Order.findOne = original.orderFind; Order.updateOne = original.orderUpdate; });
+test.afterEach(() => { resetShiprocketAuthForTests(); global.fetch = original.fetch; Product.find = original.productFind; Offer.find = original.offerFind; StoreSettings.findOne = original.settingsFind; User.findById = original.userFind; User.updateOne = original.userUpdate; PaymentCheckout.create = original.checkoutCreate; PaymentCheckout.findOne = original.checkoutFind; PaymentCheckout.updateOne = original.checkoutUpdate; Order.findOne = original.orderFind; Order.findById = original.orderFindById; Order.findOneAndUpdate = original.orderFindOneAndUpdate; Order.updateOne = original.orderUpdate; });
 
 test("Cashfree session is created server-side and response exposes no secret", async () => {
   Object.assign(env.cashfree, { environment: "sandbox", clientId: "client-id", clientSecret: "client-secret", apiVersion: "2025-01-01" });
@@ -39,6 +39,33 @@ test("Cashfree session is created server-side and response exposes no secret", a
   assert.equal(stored.orderPayload._shippingQuote.customerShippingCharge, 100);
   assert.equal(stored.razorpayQrId, sent.body.order_id);
   assert.equal(stored.idempotencyKey, sent.headers["x-idempotency-key"]);
+  assert.equal(sent.body.order_meta.return_url, `${env.clientUrl}/payment/return`);
+  assert.equal(sent.body.order_meta.return_url.includes("/checkout"), false);
+});
+
+test("payment polling is owner-scoped and reports pending without trusting the browser", async () => {
+  Object.assign(env.cashfree, { environment: "sandbox", clientId: "client-id", clientSecret: "client-secret", apiVersion: "2025-01-01" });
+  let query;
+  PaymentCheckout.findOne = async (value) => { query = value; return value.user === "user-id" ? checkout : null; };
+  global.fetch = async (url) => ({ ok: true, json: async () => url.endsWith("/payments") ? [] : ({ order_id: checkout.cashfreeOrderId, order_amount: 650, order_currency: "INR", order_status: "ACTIVE" }) });
+  const result = await getPaymentCheckoutStatus("user-id", checkout.cashfreeOrderId);
+  assert.deepEqual(query, { cashfreeOrderId: checkout.cashfreeOrderId, user: "user-id" });
+  assert.equal(result.status, "pending");
+  await assert.rejects(() => getPaymentCheckoutStatus("other-user", checkout.cashfreeOrderId), /not found/i);
+});
+
+test("duplicate polling of a completed checkout returns the same safe order without provider calls", async () => {
+  const paidCheckout = { ...checkout, status: "paid", order: "order-id" };
+  const storedOrder = { _id: "order-id", paymentStatus: "paid", products: [{ title: "Oil", variantSku: "PRIVATE-SKU", shippingWeight: 1 }], shiprocketShippingCost: 98 };
+  PaymentCheckout.findOne = async ({ user }) => user === "user-id" ? paidCheckout : null;
+  Order.findById = async () => storedOrder;
+  global.fetch = async () => { throw new Error("Provider must not be called for an already completed checkout"); };
+  const first = await getPaymentCheckoutStatus("user-id", checkout.cashfreeOrderId);
+  const second = await getPaymentCheckoutStatus("user-id", checkout.cashfreeOrderId);
+  assert.equal(first.status, "paid");
+  assert.equal(second.order._id, "order-id");
+  assert.equal(second.order.products[0].variantSku, undefined);
+  assert.equal(second.order.shiprocketShippingCost, undefined);
 });
 
 test("Shiprocket failure blocks Cashfree order creation with a controlled error", async () => {
@@ -74,13 +101,15 @@ test("duplicate verified payment resolves to the existing order", async () => {
   PaymentCheckout.updateOne = async () => ({ modifiedCount: 1 });
   const existingOrder = { _id: "existing-order", user: "user-id", products: [{ product: "product-1" }] };
   Order.findOne = async () => existingOrder;
+  Order.findOneAndUpdate = async () => existingOrder;
   let cartCleanup;
   User.updateOne = async (...args) => { cartCleanup = args; return { matchedCount: 1 }; };
   Order.updateOne = async () => ({ modifiedCount: 1 });
   global.fetch = async (url) => ({ ok: true, json: async () => url.endsWith("/payments") ? [{ cf_payment_id: "payment-1", payment_status: "SUCCESS", payment_amount: 650, payment_currency: "INR" }] : ({ cf_order_id: "123", order_id: checkout.cashfreeOrderId, order_amount: 650, order_currency: "INR", order_status: "PAID" }) });
   const order = await verifyPaymentAndCreateOrder("user-id", { cashfreeOrderId: checkout.cashfreeOrderId });
   assert.equal(order._id, "existing-order");
-  assert.deepEqual(cartCleanup, [{ _id: "user-id" }, { $pull: { cart: { product: { $in: ["product-1"] } } } }]);
+  assert.equal(cartCleanup[0]._id, "user-id");
+  assert.match(JSON.stringify(cartCleanup[1]), /\$subtract/);
   assert.ok(existingOrder.cartCleanupCompletedAt instanceof Date);
 });
 

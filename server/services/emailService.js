@@ -2,6 +2,7 @@
 import { env } from "../config/env.js";
 import { ApiError } from "../utils/ApiError.js";
 import { logExternalFailure, isServiceAvailable } from "./serviceStatusService.js";
+import { createInvoicePdfBuffer, invoiceNumberFor } from "./invoiceService.js";
 
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character]);
@@ -53,7 +54,7 @@ async function sendWithResend(message) {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${env.email.resendApiKey}`, "Content-Type": "application/json", ...(message.idempotencyKey ? { "Idempotency-Key": message.idempotencyKey } : {}) },
-    body: JSON.stringify({ from: env.email.from, to: message.to, reply_to: message.replyTo || env.email.replyTo || undefined, subject: message.subject, text: message.text, html: applyCurrentWebsiteTheme(message.html || htmlLayout(message.subject, paragraph(escapeHtml(message.text)))) }),
+    body: JSON.stringify({ from: env.email.from, to: message.to, reply_to: message.replyTo || env.email.replyTo || undefined, subject: message.subject, text: message.text, html: applyCurrentWebsiteTheme(message.html || htmlLayout(message.subject, paragraph(escapeHtml(message.text)))), attachments: message.attachments }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new ApiError(data.message || "Email delivery failed.", 502);
@@ -112,7 +113,7 @@ export function sendContactFormEmail(message) {
   return sendMail({ to: env.email.contactTo, replyTo: message.email, subject: `Swavalambi Siddaganga Oil Mill contact: ${subject}`, text, html: htmlLayout("New contact message", `${details}${paragraph(escapeHtml(message.message).replace(/\n/g, "<br>"))}`, `New website message from ${message.name}.`) });
 }
 
-export function sendOrderConfirmationEmail(order) {
+export async function sendOrderConfirmationEmail(order) {
   if (!order?.user?.email) return Promise.resolve({ skipped: true, reason: "CUSTOMER_EMAIL_MISSING" });
   const orderId = String(order._id);
   const allProducts = (Array.isArray(order.products) ? order.products : []).filter(Boolean);
@@ -120,7 +121,10 @@ export function sendOrderConfirmationEmail(order) {
   const productRows = products.map((item) => `<tr><td style="padding:9px 12px 9px 0;border-bottom:1px solid #eee6da;color:#2f241d;font-size:14px">${escapeHtml(item.title || "Product")}</td><td align="center" style="padding:9px 8px;border-bottom:1px solid #eee6da;color:#76685c;font-size:14px">${escapeHtml(item.quantity || 1)}</td></tr>`).join("");
   const remainingProducts = Math.max(0, allProducts.length - products.length);
   const productText = `${products.map((item) => `${item.title || "Product"} x ${item.quantity || 1}`).join("\n")}${remainingProducts ? `\n+ ${remainingProducts} more item${remainingProducts === 1 ? "" : "s"}` : ""}`;
-  const trackUrl = `${env.clientUrl}/account/orders/${encodeURIComponent(orderId)}`;
+  const invoiceUrl = `${env.clientUrl}/account/orders/${encodeURIComponent(orderId)}?invoice=1`;
+  const trackUrl = `${env.clientUrl}/track/${encodeURIComponent(orderId)}`;
+  const invoiceNumber = invoiceNumberFor(order);
+  const invoice = await createInvoicePdfBuffer(order);
   const paymentStatus = String(order.paymentStatus || "pending").replaceAll("_", " ");
   const amount = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(order.totalAmount) || 0);
   const details = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;background:#faf6ef"><tr><td style="padding:12px 16px;color:#76685c;font-size:13px">Order ID</td><td align="right" style="padding:12px 16px;color:#2f241d;font-size:14px;font-weight:700;word-break:break-all">${escapeHtml(orderId)}</td></tr><tr><td style="padding:0 16px 12px;color:#76685c;font-size:13px">Payment</td><td align="right" style="padding:0 16px 12px;color:#2f241d;font-size:14px;text-transform:capitalize">${escapeHtml(paymentStatus)}</td></tr><tr><td style="padding:0 16px 12px;color:#76685c;font-size:13px">Total</td><td align="right" style="padding:0 16px 12px;color:#214f3b;font-size:15px;font-weight:700">${escapeHtml(amount)}</td></tr></table>`;
@@ -128,8 +132,9 @@ export function sendOrderConfirmationEmail(order) {
   return sendMail({
     to: order.user.email,
     subject: `Order ${orderId} confirmed`,
-    text: `Your order #${orderId} has been confirmed and is now being prepared.\n\n${productText}\n\nTotal: ${amount}\nPayment: ${paymentStatus}\nTrack your order: ${trackUrl}`,
-    html: htmlLayout("Order confirmed", `${paragraph(`Your order <strong>#${escapeHtml(orderId)}</strong> has been confirmed and is now being prepared.`)}${details}${items}${actionButton("Track Your Order", trackUrl)}`, "Your order has been confirmed."),
+    text: `Your order #${orderId} has been confirmed and is now being prepared.\n\n${productText}\n\nTotal: ${amount}\nPayment: ${paymentStatus}\nView or download invoice: ${invoiceUrl}\nTrack your order: ${trackUrl}`,
+    html: htmlLayout("Order confirmed", `${paragraph(`Your order <strong>#${escapeHtml(orderId)}</strong> has been confirmed and is now being prepared.`)}${details}${items}${actionButton("View / Download Invoice", invoiceUrl)}${actionButton("Track Order", trackUrl)}`, "Your order has been confirmed."),
+    attachments: [{ filename: `Invoice-${invoiceNumber}.pdf`, content: invoice.toString("base64") }],
     idempotencyKey: `order-confirmed/${orderId}`,
   });
 }

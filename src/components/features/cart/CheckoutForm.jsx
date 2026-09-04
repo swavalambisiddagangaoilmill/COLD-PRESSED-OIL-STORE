@@ -4,7 +4,7 @@ import { CreditCard, Home, Truck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getAuthToken } from "../../../api/apiClient.js";
-import { createOrder, createPaymentIntent, getShippingQuote, verifyPayment } from "../../../services/checkoutService.js";
+import { createOrder, createPaymentIntent, getPaymentStatus, getShippingQuote } from "../../../services/checkoutService.js";
 import { fetchAccountProfile } from "../../../services/accountService.js";
 import { useCart } from "../../../hooks/useCart.jsx";
 import { formatCurrency } from "../../../utils/formatCurrency.js";
@@ -15,6 +15,38 @@ import Button from "../../ui/Button.jsx";
 import Input from "../../ui/Input.jsx";
 
 const cashfreeLoaders = new Map();
+const PENDING_PAYMENT_KEY = "ss_cashfree_pending_payment";
+const PAYMENT_POLL_INTERVAL_MS = 2500;
+const PAYMENT_POLL_TIMEOUT_MS = 15 * 60 * 1000;
+
+const wait = (duration) => new Promise((resolve) => window.setTimeout(resolve, duration));
+
+async function pollPaymentStatus(cashfreeOrderId, isActive = () => true) {
+  const deadline = Date.now() + PAYMENT_POLL_TIMEOUT_MS;
+  let lastNetworkError;
+  while (Date.now() < deadline && isActive()) {
+    try {
+      const result = await getPaymentStatus(cashfreeOrderId);
+      if (result.status === "paid" && result.order) return result.order;
+      if (["failed", "cancelled", "expired"].includes(result.status)) {
+        const error = new Error(result.status === "expired" ? "The payment session expired. Your cart is unchanged." : "Payment was not completed. Your cart is unchanged.");
+        error.paymentTerminal = true;
+        throw error;
+      }
+      lastNetworkError = undefined;
+    } catch (error) {
+      if (error.paymentTerminal || [401, 403, 404].includes(error.status)) throw error;
+      lastNetworkError = error;
+    }
+    await wait(PAYMENT_POLL_INTERVAL_MS);
+  }
+  if (!isActive()) {
+    const error = new Error("Payment status check stopped.");
+    error.pollingAborted = true;
+    throw error;
+  }
+  throw lastNetworkError || new Error("Payment confirmation is taking longer than expected. Your cart is unchanged; refresh this page to check again.");
+}
 
 function loadCashfreeCheckout(mode) {
   if (!cashfreeLoaders.has(mode)) {
@@ -60,6 +92,8 @@ export default function CheckoutForm() {
   const { showToast, showCritical } = useToast();
   const formRef = useRef(null);
   const submissionInFlightRef = useRef(false);
+  const pendingResumeRef = useRef(false);
+  const componentActiveRef = useRef(true);
   const [savedAddresses, setSavedAddresses] = useState([]);
   const [profile, setProfile] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("online");
@@ -83,6 +117,11 @@ export default function CheckoutForm() {
       if (formRef.current?.elements?.email) formRef.current.elements.email.value = data.user?.email || "";
     }).catch(() => {});
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    componentActiveRef.current = true;
+    return () => { componentActiveRef.current = false; };
   }, []);
 
 
@@ -138,12 +177,34 @@ export default function CheckoutForm() {
   };
 
   const finishOrder = async (order, shippingAddress, purchasedItems, setCheckoutStage) => {
+    window.sessionStorage.removeItem(PENDING_PAYMENT_KEY);
     writeGuestSession({ checkoutDraft: {} });
     setCheckoutStage("cart_cleanup");
-    await completePurchase(purchasedItems.map((item) => item._id || item.id));
+    await completePurchase(purchasedItems);
     showToast("Order placed successfully.", "success", null, { id: `order-${order?._id || "complete"}` });
     navigate("/order/success", { state: { order: formatOrderForSuccess(order, shippingAddress, purchasedItems, totals.total, profile) } });
   };
+
+  useEffect(() => {
+    if (pendingResumeRef.current || !getAuthToken()) return;
+    let pending;
+    try { pending = JSON.parse(window.sessionStorage.getItem(PENDING_PAYMENT_KEY) || "null"); } catch { pending = null; }
+    if (!pending?.cashfreeOrderId) return;
+    pendingResumeRef.current = true;
+    submissionInFlightRef.current = true;
+    setProcessingStep("verifying");
+    pollPaymentStatus(pending.cashfreeOrderId, () => componentActiveRef.current)
+      .then((order) => finishOrder(order, pending.shippingAddress || order.shippingAddress, pending.purchasedItems || [], () => {}))
+      .catch((resumeError) => {
+        if (resumeError.pollingAborted) return;
+        if (resumeError.paymentTerminal || [401, 403, 404].includes(resumeError.status)) window.sessionStorage.removeItem(PENDING_PAYMENT_KEY);
+        setError(resumeError.message || "Payment status could not be checked. Refresh to try again.");
+      })
+      .finally(() => {
+        submissionInFlightRef.current = false;
+        setProcessingStep("");
+      });
+  }, []);
 
   const submitCodOrder = async (orderPayload, purchasedItems, setCheckoutStage) => {
     setProcessingStep("cod");
@@ -162,16 +223,18 @@ export default function CheckoutForm() {
     setCheckoutStage("cashfree_initialization");
     const cashfree = await loadCashfreeCheckout(mode);
     if (!cashfree) throw new Error("Unable to load Cashfree Checkout. Please try again.");
+    window.sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({ cashfreeOrderId: payment.orderId, shippingAddress: orderPayload.order.shippingAddress, purchasedItems }));
     setCheckoutStage("cashfree_checkout");
-    const result = await cashfree.checkout({ paymentSessionId: payment.paymentSessionId, redirectTarget: "_modal" });
-    if (result?.error) {
-      setCheckoutStage("payment_cancelled");
-      throw new Error("Payment was not completed. Your cart is unchanged.");
-    }
+    cashfree.checkout({ paymentSessionId: payment.paymentSessionId, redirectTarget: "_modal" }).catch(() => {});
     setProcessingStep("verifying");
     setCheckoutStage("payment_verification");
-    const verified = await verifyPayment({ cashfreeOrderId: payment.orderId });
-    await finishOrder(verified.order, orderPayload.order.shippingAddress, purchasedItems, setCheckoutStage);
+    try {
+      const order = await pollPaymentStatus(payment.orderId, () => componentActiveRef.current);
+      await finishOrder(order, orderPayload.order.shippingAddress, purchasedItems, setCheckoutStage);
+    } catch (paymentError) {
+      if (paymentError.paymentTerminal || [401, 403, 404].includes(paymentError.status)) window.sessionStorage.removeItem(PENDING_PAYMENT_KEY);
+      throw paymentError;
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -201,6 +264,7 @@ export default function CheckoutForm() {
       if (paymentMethod === "cod") await submitCodOrder(orderPayload, validated.items, setCheckoutStage);
       else await submitCashfreeOrder(orderPayload, validated.items, setCheckoutStage);
     } catch (err) {
+      if (err?.pollingAborted) return;
       const sourceError = err instanceof Error ? err : new Error("Checkout processing failed.");
       const contextualError = Object.assign(new Error(sourceError.message, { cause: sourceError }), {
         status: sourceError.status,

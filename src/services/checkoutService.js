@@ -26,3 +26,7 @@ export async function verifyPayment(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export function getPaymentStatus(cashfreeOrderId, options = {}) {
+  return apiRequest(API_ENDPOINTS.paymentStatus(cashfreeOrderId), options);
+}

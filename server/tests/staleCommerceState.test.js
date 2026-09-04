@@ -4,7 +4,7 @@ import User from "../models/User.js";
 import Product from "../models/Product.js";
 import Order from "../models/Order.js";
 import Offer from "../models/Offer.js";
-import { clearPurchasedCart, createOrder } from "../services/orderService.js";
+import { clearPurchasedCart, createOrder, ensureOrderCartCleanup } from "../services/orderService.js";
 import { getCart } from "../services/cartService.js";
 import { getWishlist } from "../services/wishlistService.js";
 import { normalizeCartItem } from "../../src/services/cartService.js";
@@ -16,9 +16,11 @@ const originalFindById = User.findById;
 const originalProductFind = Product.find;
 const originalProductUpdate = Product.updateOne;
 const originalOrderCreate = Order.create;
+const originalOrderFindOneAndUpdate = Order.findOneAndUpdate;
+const originalOrderUpdate = Order.updateOne;
 const originalOfferFind = Offer.find;
 test.beforeEach(() => { Offer.find = () => ({ lean: async () => [] }); });
-test.afterEach(() => { User.updateOne = originalUpdateOne; User.findById = originalFindById; Product.find = originalProductFind; Product.updateOne = originalProductUpdate; Order.create = originalOrderCreate; Offer.find = originalOfferFind; });
+test.afterEach(() => { User.updateOne = originalUpdateOne; User.findById = originalFindById; Product.find = originalProductFind; Product.updateOne = originalProductUpdate; Order.create = originalOrderCreate; Order.findOneAndUpdate = originalOrderFindOneAndUpdate; Order.updateOne = originalOrderUpdate; Offer.find = originalOfferFind; });
 
 function mockUserSelection(value) {
   User.findById = () => ({ select: () => ({ lean: async () => value }) });
@@ -46,37 +48,54 @@ test("wishlist read removes only missing or inactive product references", async 
   assert.deepEqual(update[1].wishlist, ["valid"]);
 });
 
-test("successful purchase removes only purchased persisted cart references", async () => {
+test("successful purchase atomically subtracts exact product and variant quantities", async () => {
   let operation;
   User.updateOne = async (...args) => { operation = args; return { matchedCount: 1 }; };
-  await clearPurchasedCart("user-1", ["product-1", "product-2"]);
-  assert.deepEqual(operation, [
-    { _id: "user-1" },
-    { $pull: { cart: { product: { $in: ["product-1", "product-2"] } } } },
-  ]);
+  await clearPurchasedCart("user-1", [{ product: "product-1", variant: "variant-1", quantity: 2 }, { product: "product-1", variant: "variant-2", quantity: 1 }]);
+  assert.deepEqual(operation[0], { _id: "user-1" });
+  assert.ok(Array.isArray(operation[1]));
+  const serialized = JSON.stringify(operation[1]);
+  assert.match(serialized, /variant-1/);
+  assert.match(serialized, /variant-2/);
+  assert.match(serialized, /\$subtract/);
+  assert.match(serialized, /\$filter/);
+});
+
+test("duplicate successful completion claims cart cleanup only once", async () => {
+  const order = { _id: "order-1", user: "user-1", products: [{ product: "product-1", variant: "variant-1", quantity: 1 }] };
+  let claims = 0;
+  let cartWrites = 0;
+  Order.findOneAndUpdate = async () => (++claims === 1 ? order : null);
+  Order.updateOne = async () => ({ modifiedCount: 1 });
+  User.updateOne = async () => { cartWrites += 1; return { matchedCount: 1 }; };
+  await Promise.all([ensureOrderCartCleanup(order), ensureOrderCartCleanup({ ...order })]);
+  assert.equal(cartWrites, 1);
+  assert.ok(order.cartCleanupCompletedAt instanceof Date);
 });
 
 test("cart cleanup failure after order persistence never rolls inventory back or creates another order", async () => {
-  const product = { _id: { toString: () => "product-1" }, title: "Oil", stock: 5, price: 500, category: "category-1", codEnabled: true, images: [] };
+  const variant = { _id: "variant-1", size: "1L", litres: 1, price: 500, shippingWeight: 1, dimensions: { length: 5, width: 5, height: 10 }, images: [], isActive: true };
+  const product = { _id: { toString: () => "product-1" }, title: "Oil", stock: 5, price: 500, category: "category-1", codEnabled: true, images: [], variants: [variant] };
   Product.find = async () => [product];
   const stockWrites = [];
   Product.updateOne = async (...args) => { stockWrites.push(args); return { modifiedCount: 1 }; };
   let createCalls = 0;
   Order.create = async (value) => { createCalls += 1; return { ...value, _id: "order-1" }; };
+  Order.findOneAndUpdate = async () => ({ _id: "order-1", user: "user-1", products: [{ product: "product-1", variant: "variant-1", quantity: 1 }] });
   User.updateOne = async () => { throw new Error("cart persistence unavailable"); };
 
   const trustedShippingQuote = { shiprocketShippingCost: 98, customerShippingCharge: 100, courierId: 1, courierName: "Test courier", deliveryPincode: "560001", shipmentWeight: 1 };
-  await assert.rejects(createOrder("user-1", { products: [{ product: "product-1", quantity: 1 }], shippingAddress: { postalCode: "560001" }, paymentMethod: "cod" }, { trustedShippingQuote }), /cart persistence unavailable/);
+  await assert.rejects(createOrder("user-1", { products: [{ product: "product-1", variant: "variant-1", quantity: 1 }], shippingAddress: { postalCode: "560001" }, paymentMethod: "cod" }, { trustedShippingQuote }), /cart persistence unavailable/);
 
   assert.equal(createCalls, 1);
   assert.equal(stockWrites.length, 1);
   assert.deepEqual(stockWrites[0][1], { $inc: { stock: -1 } });
 });
 
-test("cart normalization keeps authoritative stock, active state, and current price", () => {
+test("cart normalization keeps availability, active state, and current price without exposing stock count", () => {
   const item = normalizeCartItem({ product: { _id: "product-1", title: "Oil", price: 450, discountPrice: 399, stock: 3, isActive: true }, quantity: 2 });
   assert.equal(item.price, 399);
-  assert.equal(item.stock, 3);
+  assert.equal(item.stock, Number.MAX_SAFE_INTEGER);
   assert.equal(item.isActive, true);
   assert.equal(item.quantity, 2);
 });
@@ -88,11 +107,11 @@ test("guest cart and wishlist retain valid products while removing stale product
   assert.deepEqual(reconcileWishlistWithCatalog(saved, catalog), catalog);
 });
 
-test("purchased item removal is selective and idempotent while failed flows preserve cart", () => {
-  const cart = [{ id: "purchased", quantity: 1 }, { id: "other", quantity: 2 }];
-  const afterSuccess = removePurchasedItems(cart, ["purchased"]);
-  assert.deepEqual(afterSuccess, [{ id: "other", quantity: 2 }]);
-  assert.deepEqual(removePurchasedItems(afterSuccess, ["purchased"]), afterSuccess);
+test("purchased item removal preserves other variants and quantities added after checkout", () => {
+  const cart = [{ id: "purchased", variantId: "1L", quantity: 3 }, { id: "purchased", variantId: "5L", quantity: 2 }, { id: "other", quantity: 2 }];
+  const purchased = [{ id: "purchased", variantId: "1L", quantity: 2 }];
+  const afterSuccess = removePurchasedItems(cart, purchased);
+  assert.deepEqual(afterSuccess, [{ id: "purchased", variantId: "1L", quantity: 1 }, { id: "purchased", variantId: "5L", quantity: 2 }, { id: "other", quantity: 2 }]);
   assert.deepEqual(removePurchasedItems(cart, []), cart);
 });
 

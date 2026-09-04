@@ -1,4 +1,5 @@
 // Order business logic.
+import mongoose from "mongoose";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import User from "../models/User.js";
@@ -145,18 +146,43 @@ export async function updateOrderStatus(orderId, payload) {
   return order;
 }
 
-export async function clearPurchasedCart(userId, productIds) {
-  if (!productIds.length) return;
-  const result = await User.updateOne({ _id: userId }, { $pull: { cart: { product: { $in: productIds } } } });
+export async function clearPurchasedCart(userId, purchasedItems = []) {
+  const items = normalizeOrderProducts(purchasedItems);
+  if (!items.length) return;
+  const storedId = (value) => mongoose.isValidObjectId(value) ? new mongoose.Types.ObjectId(value) : value;
+  const branches = items.map((item) => ({
+    case: { $and: [{ $eq: ["$$line.product", storedId(item.product)] }, { $eq: [{ $ifNull: ["$$line.variant", null] }, item.variant ? storedId(item.variant) : null] }] },
+    then: item.quantity,
+  }));
+  const adjustedCart = { $map: {
+    input: "$cart",
+    as: "line",
+    in: { $let: {
+      vars: { purchased: { $switch: { branches, default: 0 } } },
+      in: { $mergeObjects: ["$$line", { quantity: { $subtract: ["$$line.quantity", "$$purchased"] } }] },
+    } },
+  } };
+  const result = await User.updateOne({ _id: userId }, [{ $set: { cart: { $filter: { input: adjustedCart, as: "line", cond: { $gt: ["$$line.quantity", 0] } } } } }]);
   if (result.matchedCount !== undefined && result.matchedCount !== 1) throw new ApiError("Customer cart could not be reconciled.", 409);
 }
 
 export async function ensureOrderCartCleanup(order) {
   if (!order || order.cartCleanupCompletedAt) return order;
-  const productIds = (Array.isArray(order.products) ? order.products : []).map((item) => item?.product).filter(Boolean);
-  await clearPurchasedCart(order.user, productIds);
-  const completedAt = new Date();
-  await Order.updateOne({ _id: order._id, cartCleanupCompletedAt: null }, { $set: { cartCleanupCompletedAt: completedAt } });
-  order.cartCleanupCompletedAt = completedAt;
-  return order;
+  const startedAt = new Date();
+  const claimed = await Order.findOneAndUpdate(
+    { _id: order._id, cartCleanupCompletedAt: null, $or: [{ cartCleanupStartedAt: null }, { cartCleanupStartedAt: { $exists: false } }, { cartCleanupStartedAt: { $lt: new Date(Date.now() - 5 * 60 * 1000) } }] },
+    { $set: { cartCleanupStartedAt: startedAt } },
+    { new: true },
+  );
+  if (!claimed) return order;
+  try {
+    await clearPurchasedCart(claimed.user, claimed.products || []);
+    const completedAt = new Date();
+    await Order.updateOne({ _id: claimed._id, cartCleanupStartedAt: startedAt }, { $set: { cartCleanupCompletedAt: completedAt }, $unset: { cartCleanupStartedAt: 1 } });
+    order.cartCleanupCompletedAt = completedAt;
+    return order;
+  } catch (error) {
+    await Order.updateOne({ _id: claimed._id, cartCleanupStartedAt: startedAt }, { $unset: { cartCleanupStartedAt: 1 } }).catch(() => undefined);
+    throw error;
+  }
 }

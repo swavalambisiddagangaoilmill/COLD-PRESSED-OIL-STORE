@@ -5,6 +5,7 @@ import PaymentCheckout from "../models/PaymentCheckout.js";
 import Product from "../models/Product.js";
 import User from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
+import { customerOrderView } from "../utils/customerCommerceView.js";
 import { createAdminNotification } from "./adminNotificationService.js";
 import { calculateCheckoutTotals, validateCouponForItems } from "./couponService.js";
 import { createOrder as createStoreOrder, ensureOrderCartCleanup } from "./orderService.js";
@@ -71,10 +72,10 @@ export async function createPaymentOrder(userId, payload) {
   if (phone.length !== 10) throw new ApiError("A valid customer phone is required for online payment.", 400);
   const orderId = `cf_${crypto.randomUUID()}`;
   const idempotencyKey = crypto.randomUUID();
-  const provider = await request("/orders", { method: "POST", headers: { "x-idempotency-key": idempotencyKey, "x-request-id": idempotencyKey }, body: JSON.stringify({ order_id: orderId, order_amount: amount, order_currency: CURRENCY, customer_details: { customer_id: String(user._id), customer_name: String(payload.customer?.name || user.name || "Customer").slice(0, 100), customer_email: String(payload.customer?.email || user.email || "").slice(0, 100), customer_phone: phone }, order_meta: { return_url: `${env.clientUrl}/checkout?cashfree_order_id=${encodeURIComponent(orderId)}`, notify_url: `${env.backendPublicUrl}/api/payments/webhook` }, order_note: "Swavalambi Siddaganga Oil Mill order" }) });
+  const provider = await request("/orders", { method: "POST", headers: { "x-idempotency-key": idempotencyKey, "x-request-id": idempotencyKey }, body: JSON.stringify({ order_id: orderId, order_amount: amount, order_currency: CURRENCY, customer_details: { customer_id: String(user._id), customer_name: String(payload.customer?.name || user.name || "Customer").slice(0, 100), customer_email: String(payload.customer?.email || user.email || "").slice(0, 100), customer_phone: phone }, order_meta: { return_url: `${env.clientUrl}/payment/return`, notify_url: `${env.backendPublicUrl}/api/payments/webhook` }, order_note: "Swavalambi Siddaganga Oil Mill order" }) });
   if (provider.order_id !== orderId || Number(provider.order_amount) !== amount || provider.order_currency !== CURRENCY || !provider.payment_session_id) throw new ApiError("Payment provider returned an invalid order.", 502);
   await PaymentCheckout.create({ user: userId, amount, currency: CURRENCY, cashfreeOrderId: orderId, cashfreeCfOrderId: provider.cf_order_id, paymentSessionId: provider.payment_session_id, razorpayQrId: orderId, idempotencyKey, orderPayload: { ...orderPayload, _shippingQuote: shippingQuote }, expiresAt: provider.order_expiry_time ? new Date(provider.order_expiry_time) : undefined });
-  return { orderId, paymentSessionId: provider.payment_session_id, environment: env.cashfree.environment === "production" ? "production" : "sandbox" };
+  return { orderId, paymentSessionId: provider.payment_session_id, environment: env.cashfree.environment === "production" ? "production" : "sandbox", expiresAt: provider.order_expiry_time };
 }
 
 async function verifyProvider(checkout) {
@@ -87,9 +88,9 @@ async function verifyProvider(checkout) {
   return { order, payment };
 }
 
-async function finalize(checkout) {
+async function finalize(checkout, verifiedPayment) {
   if (checkout.status === "paid" && checkout.order) return Order.findById(checkout.order);
-  const verified = await verifyProvider(checkout);
+  const verified = verifiedPayment || await verifyProvider(checkout);
   const paymentId = String(verified.payment.cf_payment_id);
   const duplicate = await Order.findOne({ $or: [{ cashfreePaymentId: paymentId }, { cashfreeOrderId: checkout.cashfreeOrderId }] });
   if (duplicate) {
@@ -97,7 +98,7 @@ async function finalize(checkout) {
     await PaymentCheckout.updateOne({ _id: checkout._id }, { status: "paid", cashfreePaymentId: paymentId, order: duplicate._id });
     return duplicate;
   }
-  const claimed = await PaymentCheckout.findOneAndUpdate({ _id: checkout._id, status: { $in: ["created", "failed"] } }, { status: "processing" }, { new: true });
+  const claimed = await PaymentCheckout.findOneAndUpdate({ _id: checkout._id, status: { $in: ["created", "expired", "failed", "cancelled"] } }, { status: "processing" }, { new: true });
   if (!claimed) {
     const current = await PaymentCheckout.findById(checkout._id);
     if (current?.status === "paid" && current.order) return Order.findById(current.order);
@@ -119,6 +120,30 @@ export async function verifyPaymentAndCreateOrder(userId, payload) {
   const checkout = await PaymentCheckout.findOne({ cashfreeOrderId: payload.cashfreeOrderId, user: userId });
   if (!checkout) throw new ApiError("Payment order not found.", 404);
   return finalize(checkout);
+}
+
+export async function getPaymentCheckoutStatus(userId, cashfreeOrderId) {
+  const checkout = await PaymentCheckout.findOne({ cashfreeOrderId, user: userId });
+  if (!checkout) throw new ApiError("Payment order not found.", 404);
+  if (checkout.status === "paid" && checkout.order) {
+    const order = await Order.findById(checkout.order);
+    return { status: "paid", order: order ? customerOrderView(order) : null };
+  }
+  if (checkout.status === "processing") return { status: "pending", expiresAt: checkout.expiresAt };
+
+  try {
+    const verified = await verifyProvider(checkout);
+    const order = await finalize(checkout, verified);
+    return { status: "paid", order: customerOrderView(order) };
+  } catch (error) {
+    if (error.statusCode !== 409) throw error;
+    if (checkout.expiresAt && new Date(checkout.expiresAt).getTime() <= Date.now()) {
+      await PaymentCheckout.updateOne({ _id: checkout._id, status: { $ne: "paid" } }, { status: "expired" });
+      return { status: "expired", expiresAt: checkout.expiresAt };
+    }
+    if (["failed", "cancelled", "expired"].includes(checkout.status)) return { status: checkout.status, expiresAt: checkout.expiresAt };
+    return { status: "pending", expiresAt: checkout.expiresAt };
+  }
 }
 
 export async function processCashfreeWebhook(rawBody, timestamp, signature) {
