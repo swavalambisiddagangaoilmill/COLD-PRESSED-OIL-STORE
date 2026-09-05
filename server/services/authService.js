@@ -52,14 +52,17 @@ function customerOtpHash(email, code) {
 
 export async function requestCustomerAuthOtp(payload, req) {
   const email = normalizeEmail(payload.email);
+  const loginFlow = payload.flow === "login";
+  const user = await User.findOne({ email }).select("name role isDisabled customerOtpWelcomeSentAt");
+  if (loginFlow && (!user || user.role !== "user")) throw new ApiError("Account not found. Create an account first.", 404, [{ code: "ACCOUNT_NOT_FOUND" }]);
+  if (loginFlow && user.isDisabled) throw new ApiError("This account is disabled.", 403);
+  if (!loginFlow && user?.role === "admin") return;
+
   const now = new Date();
   const current = await CustomerAuthOtp.findOne({ email });
   const withinWindow = current?.requestWindowStartedAt && now - current.requestWindowStartedAt < customerOtpWindowMs;
   if (current?.lastSentAt && now - current.lastSentAt < customerOtpCooldownMs) return;
   if (withinWindow && current.requestCount >= customerOtpMaxRequests) return;
-
-  const user = await User.findOne({ email }).select("role isDisabled");
-  if (user?.role === "admin") return;
 
   const code = String(crypto.randomInt(100000, 1000000));
   const requestCount = withinWindow ? current.requestCount + 1 : 1;
@@ -69,7 +72,10 @@ export async function requestCustomerAuthOtp(payload, req) {
     { $set: { name: payload.name?.trim() || undefined, flow: payload.flow, codeHash: customerOtpHash(email, code), expiresAt: new Date(now.getTime() + customerOtpTtlMs), attempts: 0, maxAttempts: 5, lastSentAt: now, requestWindowStartedAt, requestCount, consumedAt: null, requestIpHash: hashValue(req?.ip || "unknown") } },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
-  await sendCustomerAuthOtpEmail(email, code);
+  const firstOtp = loginFlow && !user.customerOtpWelcomeSentAt
+    ? Boolean((await User.updateOne({ _id: user._id, customerOtpWelcomeSentAt: null }, { $set: { customerOtpWelcomeSentAt: now } })).modifiedCount)
+    : false;
+  await sendCustomerAuthOtpEmail(user || { email, name: payload.name?.trim() }, code, firstOtp);
 }
 
 export async function verifyCustomerAuthOtp(payload, req) {

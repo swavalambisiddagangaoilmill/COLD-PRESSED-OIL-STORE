@@ -94,8 +94,19 @@ export function sendOtpEmail(user, code, purpose) {
   return sendMail({ to: user.email, subject: "Swavalambi Siddaganga Oil Mill security code", text: `Your ${purpose} code is ${code}. It expires shortly.`, html: htmlLayout("Security code", `${paragraph(`Your ${escapeHtml(purpose)} code is:`)}${codePanel(code)}${paragraph("This code expires shortly and can be used only once.", "color:#76685c;font-size:13px")}`, "Your security code is ready.") });
 }
 
-export function sendCustomerAuthOtpEmail(email, code) {
-  return sendMail({ to: email, subject: "Your Swavalambi Siddaganga Oil Mill login code", text: `Your one-time login code is ${code}. It expires in 5 minutes.`, html: htmlLayout("Your one-time login code", `${paragraph("Use this code to access your customer account:")}${codePanel(code)}${paragraph("This code expires in 5 minutes and can be used only once.", "color:#76685c;font-size:13px")}`, "Your one-time login code is ready.") });
+export function customerAuthOtpMessage(user, code, firstOtp = false) {
+  const recipient = typeof user === "string" ? { email: user } : user;
+  const welcome = firstOtp && recipient?.name;
+  const subject = welcome ? "Welcome to Swavalambi Siddaganga Oil Mill" : "Your Swavalambi Siddaganga Oil Mill login code";
+  const greeting = welcome ? paragraph(`Welcome to Swavalambi Siddaganga Oil Mill, ${escapeHtml(recipient.name)}.`) : paragraph("Use this code to access your customer account:");
+  const text = welcome
+    ? `Welcome to Swavalambi Siddaganga Oil Mill, ${recipient.name}. Your one-time login code is ${code}. It expires in 5 minutes.`
+    : `Your one-time login code is ${code}. It expires in 5 minutes.`;
+  return { to: recipient.email, subject, text, html: htmlLayout(welcome ? "Welcome to the mill" : "Your one-time login code", `${greeting}${codePanel(code)}${paragraph("This code expires in 5 minutes and can be used only once. Never share it with anyone.", "color:#76685c;font-size:13px")}`, welcome ? "Welcome—your secure login code is ready." : "Your one-time login code is ready.") };
+}
+
+export function sendCustomerAuthOtpEmail(user, code, firstOtp = false) {
+  return sendMail(customerAuthOtpMessage(user, code, firstOtp));
 }
 
 export function sendNewDeviceEmail(user, details) {

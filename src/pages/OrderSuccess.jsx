@@ -4,10 +4,12 @@ import { Link, Navigate, useLocation } from "react-router-dom";
 import Container from "../components/ui/Container.jsx";
 import { formatCurrency } from "../utils/formatCurrency.js";
 import { downloadInvoicePdf } from "../utils/invoicePdf.js";
+import { confirmedOrderForSession } from "../utils/checkoutSession.js";
 
 export default function OrderSuccess() {
-  const { state } = useLocation();
-  const order = state?.order;
+  const { state, search } = useLocation();
+  const checkoutSessionId = new URLSearchParams(search).get("checkout") || "";
+  const order = state?.checkoutSessionId === checkoutSessionId ? state.order : confirmedOrderForSession(checkoutSessionId);
   if (!order) return <Navigate to="/shop" replace />;
 
   const orderId = order._id || order.id;

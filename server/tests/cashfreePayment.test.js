@@ -12,7 +12,8 @@ import { createPaymentOrder, getPaymentCheckoutStatus, processCashfreeWebhook, v
 import { resetShiprocketAuthForTests } from "../services/shiprocketService.js";
 
 const original = { fetch: global.fetch, productFind: Product.find, offerFind: Offer.find, settingsFind: StoreSettings.findOne, userFind: User.findById, userUpdate: User.updateOne, checkoutCreate: PaymentCheckout.create, checkoutFind: PaymentCheckout.findOne, checkoutUpdate: PaymentCheckout.updateOne, orderFind: Order.findOne, orderFindById: Order.findById, orderFindOneAndUpdate: Order.findOneAndUpdate, orderUpdate: Order.updateOne };
-const checkout = { _id: "checkout-id", user: "user-id", status: "created", amount: 650, currency: "INR", cashfreeOrderId: "cf_11111111-1111-4111-8111-111111111111", orderPayload: { products: [], shippingAddress: {} } };
+const checkoutSessionId = "22222222-2222-4222-8222-222222222222";
+const checkout = { _id: "checkout-id", user: "user-id", checkoutSessionId, status: "created", amount: 650, currency: "INR", cashfreeOrderId: "cf_11111111-1111-4111-8111-111111111111", orderPayload: { products: [], shippingAddress: {} } };
 
 test.beforeEach(() => { resetShiprocketAuthForTests(); Offer.find = () => ({ lean: async () => [] }); StoreSettings.findOne = () => ({ select: () => ({ lean: async () => ({ shiprocketEnabled: true }) }) }); });
 test.afterEach(() => { resetShiprocketAuthForTests(); global.fetch = original.fetch; Product.find = original.productFind; Offer.find = original.offerFind; StoreSettings.findOne = original.settingsFind; User.findById = original.userFind; User.updateOne = original.userUpdate; PaymentCheckout.create = original.checkoutCreate; PaymentCheckout.findOne = original.checkoutFind; PaymentCheckout.updateOne = original.checkoutUpdate; Order.findOne = original.orderFind; Order.findById = original.orderFindById; Order.findOneAndUpdate = original.orderFindOneAndUpdate; Order.updateOne = original.orderUpdate; });
@@ -30,7 +31,7 @@ test("Cashfree session is created server-side and response exposes no secret", a
     sent = { headers: options.headers, body: JSON.parse(options.body) };
     return { ok: true, json: async () => ({ order_id: sent.body.order_id, order_amount: sent.body.order_amount, order_currency: "INR", cf_order_id: "123", payment_session_id: "safe-session" }) };
   };
-  const result = await createPaymentOrder("user-id", { order: { products: [{ product: "64b000000000000000000001", variant: "64b000000000000000000002", quantity: 1 }], shippingAddress: { phone: "9876543210", postalCode: "560001" } }, customer: {} });
+  const result = await createPaymentOrder("user-id", { checkoutSessionId, order: { products: [{ product: "64b000000000000000000001", variant: "64b000000000000000000002", quantity: 1 }], shippingAddress: { phone: "9876543210", postalCode: "560001" } }, customer: {} });
   assert.equal(sent.headers["x-client-secret"], "client-secret");
   assert.equal(result.paymentSessionId, "safe-session");
   assert.equal(JSON.stringify(result).includes("client-secret"), false);
@@ -39,8 +40,9 @@ test("Cashfree session is created server-side and response exposes no secret", a
   assert.equal(stored.orderPayload._shippingQuote.customerShippingCharge, 100);
   assert.equal(stored.razorpayQrId, sent.body.order_id);
   assert.equal(stored.idempotencyKey, sent.headers["x-idempotency-key"]);
-  assert.equal(sent.body.order_meta.return_url, `${env.clientUrl}/payment/return`);
-  assert.equal(sent.body.order_meta.return_url.includes("/checkout"), false);
+  assert.equal(stored.checkoutSessionId, checkoutSessionId);
+  assert.equal(result.checkoutSessionId, checkoutSessionId);
+  assert.equal(sent.body.order_meta.return_url, `${env.clientUrl}/checkout?payment_return=${checkoutSessionId}`);
 });
 
 test("payment polling is owner-scoped and reports pending without trusting the browser", async () => {
@@ -80,7 +82,7 @@ test("Shiprocket failure blocks Cashfree order creation with a controlled error"
     throw new Error("Cashfree must not be called");
   };
   await assert.rejects(
-    createPaymentOrder("user-id", { order: { products: [{ product: "64b000000000000000000001", variant: "64b000000000000000000002", quantity: 1 }], shippingAddress: { phone: "9876543210", postalCode: "560091" } }, customer: {} }),
+    createPaymentOrder("user-id", { checkoutSessionId, order: { products: [{ product: "64b000000000000000000001", variant: "64b000000000000000000002", quantity: 1 }], shippingAddress: { phone: "9876543210", postalCode: "560091" } }, customer: {} }),
     /Shipping charges could not be calculated\. Please try again\./,
   );
   assert.equal(cashfreeCalled, false);

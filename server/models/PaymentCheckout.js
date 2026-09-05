@@ -7,6 +7,7 @@ const paymentCheckoutSchema = new mongoose.Schema(
     provider: { type: String, default: "cashfree" },
     type: { type: String, enum: ["hosted_checkout"], default: "hosted_checkout" },
     status: { type: String, enum: ["created", "processing", "paid", "expired", "failed", "cancelled"], default: "created", index: true },
+    checkoutSessionId: { type: String, index: true },
     amount: { type: Number, required: true, min: 1 },
     currency: { type: String, default: "INR" },
     cashfreeOrderId: { type: String, required: true, unique: true },

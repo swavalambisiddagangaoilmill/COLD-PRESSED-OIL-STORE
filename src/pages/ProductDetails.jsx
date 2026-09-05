@@ -13,6 +13,7 @@ import WishlistToggle from "../components/features/product/WishlistToggle.jsx";
 import Container from "../components/ui/Container.jsx";
 import { getProductBySlug } from "../services/catalogService.js";
 import { readGuestSession, writeGuestSession } from "../utils/guestSession.js";
+import { productSpecifications } from "../utils/productSpecifications.js";
 
 export default function ProductDetails() {
   const { slug } = useParams();
@@ -53,6 +54,7 @@ export default function ProductDetails() {
     image: selectedVariant.images?.[0]?.url || product.image,
     gallery: (selectedVariant.images?.length ? selectedVariant.images : product.images || []).map((image) => image.url || image),
   } : product;
+  const specifications = productSpecifications(product, selectedVariant);
 
   const handleAdded = (details) => {
     const session = readGuestSession().data;
@@ -85,7 +87,7 @@ export default function ProductDetails() {
           </div>
           <div className="mt-16 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
             <div className="rounded-3xl bg-white p-7"><h2 className="font-serif text-3xl font-semibold">Description</h2><p className="mt-4 text-lg leading-8 text-ink/65">{product.description} It is produced without chemical refining, packed for freshness, and suited for customers who want a more expressive cooking oil.</p></div>
-            <div className="rounded-3xl bg-white p-7"><h2 className="font-serif text-3xl font-semibold">Specifications</h2><dl className="mt-5 grid gap-4 sm:grid-cols-2">{Object.entries(product.specifications).map(([key, value]) => <div key={key} className="rounded-2xl bg-linen p-4"><dt className="text-xs font-bold uppercase tracking-[0.16em] text-ink/45">{key}</dt><dd className="mt-1 font-semibold">{value}</dd></div>)}</dl></div>
+            <div className="rounded-3xl bg-white p-7"><h2 className="font-serif text-3xl font-semibold">Specifications</h2><dl className="mt-5 grid gap-4 sm:grid-cols-2">{Object.entries(specifications).map(([key, value]) => <div key={key} className="rounded-2xl bg-linen p-4"><dt className="text-xs font-bold uppercase tracking-[0.16em] text-ink/45">{key}</dt><dd className="mt-1 font-semibold">{value}</dd></div>)}</dl></div>
           </div>
           <RelatedProducts current={product} />
         </Container>

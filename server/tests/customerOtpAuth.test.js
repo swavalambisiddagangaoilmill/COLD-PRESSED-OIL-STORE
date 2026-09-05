@@ -11,6 +11,7 @@ const originals = {
   otpFindOneAndUpdate: CustomerAuthOtp.findOneAndUpdate,
   userFindOne: User.findOne,
   userFind: User.find,
+  userUpdateOne: User.updateOne,
   userCreate: User.create,
 };
 
@@ -20,6 +21,7 @@ afterEach(() => {
   CustomerAuthOtp.findOneAndUpdate = originals.otpFindOneAndUpdate;
   User.findOne = originals.userFindOne;
   User.find = originals.userFind;
+  User.updateOne = originals.userUpdateOne;
   User.create = originals.userCreate;
 });
 
@@ -34,6 +36,7 @@ async function issuedRecord(payload = { email: "customer@example.com", flow: "lo
   crypto.randomInt = () => 123456;
   CustomerAuthOtp.findOne = () => query(null);
   User.findOne = () => query(customer());
+  User.updateOne = async () => ({ modifiedCount: 1 });
   let stored;
   CustomerAuthOtp.findOneAndUpdate = async (filter, update) => { stored = { _id: "otp-id", email: filter.email, ...update.$set }; return stored; };
   await requestCustomerAuthOtp(payload, req);
@@ -49,7 +52,33 @@ test("OTP request stores only a hash with a five-minute expiry", async () => {
   assert.equal(record.attempts, 0);
 });
 
+test("unknown login email is rejected before an OTP is generated or stored", async () => {
+  User.findOne = () => query(null);
+  let generated = false;
+  let stored = false;
+  crypto.randomInt = () => { generated = true; return 123456; };
+  CustomerAuthOtp.findOneAndUpdate = async () => { stored = true; };
+  await assert.rejects(() => requestCustomerAuthOtp({ email: " Missing@Example.com ", flow: "login" }, req), /account not found/i);
+  assert.equal(generated, false);
+  assert.equal(stored, false);
+});
+
+test("first login OTP claims the durable welcome marker only once", async () => {
+  const existing = customer({ customerOtpWelcomeSentAt: undefined });
+  User.findOne = () => query(existing);
+  CustomerAuthOtp.findOne = () => query(null);
+  CustomerAuthOtp.findOneAndUpdate = async () => ({});
+  const updates = [];
+  User.updateOne = async (...args) => { updates.push(args); return { modifiedCount: updates.length === 1 ? 1 : 0 }; };
+  crypto.randomInt = () => 123456;
+  await requestCustomerAuthOtp({ email: existing.email, flow: "login" }, req);
+  await requestCustomerAuthOtp({ email: existing.email, flow: "login" }, req);
+  assert.equal(updates.length, 2);
+  assert.equal(updates[0][0].customerOtpWelcomeSentAt, null);
+});
+
 test("resend cooldown does not issue a replacement code", async () => {
+  User.findOne = () => query(customer({ customerOtpWelcomeSentAt: new Date() }));
   CustomerAuthOtp.findOne = () => query({ lastSentAt: new Date(), requestWindowStartedAt: new Date(), requestCount: 1 });
   let writes = 0;
   CustomerAuthOtp.findOneAndUpdate = async () => { writes += 1; };

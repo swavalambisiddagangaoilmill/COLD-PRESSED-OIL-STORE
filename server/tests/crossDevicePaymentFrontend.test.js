@@ -10,16 +10,24 @@ test("original checkout device polls an authenticated backend status and survive
   const checkout = fs.readFileSync(path.join(root, "src/components/features/cart/CheckoutForm.jsx"), "utf8");
   const service = fs.readFileSync(path.join(root, "src/services/checkoutService.js"), "utf8");
   assert.match(checkout, /pollPaymentStatus\(payment\.orderId,/);
-  assert.match(checkout, /sessionStorage\.setItem\(PENDING_PAYMENT_KEY/);
-  assert.match(checkout, /sessionStorage\.getItem\(PENDING_PAYMENT_KEY/);
+  assert.match(checkout, /writePendingPayment\(/);
+  assert.match(checkout, /resumablePendingPayment\(location\.search\)/);
   assert.match(service, /API_ENDPOINTS\.paymentStatus/);
   assert.doesNotMatch(checkout, /cashfree_order_id/);
 });
 
-test("provider return route is harmless and does not perform payment completion", () => {
-  const routes = fs.readFileSync(path.join(root, "src/routes/AppRoutes.jsx"), "utf8");
-  const statusPage = fs.readFileSync(path.join(root, "src/pages/StatusPage.jsx"), "utf8");
-  assert.match(routes, /path="\/payment\/return"/);
-  assert.match(statusPage, /return to the device where you started checkout/i);
-  assert.doesNotMatch(statusPage, /verifyPayment|completePurchase|createOrder/);
+test("same-device provider return resumes the existing authoritative checkout verification", () => {
+  const payment = fs.readFileSync(path.join(root, "server/services/paymentService.js"), "utf8");
+  const checkout = fs.readFileSync(path.join(root, "src/components/features/cart/CheckoutForm.jsx"), "utf8");
+  assert.match(payment, /\/checkout\?payment_return=\$\{encodeURIComponent\(checkoutSessionId\)\}/);
+  assert.match(checkout, /getPaymentStatus\(cashfreeOrderId\)/);
+  assert.match(checkout, /result\.status === "paid" && result\.order/);
+  assert.doesNotMatch(checkout, /cashfree_order_id/);
+});
+
+test("confirmed order snapshot survives a safe success-page refresh", () => {
+  const checkout = fs.readFileSync(path.join(root, "src/components/features/cart/CheckoutForm.jsx"), "utf8");
+  const success = fs.readFileSync(path.join(root, "src/pages/OrderSuccess.jsx"), "utf8");
+  assert.match(checkout, /writeConfirmedOrder\(checkoutSessionIdRef\.current/);
+  assert.match(success, /confirmedOrderForSession\(checkoutSessionId\)/);
 });

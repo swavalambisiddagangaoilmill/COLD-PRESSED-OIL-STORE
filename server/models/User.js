@@ -110,6 +110,7 @@ const userSchema = new mongoose.Schema(
     ],
     addresses: [addressSchema],
     emailVerified: { type: Boolean, default: false },
+    customerOtpWelcomeSentAt: { type: Date },
     emailVerificationToken: { type: String, select: false },
     emailVerificationExpires: { type: Date, select: false },
     passwordResetToken: { type: String, select: false },
@@ -151,6 +152,7 @@ userSchema.methods.toJSON = function toJSON() {
   delete user.failedLoginAttempts;
   delete user.loginLockUntil;
   delete user.turnstileRequiredUntil;
+  delete user.customerOtpWelcomeSentAt;
   if (user.sessions) user.sessions = user.sessions.map(({ refreshTokenHash, ...session }) => session);
   if (user.otpRecords) delete user.otpRecords;
   return user;

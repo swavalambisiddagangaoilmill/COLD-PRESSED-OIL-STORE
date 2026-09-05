@@ -23,7 +23,7 @@ function normalizeProduct(product) {
     discountAmount: product.discountAmount || 0,
     appliedOffer: product.appliedOffer || null,
     variants: product.variants || [],
-    category: categoryName || "Oils",
+    category: categoryName || "Not specified",
     categoryId: typeof product.category === "object" ? product.category?._id : product.category,
     image: product.image || product.images?.[0]?.url || "",
     images: product.images?.length ? product.images : [{ url: product.image || "" }],
@@ -39,10 +39,10 @@ function normalizeProduct(product) {
     isActive: product.isActive !== false,
     rating: product.rating || 4.8,
     reviews: product.reviews || 84,
-    volume: product.volume || "1L",
+    volume: product.volume || product.size || product.variants?.find((variant) => variant.isActive !== false)?.size || "Not specified",
     tags: product.tags || [categoryName || "Oil"],
     benefits: product.benefits || ["Cold pressed", "Chemical-free", "Small batch", "Fresh aroma"],
-    specifications: product.specifications || { Volume: product.volume || "1L", Method: "Cold pressed", Category: categoryName || "Oil", Storage: "Cool, dry place" },
+    specifications: product.specifications || {},
   };
 }
 
