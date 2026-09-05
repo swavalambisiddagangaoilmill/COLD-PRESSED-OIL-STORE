@@ -53,11 +53,11 @@ async function ensureUser(payload) {
   return { doc, created: true };
 }
 
-async function ensureCategory(seed, index) {
+async function ensureCategory(seed) {
   const slug = slugify(seed.name);
   const existing = await Category.findOne({ slug });
   if (existing) return { doc: existing, created: false };
-  const doc = await Category.create({ ...seed, slug, image: imageUrls[index % imageUrls.length], isActive: true });
+  const doc = await Category.create({ ...seed, slug, isActive: true });
   return { doc, created: true };
 }
 
@@ -123,7 +123,7 @@ async function seed() {
   usersCreated += [adminResult, user1Result, user2Result].filter((item) => item.created).length;
 
   const categoryResults = [];
-  for (const [index, seedItem] of categorySeeds.entries()) categoryResults.push(await ensureCategory(seedItem, index));
+  for (const seedItem of categorySeeds) categoryResults.push(await ensureCategory(seedItem));
   categoriesCreated = categoryResults.filter((item) => item.created).length;
   const categories = categoryResults.map((item) => item.doc);
 

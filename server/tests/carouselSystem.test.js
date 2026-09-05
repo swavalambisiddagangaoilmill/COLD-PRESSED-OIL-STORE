@@ -21,11 +21,14 @@ test("carousel uploads finish at the one canonical landscape size", () => {
 });
 
 test("homepage carousel is database-backed and uses one image source on every viewport", async () => {
-  const source = await readFile(new URL("../../src/components/features/home/Hero.jsx", import.meta.url), "utf8");
+  const [source, styles] = await Promise.all([readFile(new URL("../../src/components/features/home/Hero.jsx", import.meta.url), "utf8"), readFile(new URL("../../src/styles/index.css", import.meta.url), "utf8")]);
   assert.match(source, /getActiveCarousel/);
+  assert.match(source, /CAROUSEL_IMAGE\.aspect/);
   assert.match(source, /src=\{slide\.image\}/);
   assert.doesNotMatch(source, /<picture>|<source|slide\.mobile/);
   assert.doesNotMatch(source, /CAROUSEL_SLIDES/);
+  assert.match(styles, /\.hero-carousel__slide img[^]*object-fit: contain/);
+  assert.doesNotMatch(styles, /max-height: min\(52vh/);
 });
 
 test("admin carousel mutations are mounted behind authentication and role checks", async () => {
@@ -37,7 +40,7 @@ test("admin carousel mutations are mounted behind authentication and role checks
   assert.match(app, /app\.use\("\/api\/admin\/carousel", adminCarouselRoutes\)/);
   assert.match(routes, /router\.use\(protect, adminOnly/);
   assert.match(routes, /carouselUpload\.fields/);
-  assert.match(uploads, /width: 1920, height: 1080, crop: "limit"/);
+  assert.match(uploads, /width: CAROUSEL_IMAGE\.width, height: CAROUSEL_IMAGE\.height, crop: "limit"/);
 });
 
 test("production CSP permits local carousel blob previews", async () => {
@@ -82,10 +85,11 @@ test("carousel upload accepts genuine PNG and WebP signatures", async () => {
 });
 
 test("carousel crop editor preserves the one canonical landscape aspect ratio", async () => {
-  const { CAROUSEL_CROP, cropSourceRect } = await import("../../src/admin/utils/carouselCrop.js");
+  const [{ CAROUSEL_CROP, cropSourceRect }, { CAROUSEL_IMAGE }] = await Promise.all([import("../../src/admin/utils/carouselCrop.js"), import("../../shared/carouselConfig.js")]);
   const crop = cropSourceRect(2400, 1600, "image", 1, { x: 0, y: 0 });
   assert.equal(CAROUSEL_CROP.image.width / CAROUSEL_CROP.image.height, 16 / 9);
   assert.ok(Math.abs(crop.width / crop.height - 16 / 9) < 0.000001);
+  assert.equal(CAROUSEL_CROP.image, CAROUSEL_IMAGE);
 });
 
 test("carousel crop zoom and drag stay within the source image", async () => {

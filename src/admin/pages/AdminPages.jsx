@@ -1962,37 +1962,20 @@ function StockModal({ state, onClose, onSaved }) {
   );
 }
 
+const categoryFormValue = (category) => ({ name: category?.name || "", description: category?.description || "", isActive: category?.isActive !== false });
+
 function CategoryForm({ open, category, onClose, onSaved }) {
   const { pending, run } = useAdminAction();
-  const { data: serviceData } = useAdminData(adminApi.serviceStatus);
-  const uploadAvailable =
-    serviceData?.services?.cloudinary?.available !== false;
-  const uploadMessage =
-    serviceData?.services?.cloudinary?.message ||
-    "Image uploads are temporarily unavailable.";
   const [form, setForm] = useState(
-    category || { name: "", description: "", image: "", isActive: true },
+    categoryFormValue(category),
   );
   useEffect(
     () =>
       setForm(
-        category || { name: "", description: "", image: "", isActive: true },
+        categoryFormValue(category),
       ),
     [category, open],
   );
-  const upload = async (file) => {
-    if (!uploadAvailable) return;
-    const data = await run(
-      "category:image",
-      () => adminApi.uploadImage(file),
-      "Image uploaded.",
-    );
-    if (data)
-      setForm((cur) => ({
-        ...cur,
-        image: data.image?.url || data.url || data.image,
-      }));
-  };
   return (
     <AdminModal
       title={category?._id ? "Edit Category" : "Add Category"}
@@ -2028,28 +2011,6 @@ function CategoryForm({ open, category, onClose, onSaved }) {
           value={form.description || ""}
           onChange={(e) => setForm({ ...form, description: e.target.value })}
         />
-        <div>
-          {form.image && (
-            <img
-              src={form.image}
-              alt=""
-              className="mb-3 h-24 w-24 rounded-lg object-cover"
-            />
-          )}
-          <label
-            title={uploadAvailable ? "" : uploadMessage}
-            className={`inline-flex rounded-lg border border-[var(--admin-border)] px-3 py-2 text-sm font-bold ${uploadAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-50"}`}
-          >
-            Upload Image
-            <input
-              type="file"
-              accept="image/*"
-              disabled={!uploadAvailable}
-              className="hidden"
-              onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
-            />
-          </label>
-        </div>
         <Toggle
           label="Active"
           checked={form.isActive}
@@ -2068,7 +2029,9 @@ function CategoryForm({ open, category, onClose, onSaved }) {
 
 export function CategoriesPage() {
   const { data, loading, error, setData } = useAdminData(adminApi.categories);
+  const { pending, run } = useAdminAction();
   const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
   const items = data?.items || [];
   const saveRow = (category) =>
     setData((current) =>
@@ -2108,7 +2071,6 @@ export function CategoriesPage() {
       {items.length ? (
         <AdminTable
           columns={[
-            "Image",
             "Category Name",
             "Description",
             "Products",
@@ -2117,17 +2079,6 @@ export function CategoriesPage() {
           ]}
           rows={items.map((c) => (
             <tr key={c._id}>
-              <Cell>
-                {c.image ? (
-                  <img
-                    src={c.image}
-                    alt=""
-                    className="h-10 w-10 rounded-lg object-cover"
-                  />
-                ) : (
-                  "-"
-                )}
-              </Cell>
               <Cell className="font-bold">{c.name}</Cell>
               <Cell>{c.description || "-"}</Cell>
               <Cell>{c.productCount || 0}</Cell>
@@ -2135,9 +2086,7 @@ export function CategoriesPage() {
                 <AdminBadge>{c.isActive ? "Active" : "Disabled"}</AdminBadge>
               </Cell>
               <Cell>
-                <AdminButton variant="secondary" onClick={() => setEditing(c)}>
-                  Edit
-                </AdminButton>
+                <div className="flex min-w-max flex-wrap gap-2"><AdminButton variant="secondary" onClick={() => setEditing(c)}>Edit</AdminButton><AdminButton variant="secondary" loading={pending[`category:status:${c._id}`]} onClick={async () => { const result = await run(`category:status:${c._id}`, () => adminApi.saveCategory({ name: c.name, description: c.description || "", isActive: !c.isActive }, c._id), `Category ${c.isActive ? "deactivated" : "activated"}.`); if (result?.category) saveRow(result.category); }}>{c.isActive ? "Deactivate" : "Activate"}</AdminButton><AdminButton variant="danger" onClick={() => setDeleting(c)}>Delete</AdminButton></div>
               </Cell>
             </tr>
           ))}
@@ -2149,6 +2098,7 @@ export function CategoriesPage() {
         onClose={() => setEditing(null)}
         onSaved={saveRow}
       />
+      <AdminModal title="Delete Category?" open={Boolean(deleting)} onClose={() => !pending["category:delete"] && setDeleting(null)} footer={<><AdminButton variant="secondary" disabled={pending["category:delete"]} onClick={() => setDeleting(null)}>Cancel</AdminButton><AdminButton variant="danger" loading={pending["category:delete"]} onClick={async () => { const result = await run("category:delete", () => adminApi.deleteCategory(deleting._id), "Category deleted successfully."); if (result) { setData((current) => current ? { ...current, items: current.items.filter((item) => item._id !== deleting._id) } : current); setDeleting(null); } }}>Delete Category</AdminButton></>}><p className="text-sm leading-6 text-ink/65">You are about to permanently delete <strong>“{deleting?.name}”</strong>.</p><p className="mt-3 text-sm font-semibold text-danger">This action cannot be undone. Products and other related records will never be deleted automatically.</p>{deleting?.productCount > 0 && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">This category currently has {deleting.productCount} assigned product(s). The backend will block deletion until they are reassigned.</p>}</AdminModal>
     </>
   );
 }

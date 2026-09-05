@@ -6,6 +6,7 @@ import RestrictionManagementPage from "../pages/RestrictionManagementPage.jsx";
 import CarouselPage from "../pages/CarouselPage.jsx";
 import FulfillmentPage from "../pages/FulfillmentPage.jsx";
 import DataCleanupPage from "../pages/DataCleanupPage.jsx";
+import NavbarManagementPage from "../pages/NavbarManagementPage.jsx";
 import { AuditLogsPage, CategoriesPage, CouponsPage, CustomersPage, DashboardPage, GalleryPage, InventoryPage, MessagesPage, OffersPage, OrdersPage, PaymentsPage, ProductFormPage, ProductsPage, ReportsPage, SettingsPage, ShippingPage, UsersPage } from "../pages/AdminPages.jsx";
 
 export default function AdminRoutes() {
@@ -33,6 +34,7 @@ export default function AdminRoutes() {
       <Route path="restrictions" element={<RestrictionManagementPage />} />
       <Route path="settings" element={<SettingsPage />} />
       <Route path="data-cleanup" element={<DataCleanupPage />} />
+      <Route path="navbar" element={<NavbarManagementPage />} />
       <Route path="*" element={<Navigate to="/admin" replace />} />
     </Route>
   </Routes>;

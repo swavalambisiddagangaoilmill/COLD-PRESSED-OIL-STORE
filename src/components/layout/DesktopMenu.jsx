@@ -1,20 +1,15 @@
 // Renders the DesktopMenu layout element.
 import { useEffect, useRef, useState } from "react";
 import { megaMenus } from "../../data/siteData.js";
+import { orderedActiveNavbar } from "../../../shared/navbarConfig.js";
 import MenuItem from "./MenuItem.jsx";
 import MegaMenu from "./MegaMenu.jsx";
 
-const desktopItems = [
-  { label: "Shop", href: "/shop", dropdown: "shop", state: { resetShop: true } },
-  { label: "Cold Pressed Oils", href: "/shop?q=Cold%20Pressed%20Oils&focus=search", dropdown: "coldPressed", state: { resetShop: true } },
-  { label: "Specialty Oils", href: "/shop?q=Specialty%20Oils&focus=search", dropdown: "essential", state: { resetShop: true } },
-  { label: "About", href: "/about/story", dropdown: "about" },
-  { label: "Contact", href: "/contact" },
-];
-
-export default function DesktopMenu({ products = [] }) {
+export default function DesktopMenu({ navigation }) {
   const [active, setActive] = useState(null);
   const itemRefs = useRef([]);
+  const managedItems = orderedActiveNavbar(navigation).map((item) => ({ ...item, dropdown: item.dropdownEnabled && item.children.length ? item.key : null, state: { resetShop: true } }));
+  const desktopItems = [...managedItems, { key: "about", label: "About", href: "/about/story", dropdown: "about" }, { key: "contact", label: "Contact", href: "/contact" }];
 
   useEffect(() => {
     const closeOnEscape = (event) => {
@@ -50,14 +45,9 @@ export default function DesktopMenu({ products = [] }) {
   };
 
   const activeItem = desktopItems.find((item) => item.dropdown === active);
-  const activeMega =
-    active === "shop" ||
-    active === "coldPressed" ||
-    active === "essential" ||
-    active === "about";
-  const productLinks = products.slice(0, 5).map((product) => ({ label: product.name, href: `/product/${product.slug}` }));
-  const activeData = megaMenus[active];
-  const menuData = activeData && active !== "about" && productLinks.length ? { ...activeData, links: productLinks } : activeData;
+  const activeMega = Boolean(activeItem);
+  const template = active === "about" ? megaMenus.about : activeItem?.key === "speciality-oils" ? megaMenus.essential : activeItem?.key === "shop" ? megaMenus.shop : megaMenus.coldPressed;
+  const menuData = activeItem && template ? { ...template, links: active === "about" ? template.links : activeItem.children } : null;
 
   return (
     <div
@@ -71,7 +61,7 @@ export default function DesktopMenu({ products = [] }) {
           role="menubar"
         >
           {desktopItems.map((item, index) => (
-            <div key={item.label} className="relative h-[54px]">
+            <div key={item.key} className="relative h-[54px]">
               <MenuItem
                 item={item}
                 active={active === item.dropdown}

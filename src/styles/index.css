@@ -41,14 +41,9 @@ img {
 }
 
 /* A restrained micro-radius keeps controls tactile without returning to the
-   previous pill-and-card visual language. Circular category imagery remains
-   the single stronger-radius exception. */
+   previous pill-and-card visual language. */
 [class*="rounded-"] {
   border-radius: 6px !important;
-}
-
-.category-icon {
-  border-radius: 9999px !important;
 }
 
 ::selection {
@@ -67,8 +62,6 @@ img {
 .hero-carousel__viewport {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
-  max-height: min(52vh, 720px);
   overflow: hidden;
   user-select: none;
   touch-action: pan-y;
@@ -93,7 +86,7 @@ img {
 }
 
 .hero-carousel__slide img {
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   pointer-events: none;
   -webkit-user-drag: none;

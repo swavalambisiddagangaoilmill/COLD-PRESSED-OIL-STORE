@@ -1,6 +1,6 @@
-export const CAROUSEL_CROP = Object.freeze({
-  image: { width: 1920, height: 1080, aspect: 16 / 9 },
-});
+import { CAROUSEL_IMAGE } from "../../../shared/carouselConfig.js";
+
+export const CAROUSEL_CROP = Object.freeze({ image: CAROUSEL_IMAGE });
 
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 

@@ -18,7 +18,7 @@ import { slugify } from "../../utils/slugify.js";
 import { withOrderTotals } from "../../utils/orderTotals.js";
 import { createProductWithGeneratedSku, prepareProductVariants } from "../../services/productSkuService.js";
 import { sendOrderCancellationOnce, sendOrderConfirmationEmail } from "../../services/emailService.js";
-import { createCategory, listCategories as listCanonicalCategories, requireCanonicalCategory, updateCategory } from "../../services/categoryService.js";
+import { createCategory, deleteCategory, listAdminCategories, requireCanonicalCategory, updateCategory } from "../../services/categoryService.js";
 import { priceProducts } from "../../services/offerPricingService.js";
 import mongoose from "mongoose";
 
@@ -267,8 +267,9 @@ export async function reorderGalleryImages(ids = []) {
   await GalleryImage.bulkWrite(ids.map((id, index) => ({ updateOne: { filter: { _id: id }, update: { sortOrder: index + 1 } } })));
   return listGalleryImages();
 }
-export async function listCategories() { return listCanonicalCategories(); }
+export async function listCategories() { return listAdminCategories(); }
 export async function saveCategory(payload, id) { return id ? updateCategory(id, payload) : createCategory(payload); }
+export async function removeCategory(id) { return deleteCategory(id); }
 
 export const listOffers = () => Offer.find().populate("category", "name").populate("categories", "name").populate("products", "title variants").sort({ createdAt: -1 });
 export async function saveOffer(payload, userId, id) {

@@ -11,7 +11,8 @@
     "seed": "node seed/seed.js",
     "reset": "node seed/seed.js --reset",
     "create-owner": "node scripts/create-owner.js",
-    "audit:variant-shipping": "node scripts/audit-product-variant-shipping.js"
+    "audit:variant-shipping": "node scripts/audit-product-variant-shipping.js",
+    "migrate:remove-category-images": "node scripts/remove-category-images.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

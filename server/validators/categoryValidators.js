@@ -7,7 +7,6 @@ export const categoryIdValidator = [param("id").isMongoId().withMessage("Valid c
 export const categoryValidator = [
   body("name").trim().isIn(PRODUCT_CATEGORIES).withMessage("Category must be one of the 14 canonical categories."),
   body("slug").optional().trim().isSlug().withMessage("Slug must be URL friendly."),
-  body("image").optional({ values: "falsy" }).trim().isURL().withMessage("Image must be a URL."),
   body("description").optional().trim(),
   body("isActive").optional().isBoolean().withMessage("Category status must be true or false."),
 ];

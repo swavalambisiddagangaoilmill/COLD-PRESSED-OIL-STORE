@@ -10,6 +10,7 @@ import { sendSuccess } from "../utils/apiResponse.js";
 import { verifyTurnstile } from "../services/turnstileService.js";
 import { sendContactFormEmail } from "../services/emailService.js";
 import { validateCouponPayload } from "../services/couponService.js";
+import { getNavbarConfig } from "../services/navigationService.js";
 
 const faqs = [
   { category: "Products", items: [{ question: "What is cold pressed oil?", answer: "Cold pressed oil is extracted without high heat so the natural aroma and nutrients are better preserved." }] },
@@ -61,6 +62,8 @@ export const getPageContent = asyncHandler(async (req, res) => {
   const content = await SiteContent.findOne({ key: req.params.slug });
   sendSuccess(res, 200, "Page content fetched successfully", { slug: req.params.slug, sections: content?.value?.sections || [], value: content?.value || null });
 });
+
+export const getNavbar = asyncHandler(async (_req, res) => sendSuccess(res, 200, "Navbar fetched successfully", { navbar: await getNavbarConfig() }));
 
 
 

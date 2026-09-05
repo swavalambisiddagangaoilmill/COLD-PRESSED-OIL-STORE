@@ -1,6 +1,6 @@
 // Admin shell with permission-aware navigation, global search, and profile controls.
 import "../adminTheme.css";
-import { BarChart3, Bell, Boxes, ChevronDown, ClipboardList, DatabaseZap, Home, Image as ImageIcon, LayoutDashboard, LockKeyhole, Mail, Megaphone, Menu, Package, Percent, Settings, ShieldCheck, Truck, Users, X } from "lucide-react";
+import { BarChart3, Bell, Boxes, ChevronDown, ClipboardList, DatabaseZap, Home, Image as ImageIcon, LayoutDashboard, Link2, LockKeyhole, Mail, Megaphone, Menu, Package, Percent, Settings, ShieldCheck, Truck, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -11,7 +11,7 @@ const roleModules = {
   OWNER: ["*"],
   ORDER_MANAGER: ["Dashboard", "Orders", "Fulfillment", "Shipping", "Customers", "Payments", "Reports", "Notifications"],
   PRODUCT_MANAGER: ["Dashboard", "Products", "Inventory", "Categories", "Reports", "Notifications"],
-  CONTENT_MANAGER: ["Dashboard", "Homepage Carousel", "Gallery", "Messages", "Notifications"],
+  CONTENT_MANAGER: ["Dashboard", "Homepage Carousel", "Navbar Management", "Gallery", "Messages", "Notifications"],
 };
 
 const BellIcon = Bell;
@@ -26,6 +26,7 @@ const navItems = [
   { label: "Offers", to: "/admin/offers", icon: Megaphone, group: "Marketing" },
   { label: "Coupons", to: "/admin/coupons", icon: Percent, group: "Marketing" },
   { label: "Homepage Carousel", to: "/admin/carousel", icon: ImageIcon, group: "Marketing" },
+  { label: "Navbar Management", to: "/admin/navbar", icon: Link2, group: "Marketing" },
   { label: "Gallery", to: "/admin/gallery", icon: ImageIcon, group: "Marketing" },
   { label: "Shipping", to: "/admin/shipping", icon: Truck },
   { label: "Customers", to: "/admin/customers", icon: Users },

@@ -35,11 +35,11 @@ test("canonical categories can update editable fields in document validation con
   category.save = async function saveForTest() { await this.validate(); return this; };
   Category.findById = async () => category;
 
-  const updated = await updateCategory(category._id, { ...category.toObject(), description: "Updated", image: "", isActive: false, productCount: 4 });
+  const updated = await updateCategory(category._id, { ...category.toObject(), description: "Updated", isActive: false, productCount: 4 });
   assert.equal(updated.name, "Groundnut Oil");
   assert.equal(updated.slug, "groundnut-oil");
   assert.equal(updated.description, "Updated");
-  assert.equal(updated.image, "");
+  assert.equal(updated.image, undefined);
   assert.equal(updated.isActive, false);
   assert.equal(updated.productCount, undefined);
 });

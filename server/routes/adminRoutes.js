@@ -14,6 +14,7 @@ import { orderIdValidator, updateOrderStatusValidator } from "../validators/orde
 import { categoryIdValidator, categoryValidator } from "../validators/categoryValidators.js";
 import { productIdValidator, productUpdateValidator, productValidator } from "../validators/productValidators.js";
 import * as adminPanelController from "../admin/controllers/adminController.js";
+import { requireOwner } from "../admin/middleware/adminAuth.js";
 
 const router = Router();
 router.use(protect, adminOnly);
@@ -36,7 +37,7 @@ router.put("/products/:id", productIdValidator, productUpdateValidator, validate
 router.delete("/products/:id", productIdValidator, validate, deleteProductHandler);
 router.post("/categories", categoryValidator, validate, createCategoryHandler);
 router.put("/categories/:id", categoryIdValidator, categoryValidator, validate, updateCategoryHandler);
-router.delete("/categories/:id", categoryIdValidator, validate, deleteCategoryHandler);
+router.delete("/categories/:id", requireOwner, categoryIdValidator, validate, deleteCategoryHandler);
 
 export default router;
 

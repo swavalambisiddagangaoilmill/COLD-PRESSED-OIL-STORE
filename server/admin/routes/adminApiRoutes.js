@@ -24,6 +24,8 @@ router.post("/data-cleanup/preview", requireOwner, cleanupController.preview);
 router.post("/data-cleanup/:id/execute", requireOwner, cleanupController.execute);
 
 router.get("/search", requireAdminPermission("dashboard.read"), controller.globalSearch);
+router.get("/navbar", requireAdminPermission("navbar.read"), controller.navbar);
+router.put("/navbar", requireAdminPermission("navbar.manage"), controller.saveNavbar);
 router.get("/dashboard", requireAdminPermission("dashboard.read"), controller.dashboard);
 router.get("/notifications", requireAdminPermission("notifications.read"), controller.notifications);
 router.put("/notifications/:id/read", requireAdminPermission("notifications.read"), controller.markNotificationRead);
@@ -58,6 +60,7 @@ router.put("/inventory/:id", requireAdminPermission("inventory.update"), product
 router.get("/categories", requireAdminPermission("categories.read"), controller.categories);
 router.post("/categories", requireAdminPermission("categories.manage"), categoryValidator, validate, controller.saveCategory);
 router.put("/categories/:id", requireAdminPermission("categories.manage"), categoryIdValidator, categoryValidator, validate, controller.saveCategory);
+router.delete("/categories/:id", requireAdminPermission("categories.delete"), categoryIdValidator, validate, controller.deleteCategory);
 router.get("/gallery", requireAdminPermission("gallery.read"), controller.galleryImages);
 router.post("/gallery", requireAdminPermission("gallery.manage"), [body("image").custom((value) => Boolean(value?.url || typeof value === "string")).withMessage("Gallery image is required.")], validate, controller.saveGalleryImage);
 router.put("/gallery/reorder", requireAdminPermission("gallery.manage"), [body("ids").isArray().withMessage("Gallery order is required.")], validate, controller.reorderGalleryImages);

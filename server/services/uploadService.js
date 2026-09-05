@@ -2,6 +2,7 @@
 import cloudinary from "../config/cloudinary.js";
 import { ApiError } from "../utils/ApiError.js";
 import { isServiceAvailable, logExternalFailure } from "./serviceStatusService.js";
+import { CAROUSEL_IMAGE } from "../../shared/carouselConfig.js";
 
 function hasValidImageSignature(file) {
   const buffer = file.buffer;
@@ -25,12 +26,12 @@ export async function uploadImage(file, folder = "products") {
   try {
     const safeFolder = ["products", "carousel"].includes(folder) ? folder : "products";
     const result = await cloudinary.uploader.upload(dataUri, { folder: `ss-oil-mill/${safeFolder}`, resource_type: "image", quality: "auto:good", fetch_format: "auto" });
-    if (safeFolder === "carousel" && (result.width < 800 || result.height < 300)) {
+    if (safeFolder === "carousel" && (result.width < 800 || result.height < 450)) {
       await cloudinary.uploader.destroy(result.public_id);
       throw new ApiError("Carousel images must be at least 800 × 300 pixels.", 400);
     }
     const ratio = result.width / result.height;
-    return { url: result.secure_url, publicId: result.public_id, provider: "cloudinary", width: result.width, height: result.height, aspectWarning: safeFolder === "carousel" && Math.abs(ratio - (16 / 9)) > 0.25 ? "Image differs from the recommended 16:9 carousel ratio." : "" };
+    return { url: result.secure_url, publicId: result.public_id, provider: "cloudinary", width: result.width, height: result.height, aspectWarning: safeFolder === "carousel" && Math.abs(ratio - CAROUSEL_IMAGE.aspect) > 0.25 ? "Image differs from the recommended 16:9 carousel ratio." : "" };
   } catch (error) {
     if (error instanceof ApiError) throw error;
     logExternalFailure("cloudinary", error, { action: "upload_image" });
@@ -49,7 +50,7 @@ export async function uploadCarouselImage(file) {
       folder: "ss-oil-mill/carousel",
       resource_type: "image",
       format: "webp",
-      transformation: [{ width: 1920, height: 1080, crop: "limit", quality: "auto:good" }],
+      transformation: [{ width: CAROUSEL_IMAGE.width, height: CAROUSEL_IMAGE.height, crop: "limit", quality: "auto:good" }],
     });
     const dimensionError = validateCarouselDimensions(result.width, result.height);
     if (dimensionError) {
@@ -66,7 +67,7 @@ export async function uploadCarouselImage(file) {
 
 export function validateCarouselDimensions(width, height) {
   const ratio = Number(width) / Number(height);
-  return width >= 800 && height >= 450 && Math.abs(ratio - (16 / 9)) < 0.01 ? "" : "Carousel image could not be prepared at the required 16:9 dimensions.";
+  return width >= 800 && height >= 450 && Math.abs(ratio - CAROUSEL_IMAGE.aspect) < 0.01 ? "" : "Carousel image could not be prepared at the required 16:9 dimensions.";
 }
 
 export async function deleteImage(publicId) {
