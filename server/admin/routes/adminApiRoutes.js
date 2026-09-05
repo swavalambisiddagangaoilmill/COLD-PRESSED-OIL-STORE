@@ -3,7 +3,8 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { body, param } from "express-validator";
 import * as controller from "../controllers/adminController.js";
-import { requireAdmin, requireAdminPermission } from "../middleware/adminAuth.js";
+import * as cleanupController from "../controllers/adminCleanupController.js";
+import { requireAdmin, requireAdminPermission, requireOwner } from "../middleware/adminAuth.js";
 import { protect } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import { productIdValidator, productQueryValidator, productUpdateValidator, productValidator } from "../../validators/productValidators.js";
@@ -16,6 +17,11 @@ const noteBody = [body("note").trim().isLength({ min: 2, max: 1000 }).withMessag
 const reasonBody = [body("reason").trim().isLength({ min: 2, max: 1000 }).withMessage("Admin reason is required.")];
 const extendBody = [...reasonBody, body("expiresAt").isISO8601().withMessage("Valid expiry time is required.")];
 router.use(protect, requireAdmin);
+
+router.get("/data-cleanup/types", requireOwner, cleanupController.types);
+router.get("/data-cleanup/history", requireOwner, cleanupController.history);
+router.post("/data-cleanup/preview", requireOwner, cleanupController.preview);
+router.post("/data-cleanup/:id/execute", requireOwner, cleanupController.execute);
 
 router.get("/search", requireAdminPermission("dashboard.read"), controller.globalSearch);
 router.get("/dashboard", requireAdminPermission("dashboard.read"), controller.dashboard);

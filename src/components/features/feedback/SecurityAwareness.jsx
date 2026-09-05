@@ -156,7 +156,7 @@ export default function SecurityAwareness() {
 
   if (restricted) {
     return (
-      <div className="fixed inset-0 z-[99999] grid place-items-center bg-cream px-5 text-center text-ink" onMouseDown={(event) => event.stopPropagation()} onTouchMove={(event) => event.preventDefault()} onWheel={(event) => event.preventDefault()}>
+      <div className="fixed inset-0 z-[99999] grid place-items-center bg-cream px-5 text-center text-ink" onMouseDown={(event) => event.stopPropagation()}>
         <div ref={overlayRef} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby="restriction-title" className="max-w-md rounded-3xl bg-white p-8 shadow-soft outline-none">
           <h1 id="restriction-title" className="font-serif text-4xl font-semibold">Access Restricted</h1>
           <p className="mt-4 leading-7 text-ink/65">Repeated unusual browser activity was detected. Please return later or contact support if this was a mistake.</p>

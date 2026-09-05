@@ -34,5 +34,10 @@ export function requireAdminPermission(permission) {
   };
 }
 
+export function requireOwner(req, _res, next) {
+  if (getAdminRole(req.user) !== "OWNER") return next(new ApiError("Owner access required.", 403));
+  return next();
+}
+
 
 

@@ -26,6 +26,16 @@ function CropEditor({ source, originalFile, setExporter }) {
   const [zoom, setZoom] = useState(1); const [position, setPosition] = useState({ x: 0, y: 0 });
   useEffect(() => { if (canvas.current && source) drawCarouselCrop(canvas.current.getContext("2d"), source, "image", zoom, position, canvas.current.width, canvas.current.height); }, [position, source, zoom]);
   useEffect(() => { setExporter(() => exportCarouselCrop(source, originalFile, "image", zoom, position)); return () => setExporter(null); }, [originalFile, position, setExporter, source, zoom]);
+  useEffect(() => {
+    const element = canvas.current;
+    if (!element) return undefined;
+    const handleWheel = (event) => {
+      event.preventDefault();
+      setZoom((current) => Math.max(1, Math.min(3, current + (event.deltaY < 0 ? 0.1 : -0.1))));
+    };
+    element.addEventListener("wheel", handleWheel, { passive: false });
+    return () => element.removeEventListener("wheel", handleWheel);
+  }, []);
   const distance = () => { const [first, second] = [...pointers.current.values()]; return first && second ? Math.hypot(second.x - first.x, second.y - first.y) : 0; };
   const start = (event) => { event.currentTarget.setPointerCapture(event.pointerId); pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.current.size === 2) pinch.current = { distance: distance(), zoom }; else drag.current = { x: event.clientX, y: event.clientY, position }; };
   const move = (event) => {
@@ -37,7 +47,7 @@ function CropEditor({ source, originalFile, setExporter }) {
     setPosition({ x: Math.max(-1, Math.min(1, drag.current.position.x + ((event.clientX - drag.current.x) / rect.width) * 2)), y: Math.max(-1, Math.min(1, drag.current.position.y + ((event.clientY - drag.current.y) / rect.height) * 2)) });
   };
   const finish = (event) => { pointers.current.delete(event.pointerId); canvas.current?.releasePointerCapture?.(event.pointerId); drag.current = null; pinch.current = null; };
-  return <div className="grid gap-3"><div className="relative mx-auto w-full max-w-[720px] overflow-hidden border-2 border-[var(--admin-primary)] bg-black shadow-inner"><canvas ref={canvas} width={640} height={360} className="block aspect-video w-full cursor-grab touch-none active:cursor-grabbing" onWheel={(event) => { event.preventDefault(); setZoom((current) => Math.max(1, Math.min(3, current + (event.deltaY < 0 ? 0.1 : -0.1)))); }} onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} aria-label="Carousel crop preview" /><div className="pointer-events-none absolute inset-0 border border-white/70" /><span className="pointer-events-none absolute bottom-2 left-2 bg-black/65 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white">All devices · 16:9 preview</span></div><p className="text-center text-xs font-semibold text-ink/55">Drag to position. Pinch or use the mouse wheel to zoom. Zoom: {Math.round(zoom * 100)}%</p><div className="flex justify-center"><AdminButton type="button" variant="secondary" onClick={() => { setZoom(1); setPosition({ x: 0, y: 0 }); }}><RotateCcw size={15} />Reset</AdminButton></div></div>;
+  return <div className="grid gap-3"><div className="relative mx-auto w-full max-w-[720px] overflow-hidden border-2 border-[var(--admin-primary)] bg-black shadow-inner"><canvas ref={canvas} width={640} height={360} className="block aspect-video w-full cursor-grab touch-none active:cursor-grabbing" onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} aria-label="Carousel crop preview" /><div className="pointer-events-none absolute inset-0 border border-white/70" /><span className="pointer-events-none absolute bottom-2 left-2 bg-black/65 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white">All devices · 16:9 preview</span></div><p className="text-center text-xs font-semibold text-ink/55">Drag to position. Pinch or use the mouse wheel to zoom. Zoom: {Math.round(zoom * 100)}%</p><div className="flex justify-center"><AdminButton type="button" variant="secondary" onClick={() => { setZoom(1); setPosition({ x: 0, y: 0 }); }}><RotateCcw size={15} />Reset</AdminButton></div></div>;
 }
 
 function UploadArtboard({ file, existing, removed, onFile, onRemove, setExporter }) {

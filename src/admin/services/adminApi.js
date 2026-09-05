@@ -112,6 +112,10 @@ export const adminApi = {
   revokeSessions: (sessionIds) => apiRequest(`${base}/sessions/revoke`, { method: "POST", body: JSON.stringify({ sessionIds }) }),
   settings: () => apiRequest(`${base}/settings`),
   saveSettings: (payload) => apiRequest(`${base}/settings`, { method: "PUT", body: JSON.stringify(payload) }),
+  cleanupTypes: () => apiRequest(`${base}/data-cleanup/types`),
+  cleanupHistory: () => apiRequest(`${base}/data-cleanup/history`),
+  cleanupPreview: (payload) => apiRequest(`${base}/data-cleanup/preview`, { method: "POST", body: JSON.stringify(payload) }),
+  cleanupExecute: (id, confirmationPhrase) => apiRequest(`${base}/data-cleanup/${id}/execute`, { method: "POST", body: JSON.stringify({ confirmationPhrase }) }),
 };
 
 
