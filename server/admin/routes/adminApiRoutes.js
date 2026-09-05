@@ -7,8 +7,9 @@ import * as cleanupController from "../controllers/adminCleanupController.js";
 import { requireAdmin, requireAdminPermission, requireOwner } from "../middleware/adminAuth.js";
 import { protect } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
+import { adminMutationLimiter, adminReadLimiter } from "../../middleware/rateLimits.js";
 import { productIdValidator, productQueryValidator, productUpdateValidator, productValidator } from "../../validators/productValidators.js";
-import { categoryIdValidator, categoryValidator } from "../../validators/categoryValidators.js";
+import { categoryCreateValidator, categoryIdValidator, categoryUpdateValidator } from "../../validators/categoryValidators.js";
 
 const router = Router();
 const restrictionLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many restriction management requests.", errors: [] } });
@@ -17,6 +18,7 @@ const noteBody = [body("note").trim().isLength({ min: 2, max: 1000 }).withMessag
 const reasonBody = [body("reason").trim().isLength({ min: 2, max: 1000 }).withMessage("Admin reason is required.")];
 const extendBody = [...reasonBody, body("expiresAt").isISO8601().withMessage("Valid expiry time is required.")];
 router.use(protect, requireAdmin);
+router.use(adminReadLimiter, adminMutationLimiter);
 
 router.get("/data-cleanup/types", requireOwner, cleanupController.types);
 router.get("/data-cleanup/history", requireOwner, cleanupController.history);
@@ -58,8 +60,8 @@ router.post("/products/bulk-price/preview", requireAdminPermission("products.upd
 router.post("/products/bulk-price/apply", requireAdminPermission("products.update"), controller.bulkPriceApply);
 router.put("/inventory/:id", requireAdminPermission("inventory.update"), productIdValidator, [body("mode").isIn(["add", "reduce", "set"]).withMessage("Valid stock update mode is required."), body("quantity").isFloat({ min: 0 }).withMessage("Stock litres must be zero or more."), body().custom((value) => value.mode === "set" || Number(value.quantity) > 0).withMessage("Add or reduce litres must be greater than zero.")], validate, controller.inventoryUpdate);
 router.get("/categories", requireAdminPermission("categories.read"), controller.categories);
-router.post("/categories", requireAdminPermission("categories.manage"), categoryValidator, validate, controller.saveCategory);
-router.put("/categories/:id", requireAdminPermission("categories.manage"), categoryIdValidator, categoryValidator, validate, controller.saveCategory);
+router.post("/categories", requireAdminPermission("categories.manage"), categoryCreateValidator, validate, controller.saveCategory);
+router.put("/categories/:id", requireAdminPermission("categories.manage"), categoryIdValidator, categoryUpdateValidator, validate, controller.saveCategory);
 router.delete("/categories/:id", requireAdminPermission("categories.delete"), categoryIdValidator, validate, controller.deleteCategory);
 router.get("/gallery", requireAdminPermission("gallery.read"), controller.galleryImages);
 router.post("/gallery", requireAdminPermission("gallery.manage"), [body("image").custom((value) => Boolean(value?.url || typeof value === "string")).withMessage("Gallery image is required.")], validate, controller.saveGalleryImage);

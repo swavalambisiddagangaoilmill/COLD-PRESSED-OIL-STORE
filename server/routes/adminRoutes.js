@@ -11,13 +11,15 @@ import { logAdminMutation } from "../middleware/security.js";
 import { validate } from "../middleware/validate.js";
 import { userIdValidator, roleValidator } from "../validators/adminValidators.js";
 import { orderIdValidator, updateOrderStatusValidator } from "../validators/orderValidators.js";
-import { categoryIdValidator, categoryValidator } from "../validators/categoryValidators.js";
+import { categoryCreateValidator, categoryIdValidator, categoryUpdateValidator } from "../validators/categoryValidators.js";
 import { productIdValidator, productUpdateValidator, productValidator } from "../validators/productValidators.js";
 import * as adminPanelController from "../admin/controllers/adminController.js";
 import { requireOwner } from "../admin/middleware/adminAuth.js";
+import { adminMutationLimiter, adminReadLimiter } from "../middleware/rateLimits.js";
 
 const router = Router();
 router.use(protect, adminOnly);
+router.use(adminReadLimiter, adminMutationLimiter);
 router.use(logAdminMutation);
 
 router.get("/gallery", adminPanelController.galleryImages);
@@ -35,8 +37,8 @@ router.post("/orders/:id/ready-to-ship", orderIdValidator, validate, readyToShip
 router.post("/products", productValidator, validate, createProductHandler);
 router.put("/products/:id", productIdValidator, productUpdateValidator, validate, updateProductHandler);
 router.delete("/products/:id", productIdValidator, validate, deleteProductHandler);
-router.post("/categories", categoryValidator, validate, createCategoryHandler);
-router.put("/categories/:id", categoryIdValidator, categoryValidator, validate, updateCategoryHandler);
+router.post("/categories", categoryCreateValidator, validate, createCategoryHandler);
+router.put("/categories/:id", categoryIdValidator, categoryUpdateValidator, validate, updateCategoryHandler);
 router.delete("/categories/:id", requireOwner, categoryIdValidator, validate, deleteCategoryHandler);
 
 export default router;

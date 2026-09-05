@@ -39,6 +39,7 @@ export function WishlistProvider({ children }) {
   }, [authenticated, items]);
 
   useEffect(() => {
+    if (window.location.pathname.startsWith("/admin")) return undefined;
     const refresh = () => refreshWishlist({ notify: true }).catch(() => {});
     refresh();
     const onVisibility = () => { if (document.visibilityState === "visible") refresh(); };

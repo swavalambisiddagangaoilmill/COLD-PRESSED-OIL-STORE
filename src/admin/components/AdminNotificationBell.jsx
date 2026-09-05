@@ -21,11 +21,23 @@ export default function AdminNotificationBell() {
   const [data, setData] = useState({ items: [], unread: 0 });
   const [pending, setPending] = useState({});
   const ref = useRef(null);
-  const load = () => adminApi.notifications("?limit=8").then((result) => setData({ ...result, items: Array.isArray(result?.items) ? result.items.filter(Boolean) : [], unread: Number(result?.unread) || 0 })).catch(() => {});
+  const loadingRef = useRef(false);
+  const load = async () => {
+    if (loadingRef.current || document.visibilityState !== "visible") return;
+    loadingRef.current = true;
+    try {
+      const result = await adminApi.notifications("?limit=8");
+      setData({ ...result, items: Array.isArray(result?.items) ? result.items.filter(Boolean) : [], unread: Number(result?.unread) || 0 });
+    } catch {
+      // Keep the last successful notification snapshot; polling never retries immediately.
+    } finally {
+      loadingRef.current = false;
+    }
+  };
 
   useEffect(() => {
     load();
-    const timer = window.setInterval(load, 10000);
+    const timer = window.setInterval(load, 60000);
     const refresh = () => { if (document.visibilityState === "visible") load(); };
     window.addEventListener("focus", load);
     document.addEventListener("visibilitychange", refresh);

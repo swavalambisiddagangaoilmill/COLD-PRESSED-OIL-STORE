@@ -3,6 +3,7 @@ import { API_BASE_URL } from "../constants/apiConfig.js";
 
 const TOKEN_KEY = "ss_oil_mill_token";
 const REFRESH_KEY = "ss_oil_mill_refresh_token";
+const pendingReads = new Map();
 
 function notifyAuthChange() {
   window.dispatchEvent(new Event("ss-oil-mill-auth-change"));
@@ -28,8 +29,7 @@ export function clearAuthTokens() {
   notifyAuthChange();
 }
 
-export async function apiRequest(endpoint, options = {}) {
-  const token = getAuthToken();
+async function executeRequest(endpoint, options, token) {
   const hasBody = options.body instanceof FormData;
   const mutating = ["POST", "PUT", "PATCH", "DELETE"].includes((options.method || "GET").toUpperCase());
   const csrfToken = mutating ? getCookie("csrfToken") : "";
@@ -52,7 +52,9 @@ export async function apiRequest(endpoint, options = {}) {
   }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = payload.message || (response.status === 429 ? "Rate limit reached. Please retry after a short pause." : `API request failed: ${response.status}`);
+    const fieldMessage = Array.isArray(payload.errors) ? payload.errors.find((item) => typeof item?.message === "string")?.message : "";
+    const backendMessage = payload.message === "Validation failed." && fieldMessage ? fieldMessage : payload.message;
+    const message = backendMessage || (response.status === 429 ? "Too many requests. Please wait a moment and try again." : `API request failed: ${response.status}`);
     const error = new Error(message);
     error.status = response.status;
     error.errors = payload.errors || [];
@@ -61,6 +63,17 @@ export async function apiRequest(endpoint, options = {}) {
     throw error;
   }
   return payload.data ?? payload;
+}
+
+export function apiRequest(endpoint, options = {}) {
+  const token = getAuthToken();
+  const method = (options.method || "GET").toUpperCase();
+  if (method !== "GET") return executeRequest(endpoint, options, token);
+  const key = `${token || "guest"}:${endpoint}`;
+  if (pendingReads.has(key)) return pendingReads.get(key);
+  const request = executeRequest(endpoint, options, token).finally(() => pendingReads.delete(key));
+  pendingReads.set(key, request);
+  return request;
 }
 
 

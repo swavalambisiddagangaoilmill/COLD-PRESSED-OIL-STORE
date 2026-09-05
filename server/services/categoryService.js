@@ -22,8 +22,8 @@ export async function listCategories() {
 }
 
 export async function listAdminCategories() {
-  const categories = await Category.aggregate([{ $match: { name: { $in: PRODUCT_CATEGORIES } } }, { $lookup: { from: "products", localField: "_id", foreignField: "category", as: "assignedProducts" } }, { $addFields: { productCount: { $size: "$assignedProducts" } } }, { $project: { assignedProducts: 0, image: 0, imageUrl: 0, image_url: 0, categoryImage: 0, categoryImageUrl: 0, thumbnail: 0 } }]);
-  return categories.sort((a, b) => categoryOrder[a.name] - categoryOrder[b.name]);
+  const categories = await Category.aggregate([{ $lookup: { from: "products", localField: "_id", foreignField: "category", as: "assignedProducts" } }, { $addFields: { productCount: { $size: "$assignedProducts" } } }, { $project: { assignedProducts: 0, image: 0, imageUrl: 0, image_url: 0, categoryImage: 0, categoryImageUrl: 0, thumbnail: 0 } }]);
+  return categories.sort((a, b) => (categoryOrder[a.name] ?? Number.MAX_SAFE_INTEGER) - (categoryOrder[b.name] ?? Number.MAX_SAFE_INTEGER) || a.name.localeCompare(b.name));
 }
 
 export async function getCategory(idOrSlug) {
@@ -43,14 +43,17 @@ export function createCategory(payload) {
 export async function updateCategory(id, payload) {
   const current = await Category.findById(id);
   if (!current) throw new ApiError("Category not found.", 404);
-  const name = payload.name || current.name;
+  const name = String(payload.name || current.name).trim();
   const canonical = PRODUCT_CATEGORY_SLUGS.find((item) => item.name === name);
-  if (!canonical) throw new ApiError("Category name must be one of the 14 canonical categories.", 400, [{ field: "name", message: "Category name is not valid." }]);
-  if (payload.slug && payload.slug !== canonical.slug) throw new ApiError("Category slug must match its canonical name.", 400, [{ field: "slug", message: `Use ${canonical.slug}.` }]);
-  current.name = canonical.name;
-  current.slug = canonical.slug;
+  const preservingLegacyName = !canonical && name === current.name && !isCanonicalProductCategory(current.name, current.slug);
+  if (!canonical && !preservingLegacyName) throw new ApiError("Category must be one of the 14 canonical categories.", 400, [{ field: "name", message: "Select a valid category name." }]);
+  if (canonical) {
+    if (payload.slug && payload.slug !== canonical.slug) throw new ApiError("Category slug must match its canonical name.", 400, [{ field: "slug", message: `Use ${canonical.slug}.` }]);
+    current.name = canonical.name;
+    current.slug = canonical.slug;
+  }
   if (payload.description !== undefined) current.description = payload.description;
-  if (payload.isActive !== undefined) current.isActive = Boolean(payload.isActive);
+  if (payload.isActive !== undefined) current.isActive = payload.isActive === true || payload.isActive === "true";
   return current.save();
 }
 

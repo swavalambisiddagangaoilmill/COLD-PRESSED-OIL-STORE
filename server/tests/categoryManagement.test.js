@@ -7,7 +7,7 @@ import Coupon from "../models/Coupon.js";
 import Offer from "../models/Offer.js";
 import Product from "../models/Product.js";
 import SiteContent from "../models/SiteContent.js";
-import { deleteCategory } from "../services/categoryService.js";
+import { createCategory, deleteCategory, updateCategory } from "../services/categoryService.js";
 
 const query = (value) => ({ session() { return this; }, then(resolve, reject) { return Promise.resolve(value).then(resolve, reject); } });
 const mockTransaction = () => mock.method(mongoose, "startSession", async () => ({ withTransaction: async (callback) => callback(), endSession: async () => {} }));
@@ -23,6 +23,40 @@ test("category schema and admin UI contain no category image feature", async () 
   const categorySection = admin.slice(admin.indexOf("function CategoryForm"), admin.indexOf("function OfferForm"));
   assert.doesNotMatch(categorySection, /Upload Image|accept="image|form\.image|category:image|c\.image/);
   assert.doesNotMatch(seed.slice(seed.indexOf("ensureCategory"), seed.indexOf("ensureProduct")), /image/);
+});
+
+test("an unchanged legacy category remains editable without restoring image support", async () => {
+  const category = Category.hydrate({ _id: new mongoose.Types.ObjectId(), name: "Sesame/Gingelly Oil", slug: "sesame-gingelly-oil", description: "Legacy", isActive: true, image: "https://example.com/legacy.jpg" });
+  category.save = async function saveForTest() { await this.validate(); return this; };
+  mock.method(Category, "findById", async () => category);
+  try {
+    const updated = await updateCategory(category._id, { name: "Sesame/Gingelly Oil", description: "Updated", isActive: false, image: "https://example.com/ignored.jpg" });
+    assert.equal(updated.name, "Sesame/Gingelly Oil");
+    assert.equal(updated.description, "Updated");
+    assert.equal(updated.isActive, false);
+    assert.equal(updated.image, undefined);
+  } finally { mock.restoreAll(); }
+});
+
+test("a legacy category can be renamed to a canonical category", async () => {
+  const category = Category.hydrate({ _id: new mongoose.Types.ObjectId(), name: "Sesame/Gingelly Oil", slug: "sesame-gingelly-oil", description: "Legacy", isActive: true });
+  category.save = async function saveForTest() { await this.validate(); return this; };
+  mock.method(Category, "findById", async () => category);
+  try {
+    const updated = await updateCategory(category._id, { name: "White Sesame Oil", description: "Renamed", isActive: true });
+    assert.equal(updated.name, "White Sesame Oil");
+    assert.equal(updated.slug, "white-sesame-oil");
+  } finally { mock.restoreAll(); }
+});
+
+test("new category creation remains canonical and ignores obsolete fields", async () => {
+  let created;
+  mock.method(Category, "create", async (payload) => { created = payload; return payload; });
+  try {
+    await createCategory({ name: "Coconut Oil", description: "Fresh", isActive: false, image: "https://example.com/ignored.jpg", unexpected: true });
+    assert.deepEqual(created, { name: "Coconut Oil", slug: "coconut-oil", description: "Fresh", isActive: false });
+    assert.throws(() => createCategory({ name: "Invalid Oil" }), /14 canonical categories/);
+  } finally { mock.restoreAll(); }
 });
 
 test("safe category deletion removes only an unreferenced category", async () => {

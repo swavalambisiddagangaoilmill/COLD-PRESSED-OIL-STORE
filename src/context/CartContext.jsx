@@ -68,6 +68,7 @@ export function CartProvider({ children }) {
   }, [authenticated]);
 
   useEffect(() => {
+    if (window.location.pathname.startsWith("/admin")) return undefined;
     const refresh = () => revalidateCart({ notify: true }).catch(() => {});
     refresh();
     const onVisibility = () => { if (document.visibilityState === "visible") refresh(); };

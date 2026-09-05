@@ -3,7 +3,6 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
-import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import morgan from "morgan";
 import { cspConnectSources, corsOrigin } from "./config/cors.js";
@@ -12,6 +11,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { csrfGuard } from "./middleware/csrf.js";
 import { notFound } from "./middleware/notFound.js";
 import { assignRequestId, preventParameterPollution, sanitizeRequest } from "./middleware/security.js";
+import { publicApiLimiter } from "./middleware/rateLimits.js";
 import { restrictionGuard } from "./middleware/restrictionGuard.js";
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
@@ -86,7 +86,7 @@ app.get("/api/service-status", async (_req, res, next) => {
 });
 app.use(restrictionGuard);
 app.use(morgan(env.isProduction ? "combined" : "dev"));
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 150, standardHeaders: true, legacyHeaders: false, message: { success: false, message: "Too many requests.", errors: [] } }));
+app.use(publicApiLimiter);
 
 app.get("/api/carousel", getActiveCarousel);
 app.use("/api/admin/carousel", adminCarouselRoutes);

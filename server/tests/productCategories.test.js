@@ -22,9 +22,9 @@ test("canonical category names and matching slugs validate", async () => {
 });
 
 test("obsolete and mismatched categories are rejected", async () => {
-  await assert.rejects(() => new Category({ name: "Raw Material Crushing", slug: "raw-material-crushing" }).validate(), /not a valid enum value/);
-  await assert.rejects(() => new Category({ name: "Seeds Caster", slug: "seeds-caster" }).validate(), /not a valid enum value/);
-  await assert.rejects(() => new Category({ name: "Groundnut Oils", slug: "groundnut-oils" }).validate(), /not a valid enum value/);
+  await assert.rejects(() => new Category({ name: "Raw Material Crushing", slug: "raw-material-crushing" }).validate(), /14 canonical categories/);
+  await assert.rejects(() => new Category({ name: "Seeds Caster", slug: "seeds-caster" }).validate(), /14 canonical categories/);
+  await assert.rejects(() => new Category({ name: "Groundnut Oils", slug: "groundnut-oils" }).validate(), /14 canonical categories/);
   await assert.rejects(() => new Category({ name: "Groundnut Oil", slug: "coconut-oil" }).validate(), /canonical/);
 });
 

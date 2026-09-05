@@ -6,10 +6,12 @@ import { protect } from "../middleware/auth.js";
 import { logAdminMutation } from "../middleware/security.js";
 import { carouselUpload } from "../middleware/upload.js";
 import { validate } from "../middleware/validate.js";
+import { adminMutationLimiter, adminReadLimiter } from "../middleware/rateLimits.js";
 
 const router = Router();
 
 router.use(protect, adminOnly, logAdminMutation);
+router.use(adminReadLimiter, adminMutationLimiter);
 router.get("/", listCarousel);
 const slideFiles = carouselUpload.fields([{ name: "image", maxCount: 1 }, { name: "desktopImage", maxCount: 1 }]);
 router.post("/", slideFiles, createCarousel);
