@@ -2,6 +2,13 @@
 import { API_ENDPOINTS } from "../constants/apiConfig.js";
 import { apiRequest } from "../api/apiClient.js";
 
+const internalIdentifier = (value) => /^[a-f\d]{24}$/i.test(String(value || "")) || /^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(String(value || ""));
+
+function displayCategory(category) {
+  const value = typeof category === "object" && category !== null ? category.name : category;
+  return value && !internalIdentifier(value) ? value : "Not specified";
+}
+
 export function normalizeCartItem(item) {
   const product = item.product || item;
   const variantId = item.variant?._id || item.variant || item.variantId;
@@ -10,7 +17,8 @@ export function normalizeCartItem(item) {
   const baseSellingPrice = priced?.baseSellingPrice ?? (variant ? variant.price : (product?.discountPrice ?? product?.price)) ?? 0;
   const price = priced?.effectivePrice ?? baseSellingPrice;
   const availableQuantity = variant?.isAvailable === false || product?.inStock === false ? 0 : Number.MAX_SAFE_INTEGER;
-  return { ...(product || {}), id: product?._id || product?.id, variantId: variantId || null, cartKey: `${product?._id || product?.id}:${variantId || ""}`, name: product?.title || product?.name, image: priced?.images?.[0]?.url || product?.images?.[0]?.url || product?.image || "", price, effectivePrice: price, baseSellingPrice, mrp: priced?.appliedOffer ? baseSellingPrice : priced?.mrp || baseSellingPrice, stock: availableQuantity, litres: variant?.litres, isActive: product?.isActive !== false && priced?.isActive !== false, quantity: item.quantity || 1, category: product?.category?.name || product?.category || "Oil", volume: variant?.size || product?.volume || product?.size || "1L", appliedOffer: priced?.appliedOffer || null, codEnabled: product?.codEnabled !== false, onlinePaymentEnabled: product?.onlinePaymentEnabled !== false, returnEligible: product?.returnEligible !== false, exchangeEligible: Boolean(product?.exchangeEligible) };
+  const { sku: _sku, weight: _weight, dimensions: _dimensions, ...safeProduct } = product || {};
+  return { ...safeProduct, id: product?._id || product?.id, variantId: variantId || null, cartKey: `${product?._id || product?.id}:${variantId || ""}`, name: product?.title || product?.name, image: priced?.images?.[0]?.url || product?.images?.[0]?.url || product?.image || "", price, effectivePrice: price, baseSellingPrice, mrp: priced?.appliedOffer ? baseSellingPrice : priced?.mrp || baseSellingPrice, stock: availableQuantity, litres: variant?.litres, isActive: product?.isActive !== false && priced?.isActive !== false, quantity: item.quantity || 1, category: displayCategory(product?.category), volume: variant?.size || product?.volume || product?.size || "Not specified", appliedOffer: priced?.appliedOffer || null, codEnabled: product?.codEnabled !== false, onlinePaymentEnabled: product?.onlinePaymentEnabled !== false, returnEligible: product?.returnEligible !== false, exchangeEligible: Boolean(product?.exchangeEligible) };
 }
 
 export async function fetchCart() {

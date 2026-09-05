@@ -10,7 +10,10 @@ async function populatedCart(userId) {
   const user = await User.findById(userId).select("cart").lean();
   if (!user) throw new ApiError("User not found.", 404);
   const productIds = user.cart.map((item) => item.product).filter(Boolean);
-  const products = await Product.find({ _id: { $in: productIds }, isActive: true });
+  const productQuery = Product.find({ _id: { $in: productIds }, isActive: true });
+  const products = typeof productQuery.populate === "function"
+    ? await productQuery.populate("category", "name slug")
+    : await productQuery;
   const productMap = new Map(products.map((product) => [product._id.toString(), product]));
   const cart = user.cart.flatMap((item) => {
     const product = productMap.get(item.product?.toString());
@@ -110,8 +113,11 @@ export async function updateCartItem(userId, productId, quantity, variantId) {
   if (!product) throw new ApiError("Product not found.", 404);
   const nextQuantity = requestedQuantity(quantity);
   const variant = assertStock(product, nextQuantity, variantId);
+  const identity = variant
+    ? { product: product._id, variant: variant._id }
+    : { product: product._id, variant: null };
   const user = await User.findOneAndUpdate(
-    { _id: userId, cart: { $elemMatch: { product: productId, variant: variant?._id || { $exists: false } } } },
+    { _id: userId, cart: { $elemMatch: identity } },
     { $set: { "cart.$.quantity": nextQuantity } },
     { new: true, runValidators: true }
   );
@@ -123,7 +129,16 @@ export async function updateCartItem(userId, productId, quantity, variantId) {
 }
 
 export async function removeCartItem(userId, productId, variantId) {
-  await User.findByIdAndUpdate(userId, { $pull: { cart: { product: productId, ...(variantId ? { variant: variantId } : { variant: { $exists: false } }) } } });
+  const identity = { product: productId, variant: variantId || null };
+  const user = await User.findOneAndUpdate(
+    { _id: userId, cart: { $elemMatch: identity } },
+    { $pull: { cart: identity } },
+    { new: true }
+  );
+  if (!user) {
+    if (!await User.exists({ _id: userId })) throw new ApiError("User not found.", 404);
+    throw new ApiError("Cart item not found.", 404);
+  }
   return populatedCart(userId);
 }
 

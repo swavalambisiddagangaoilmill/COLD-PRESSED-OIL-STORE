@@ -1,5 +1,6 @@
 ﻿// Renders the Cart page experience.
 import { Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
 import Breadcrumb from "../components/common/Breadcrumb.jsx";
 import QuantitySelector from "../components/common/QuantitySelector.jsx";
 import CartSummary from "../components/features/cart/CartSummary.jsx";
@@ -13,6 +14,8 @@ import { useToast } from "../components/features/feedback/ToastProvider.jsx";
 export default function Cart() {
   const { items, updateQuantity, removeItem, totals } = useCart();
   const { showToast } = useToast();
+  const removingRef = useRef(new Set());
+  const [removing, setRemoving] = useState(() => new Set());
   const safeItems = Array.isArray(items) ? items.filter((item) => item && typeof item === "object" && (item.id || item._id)) : [];
 
   const changeQuantity = async (item, quantity) => {
@@ -25,11 +28,18 @@ export default function Cart() {
   };
 
   const remove = async (item) => {
+    const key = item.cartKey || `${item.id}:${item.variantId || ""}`;
+    if (removingRef.current.has(key)) return;
+    removingRef.current.add(key);
+    setRemoving((current) => new Set(current).add(key));
     try {
       await removeItem(item.id, item.variantId);
       showToast("Removed from cart.", "success", null, { id: `cart-remove-${item.id}` });
     } catch (error) {
       showToast(customerMessage(error, "Unable to remove this item. Please try again."), "error", { label: "Retry", onClick: () => remove(item) }, { id: `cart-remove-error-${item.id}` });
+    } finally {
+      removingRef.current.delete(key);
+      setRemoving((current) => { const next = new Set(current); next.delete(key); return next; });
     }
   };
   return (
@@ -56,7 +66,7 @@ export default function Cart() {
                     </div>
                     <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
                       <QuantitySelector value={item.quantity} onChange={(value) => changeQuantity(item, value)} />
-                      <button type="button" aria-label={`Remove ${item.name}`} onClick={() => remove(item)} className="rounded-full bg-linen p-3 text-ink/60 transition hover:text-danger"><Trash2 size={18} /></button>
+                      <button type="button" aria-label={`Remove ${item.name}`} disabled={removing.has(item.cartKey || `${item.id}:${item.variantId || ""}`)} onClick={() => remove(item)} className="rounded-full bg-linen p-3 text-ink/60 transition hover:text-danger disabled:cursor-wait disabled:opacity-50"><Trash2 size={18} /></button>
                     </div>
                   </article>
                 ))}
