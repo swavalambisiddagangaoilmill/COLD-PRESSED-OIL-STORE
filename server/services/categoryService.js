@@ -7,7 +7,7 @@ const categoryOrder = Object.fromEntries(PRODUCT_CATEGORIES.map((name, index) =>
 
 export async function requireCanonicalCategory(id) {
   const category = await Category.findById(id).select("name slug");
-  if (!category || !isCanonicalProductCategory(category.name, category.slug)) throw new ApiError("Select one of the 16 valid product categories.", 400, [{ field: "category", message: "Product category is not valid." }]);
+  if (!category || !isCanonicalProductCategory(category.name, category.slug)) throw new ApiError("Select one of the 14 valid product categories.", 400, [{ field: "category", message: "Product category is not valid." }]);
   return category;
 }
 
@@ -25,7 +25,7 @@ export async function getCategory(idOrSlug) {
 
 export function createCategory(payload) {
   const canonical = PRODUCT_CATEGORY_SLUGS.find(({ name }) => name === payload.name);
-  if (!canonical) throw new ApiError("Category name must be one of the 16 canonical categories.", 400, [{ field: "name", message: "Category name is not valid." }]);
+  if (!canonical) throw new ApiError("Category name must be one of the 14 canonical categories.", 400, [{ field: "name", message: "Category name is not valid." }]);
   if (payload.slug && payload.slug !== canonical.slug) throw new ApiError("Category slug must match its canonical name.", 400, [{ field: "slug", message: `Use ${canonical.slug}.` }]);
   return Category.create({ ...payload, name: canonical.name, slug: canonical.slug, isActive: true });
 }
@@ -35,7 +35,7 @@ export async function updateCategory(id, payload) {
   if (!current) throw new ApiError("Category not found.", 404);
   const name = payload.name || current.name;
   const canonical = PRODUCT_CATEGORY_SLUGS.find((item) => item.name === name);
-  if (!canonical) throw new ApiError("Category name must be one of the 16 canonical categories.", 400, [{ field: "name", message: "Category name is not valid." }]);
+  if (!canonical) throw new ApiError("Category name must be one of the 14 canonical categories.", 400, [{ field: "name", message: "Category name is not valid." }]);
   if (payload.slug && payload.slug !== canonical.slug) throw new ApiError("Category slug must match its canonical name.", 400, [{ field: "slug", message: `Use ${canonical.slug}.` }]);
   current.name = canonical.name;
   current.slug = canonical.slug;

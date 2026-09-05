@@ -73,7 +73,7 @@ function isSameCreateRequest(existing, payload) {
 
 export async function generateProductSku(data) {
   const category = await Category.findById(data.category).select("name slug").lean();
-  if (!category || !isCanonicalProductCategory(category.name, category.slug)) throw new ApiError("Select one of the 16 valid product categories.", 400, [{ field: "category", message: "Product category is not valid." }]);
+  if (!category || !isCanonicalProductCategory(category.name, category.slug)) throw new ApiError("Select one of the 14 valid product categories.", 400, [{ field: "category", message: "Product category is not valid." }]);
 
   const weight = Number(data.weight);
   const base = [

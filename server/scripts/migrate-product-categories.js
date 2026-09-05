@@ -12,7 +12,6 @@ const exactTitlePatterns = [
   ["Coconut Oil", /\bcoconut oil\b/i],
   ["Castor Oil", /\bcastor oil\b/i],
   ["Badam Oil", /\bbadam oil\b/i],
-  ["Raw Material Crushing", /\braw material crushing\b/i],
   ["White Sesame Oil", /\bwhite sesame oil\b/i],
   ["Black Sesame Oil", /\bblack sesame oil\b/i],
   ["Niger Seed Oil", /\bniger(?: seed)? oil\b/i],
@@ -20,7 +19,6 @@ const exactTitlePatterns = [
   ["Groundnut Oil", /\bgroundnut oil\b/i],
   ["Neem Oil", /\bneem oil\b/i],
   ["Herbal Oil", /\bherbal oil\b/i],
-  ["Seeds Caster", /\bseeds caster\b/i],
   ["Caranja Oil", /\bcaranja oil\b/i],
 ];
 

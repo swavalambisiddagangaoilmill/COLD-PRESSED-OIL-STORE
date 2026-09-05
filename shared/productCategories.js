@@ -5,7 +5,6 @@ export const PRODUCT_CATEGORIES = Object.freeze([
   "Coconut Oil",
   "Castor Oil",
   "Badam Oil",
-  "Raw Material Crushing",
   "White Sesame Oil",
   "Black Sesame Oil",
   "Niger Seed Oil",
@@ -13,7 +12,6 @@ export const PRODUCT_CATEGORIES = Object.freeze([
   "Groundnut Oil",
   "Neem Oil",
   "Herbal Oil",
-  "Seeds Caster",
   "Caranja Oil",
 ]);
 
