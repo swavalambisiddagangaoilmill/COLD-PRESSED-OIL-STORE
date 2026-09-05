@@ -11,6 +11,7 @@ const carouselImageSchema = new mongoose.Schema({
   // Legacy fields remain readable while records migrate to responsive assets.
   imageUrl: { type: String, trim: true },
   publicId: { type: String, trim: true },
+  image: { type: assetSchema },
   desktopImage: { type: assetSchema },
   mobileImage: { type: assetSchema },
   requestKey: { type: String, trim: true, unique: true, sparse: true },
@@ -19,7 +20,7 @@ const carouselImageSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 carouselImageSchema.pre("validate", function requireImage(next) {
-  if (!this.desktopImage?.url && !this.mobileImage?.url && !this.imageUrl) this.invalidate("desktopImage", "At least one carousel image is required.");
+  if (!this.image?.url && !this.desktopImage?.url && !this.mobileImage?.url && !this.imageUrl) this.invalidate("image", "At least one carousel image is required.");
   next();
 });
 

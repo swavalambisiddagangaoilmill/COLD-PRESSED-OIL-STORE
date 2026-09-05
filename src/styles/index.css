@@ -66,7 +66,9 @@ img {
 
 .hero-carousel__viewport {
   position: relative;
-  aspect-ratio: 1023 / 1537;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: min(52vh, 720px);
   overflow: hidden;
   user-select: none;
   touch-action: pan-y;
@@ -84,7 +86,6 @@ img {
   height: 100%;
 }
 
-.hero-carousel__slide picture,
 .hero-carousel__slide img {
   display: block;
   width: 100%;
@@ -192,10 +193,6 @@ img {
 }
 
 @media (min-width: 1024px) {
-  .hero-carousel__viewport {
-    aspect-ratio: 11 / 5;
-  }
-
   .hero-carousel__slide img { object-fit: cover; }
   .hero-carousel__arrow--previous { left: 28px; }
   .hero-carousel__arrow--next { right: 28px; }

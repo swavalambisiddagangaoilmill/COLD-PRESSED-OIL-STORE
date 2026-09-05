@@ -28,5 +28,5 @@ export const carouselUpload = multer({
     if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.mimetype.toLowerCase()) || ![".jpg", ".jpeg", ".png", ".webp"].includes(extension)) return cb(new ApiError("Carousel images must be JPEG, PNG, or WebP.", 400));
     cb(null, true);
   },
-  limits: { fileSize: 8 * 1024 * 1024, files: 2 },
+  limits: { fileSize: 8 * 1024 * 1024, files: 1 },
 });

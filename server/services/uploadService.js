@@ -38,8 +38,7 @@ export async function uploadImage(file, folder = "products") {
   }
 }
 
-export async function uploadCarouselImage(file, orientation) {
-  if (!["desktop", "mobile"].includes(orientation)) throw new ApiError("Carousel image format is invalid.", 400);
+export async function uploadCarouselImage(file) {
   if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file?.mimetype?.toLowerCase())) throw new ApiError("Carousel images must be JPEG, PNG, or WebP.", 400);
   if (!hasValidImageSignature(file)) throw new ApiError("Uploaded file is not a valid image.", 400);
   if (!isServiceAvailable("cloudinary")) throw new ApiError("Image upload failed. Please try again.", 503);
@@ -50,9 +49,9 @@ export async function uploadCarouselImage(file, orientation) {
       folder: "ss-oil-mill/carousel",
       resource_type: "image",
       format: "webp",
-      transformation: [{ width: orientation === "desktop" ? 1920 : 1080, height: orientation === "desktop" ? 1080 : 1440, crop: "fill", gravity: "auto", quality: "auto:good" }],
+      transformation: [{ width: 1920, height: 1080, crop: "limit", quality: "auto:good" }],
     });
-    const dimensionError = validateCarouselDimensions(result.width, result.height, orientation);
+    const dimensionError = validateCarouselDimensions(result.width, result.height);
     if (dimensionError) {
       await cloudinary.uploader.destroy(result.public_id);
       throw new ApiError(dimensionError, 400);
@@ -60,14 +59,14 @@ export async function uploadCarouselImage(file, orientation) {
     return { url: result.secure_url, publicId: result.public_id, width: result.width, height: result.height };
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    logExternalFailure("cloudinary", error, { action: "upload_carousel_image", orientation });
+    logExternalFailure("cloudinary", error, { action: "upload_carousel_image" });
     throw new ApiError("Image upload failed. Please try again.", 503);
   }
 }
 
-export function validateCarouselDimensions(width, height, orientation) {
-  const expected = orientation === "desktop" ? { width: 1920, height: 1080 } : { width: 1080, height: 1440 };
-  return width === expected.width && height === expected.height ? "" : "Carousel image could not be prepared at the required dimensions.";
+export function validateCarouselDimensions(width, height) {
+  const ratio = Number(width) / Number(height);
+  return width >= 800 && height >= 450 && Math.abs(ratio - (16 / 9)) < 0.01 ? "" : "Carousel image could not be prepared at the required 16:9 dimensions.";
 }
 
 export async function deleteImage(publicId) {

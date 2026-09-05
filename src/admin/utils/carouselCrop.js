@@ -1,6 +1,5 @@
 export const CAROUSEL_CROP = Object.freeze({
-  desktop: { width: 1920, height: 1080, aspect: 16 / 9 },
-  mobile: { width: 1080, height: 1440, aspect: 3 / 4 },
+  image: { width: 1920, height: 1080, aspect: 16 / 9 },
 });
 
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
@@ -32,13 +31,14 @@ export function drawCarouselCrop(context, image, kind, zoom, position, outputWid
 
 export function exportCarouselCrop(image, originalFile, kind, zoom, position) {
   const target = CAROUSEL_CROP[kind];
+  const source = cropSourceRect(image.naturalWidth, image.naturalHeight, kind, zoom, position);
   const canvas = document.createElement("canvas");
-  canvas.width = target.width;
-  canvas.height = target.height;
-  drawCarouselCrop(canvas.getContext("2d"), image, kind, zoom, position, target.width, target.height);
+  canvas.width = Math.min(target.width, Math.max(1, Math.floor(source.width)));
+  canvas.height = Math.max(1, Math.round(canvas.width / target.aspect));
+  drawCarouselCrop(canvas.getContext("2d"), image, kind, zoom, position, canvas.width, canvas.height);
   return new Promise((resolve, reject) => canvas.toBlob((blob) => {
     if (!blob) return reject(new Error("The cropped image could not be prepared."));
-    const stem = (originalFile.name || `${kind}-carousel`).replace(/\.[^.]+$/, "");
-    resolve(new File([blob], `${stem}-${kind}.jpg`, { type: "image/jpeg", lastModified: Date.now() }));
+    const stem = (originalFile.name || "carousel").replace(/\.[^.]+$/, "");
+    resolve(new File([blob], `${stem}-carousel.jpg`, { type: "image/jpeg", lastModified: Date.now() }));
   }, "image/jpeg", 0.92));
 }

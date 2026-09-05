@@ -11,7 +11,7 @@ const router = Router();
 
 router.use(protect, adminOnly, logAdminMutation);
 router.get("/", listCarousel);
-const slideFiles = carouselUpload.fields([{ name: "desktopImage", maxCount: 1 }, { name: "mobileImage", maxCount: 1 }]);
+const slideFiles = carouselUpload.fields([{ name: "image", maxCount: 1 }, { name: "desktopImage", maxCount: 1 }]);
 router.post("/", slideFiles, createCarousel);
 router.patch("/reorder", [body("ids").isArray({ min: 1 }).withMessage("Carousel order is required."), body("ids.*").isMongoId().withMessage("Carousel order contains an invalid image id.")], validate, reorderCarousel);
 router.put("/:id", [param("id").isMongoId().withMessage("Valid carousel id is required.")], validate, slideFiles, updateCarousel);

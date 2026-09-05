@@ -3,56 +3,52 @@ import { ApiError } from "../utils/ApiError.js";
 import { deleteImage, uploadCarouselImage } from "./uploadService.js";
 
 const sort = { order: 1, createdAt: 1 };
-const normalized = (item) => ({ ...item, desktopImage: item.desktopImage || (item.imageUrl ? { url: item.imageUrl, publicId: item.publicId } : undefined), mobileImage: item.mobileImage || undefined });
+const legacyAsset = (item) => item.desktopImage || (item.imageUrl ? { url: item.imageUrl, publicId: item.publicId } : undefined) || item.mobileImage;
+const normalized = (item) => ({ ...item, image: item.image || legacyAsset(item) });
 
-export const listActiveCarouselImages = async () => (await CarouselImage.find({ isActive: true }).sort(sort).lean()).map(normalized).filter((item) => item.desktopImage?.url);
+export const listActiveCarouselImages = async () => (await CarouselImage.find({ isActive: true }).sort(sort).lean()).map(normalized).filter((item) => item.image?.url);
 export const listAllCarouselImages = async () => (await CarouselImage.find({}).sort(sort).lean()).map(normalized);
 
 async function referencedElsewhere(publicId, excludingId) {
   if (!publicId) return false;
-  return Boolean(await CarouselImage.exists({ _id: { $ne: excludingId }, $or: [{ publicId }, { "desktopImage.publicId": publicId }, { "mobileImage.publicId": publicId }] }));
+  return Boolean(await CarouselImage.exists({ _id: { $ne: excludingId }, $or: [{ publicId }, { "image.publicId": publicId }, { "desktopImage.publicId": publicId }, { "mobileImage.publicId": publicId }] }));
 }
 
 async function cleanup(asset, excludingId) {
   if (asset?.publicId && !await referencedElsewhere(asset.publicId, excludingId)) await deleteImage(asset.publicId);
 }
 
-export async function saveCarouselImage({ desktopFile, mobileFile, removeDesktop = false, removeMobile = false, isActive, requestKey }, id) {
+export async function saveCarouselImage({ imageFile, removeImage = false, isActive, requestKey }, id) {
   if (!id && requestKey) {
     const existing = await CarouselImage.findOne({ requestKey });
     if (existing) return normalized(existing.toObject());
   }
   const current = id ? await CarouselImage.findById(id) : null;
   if (id && !current) throw new ApiError("Carousel slide not found.", 404);
-  if (!current && !desktopFile) throw new ApiError("Desktop banner is required.", 400);
+  if (!current && !imageFile) throw new ApiError("Carousel image is required.", 400);
   const uploaded = {};
   let saved = false;
   try {
-    if (desktopFile) uploaded.desktopImage = await uploadCarouselImage(desktopFile, "desktop");
-    if (mobileFile) uploaded.mobileImage = await uploadCarouselImage(mobileFile, "mobile");
-    const oldDesktop = current?.desktopImage || (current?.imageUrl ? { url: current.imageUrl, publicId: current.publicId } : null);
-    const oldMobile = current?.mobileImage;
-    const desktopImage = uploaded.desktopImage || (removeDesktop ? undefined : oldDesktop);
-    const mobileImage = uploaded.mobileImage || (removeMobile ? undefined : oldMobile);
-    if (!desktopImage?.url && !mobileImage?.url) throw new ApiError("Keep at least one image, or delete the slide.", 400);
+    if (imageFile) uploaded.image = await uploadCarouselImage(imageFile);
+    const oldAssets = [current?.image, current?.desktopImage || (current?.imageUrl ? { url: current.imageUrl, publicId: current.publicId } : null), current?.mobileImage].filter(Boolean);
+    const image = uploaded.image || (removeImage ? undefined : current ? normalized(current.toObject()).image : undefined);
+    if (!image?.url) throw new ApiError("Keep an image, or delete the slide.", 400);
     let item;
     if (current) {
-      current.desktopImage = desktopImage;
-      current.mobileImage = mobileImage;
+      current.image = image;
+      current.desktopImage = undefined;
+      current.mobileImage = undefined;
       current.imageUrl = undefined;
       current.publicId = undefined;
       if (isActive !== undefined) current.isActive = isActive === true || isActive === "true";
-      if (!desktopImage?.url) current.isActive = false;
+      if (!image?.url) current.isActive = false;
       item = await current.save();
     } else {
       const last = await CarouselImage.findOne({}).sort({ order: -1 }).select("order").lean();
-      item = await CarouselImage.create({ desktopImage, mobileImage, requestKey, order: (last?.order || 0) + 1, isActive: isActive !== "false" });
+      item = await CarouselImage.create({ image, requestKey, order: (last?.order || 0) + 1, isActive: isActive !== "false" });
     }
     saved = true;
-    await Promise.allSettled([
-      uploaded.desktopImage ? cleanup(oldDesktop, item._id) : Promise.resolve(),
-      uploaded.mobileImage || removeMobile ? cleanup(oldMobile, item._id) : Promise.resolve(),
-    ]);
+    if (uploaded.image) await Promise.allSettled(oldAssets.map((asset) => cleanup(asset, item._id)));
     return normalized(item.toObject());
   } catch (error) {
     if (!saved) await Promise.allSettled(Object.values(uploaded).map((asset) => deleteImage(asset.publicId)));
@@ -68,7 +64,7 @@ export async function setCarouselStatus(id, isActive) {
   if (isActive) {
     const current = await CarouselImage.findById(id).lean();
     if (!current) throw new ApiError("Carousel slide not found.", 404);
-    if (!normalized(current).desktopImage?.url) throw new ApiError("Add a desktop banner before activating this slide.", 400);
+    if (!normalized(current).image?.url) throw new ApiError("Add an image before activating this slide.", 400);
   }
   const item = await CarouselImage.findByIdAndUpdate(id, { isActive: Boolean(isActive) }, { new: true, runValidators: true });
   if (!item) throw new ApiError("Carousel slide not found.", 404);
@@ -86,7 +82,7 @@ export async function reorderCarouselImages(ids) {
 export async function removeCarouselImage(id) {
   const item = await CarouselImage.findById(id);
   if (!item) throw new ApiError("Carousel slide not found.", 404);
-  const assets = [item.desktopImage || (item.imageUrl ? { publicId: item.publicId } : null), item.mobileImage];
+  const assets = [item.image, item.desktopImage || (item.imageUrl ? { publicId: item.publicId } : null), item.mobileImage];
   await item.deleteOne();
   await Promise.allSettled(assets.map((asset) => cleanup(asset, id)));
   const remaining = await CarouselImage.find({}).sort(sort);
