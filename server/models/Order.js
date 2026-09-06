@@ -62,6 +62,7 @@ const shippingStatuses = [
 const orderSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    checkoutSessionId: { type: String },
     products: [orderItemSchema],
     shippingAddress: shippingAddressSchema,
     paymentMethod: { type: String, enum: ["cod", "cashfree", "razorpay", "card", "upi"], default: "cod" },
@@ -150,6 +151,10 @@ const orderSchema = new mongoose.Schema(
 orderSchema.index({ shiprocketShipmentId: 1 });
 orderSchema.index({ awbCode: 1 });
 orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index(
+  { user: 1, checkoutSessionId: 1 },
+  { unique: true, partialFilterExpression: { checkoutSessionId: { $type: "string" } } }
+);
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
 orderSchema.index({ razorpayPaymentId: 1 }, { unique: true, sparse: true });
 orderSchema.index({ razorpayOrderId: 1 }, { sparse: true });

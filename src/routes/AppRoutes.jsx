@@ -48,7 +48,7 @@ export default function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/admin-session-limit" element={<AdminSessionLimit />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/order/success" element={<OrderSuccess />} />
+        <Route path="/order/success" element={<ProtectedRoute><OrderSuccess /></ProtectedRoute>} />
         <Route path="/track/:id" element={<ProtectedRoute><TrackOrder /></ProtectedRoute>} />
         <Route path="/legal/:slug" element={<LegalPage />} />
         <Route path="/auth/login-required" element={<StatusPage code="401" retry />} />

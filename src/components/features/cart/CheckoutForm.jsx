@@ -10,7 +10,7 @@ import { useCart } from "../../../hooks/useCart.jsx";
 import { formatCurrency } from "../../../utils/formatCurrency.js";
 import { writeGuestSession } from "../../../utils/guestSession.js";
 import { checkoutMessage } from "../../../utils/customerMessage.js";
-import { cartFingerprint, clearPendingPayment, newCheckoutSessionId, resumablePendingPayment, writeConfirmedOrder, writePendingPayment } from "../../../utils/checkoutSession.js";
+import { cartFingerprint, clearPendingPayment, newCheckoutSessionId, resumablePendingPayment, writePendingPayment } from "../../../utils/checkoutSession.js";
 import { useToast } from "../feedback/ToastProvider.jsx";
 import Button from "../../ui/Button.jsx";
 import Input from "../../ui/Input.jsx";
@@ -62,33 +62,6 @@ function loadCashfreeCheckout(mode) {
     cashfreeLoaders.set(mode, loader);
   }
   return cashfreeLoaders.get(mode);
-}
-
-function formatOrderForSuccess(order, shippingAddress, items, total, profile) {
-  return {
-    _id: order?._id || `VEL-${Date.now().toString().slice(-6)}`,
-    id: order?._id || `VEL-${Date.now().toString().slice(-6)}`,
-    createdAt: order?.createdAt || new Date().toISOString(),
-    date: new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(order?.createdAt || Date.now())),
-    paymentStatus: order?.paymentStatus || "pending",
-    paymentMethod: order?.paymentMethod || "cod",
-    customerName: profile?.name || shippingAddress.fullName,
-    customerEmail: profile?.email || "",
-    customerPhone: profile?.phone || shippingAddress.phone,
-    user: profile ? { name: profile.name, email: profile.email, phone: profile.phone } : undefined,
-    shippingAddress,
-    billingAddress: shippingAddress,
-    items,
-    products: order?.products || items,
-    productSubtotal: Number(order?.productSubtotal ?? items.reduce((sum, item) => sum + Number(item.basePrice ?? item.price ?? 0) * Number(item.quantity || 1), 0)),
-    offerDiscount: Number(order?.offerDiscount ?? 0),
-    subtotal: Number(order?.subtotal ?? items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0)),
-    shippingAmount: Number(order?.shippingAmount || 0),
-    couponDiscount: Number(order?.couponDiscount || 0),
-    total: order?.totalAmount ?? total,
-    totalAmount: order?.totalAmount ?? total,
-    estimatedDelivery: "2-5 business days",
-  };
 }
 
 export default function CheckoutForm() {
@@ -190,10 +163,8 @@ export default function CheckoutForm() {
     writeGuestSession({ checkoutDraft: {} });
     setCheckoutStage("cart_cleanup");
     await completePurchase(purchasedItems);
-    const confirmedOrder = formatOrderForSuccess(order, shippingAddress, purchasedItems, totals.total, profile);
-    writeConfirmedOrder(checkoutSessionIdRef.current, confirmedOrder);
     showToast("Order placed successfully.", "success", null, { id: `order-${order?._id || "complete"}` });
-    navigate(`/order/success?checkout=${encodeURIComponent(checkoutSessionIdRef.current)}`, { state: { checkoutSessionId: checkoutSessionIdRef.current, order: confirmedOrder } });
+    navigate(`/order/success?checkout=${encodeURIComponent(checkoutSessionIdRef.current)}`);
   };
 
   useEffect(() => {
@@ -219,7 +190,7 @@ export default function CheckoutForm() {
   const submitCodOrder = async (orderPayload, purchasedItems, setCheckoutStage) => {
     setProcessingStep("cod");
     setCheckoutStage("order_creation");
-    const response = await createOrder({ ...orderPayload.order, paymentMethod: "cod" });
+    const response = await createOrder({ ...orderPayload.order, checkoutSessionId: checkoutSessionIdRef.current, paymentMethod: "cod" });
     await finishOrder(response.order, orderPayload.order.shippingAddress, purchasedItems, setCheckoutStage);
   };
 

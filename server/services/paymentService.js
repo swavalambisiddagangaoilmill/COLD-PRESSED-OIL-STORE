@@ -60,10 +60,33 @@ export async function getCheckoutShippingQuote(userId, payload) {
   return { shippingAmount: quote.customerShippingCharge, subtotal: totals.subtotal, couponDiscount: totals.discountAmount, totalAmount: totals.totalAmount };
 }
 
+function paymentIntentResponse(checkout) {
+  return { orderId: checkout.cashfreeOrderId, checkoutSessionId: checkout.checkoutSessionId, paymentSessionId: checkout.paymentSessionId, environment: env.cashfree.environment === "production" ? "production" : "sandbox", expiresAt: checkout.expiresAt };
+}
+
+async function existingPaymentIntent(userId, checkoutSessionId) {
+  return PaymentCheckout.findOne({ user: userId, checkoutSessionId }).select("+paymentSessionId +idempotencyKey");
+}
+
+async function waitForCreatedPaymentIntent(userId, checkoutSessionId) {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const checkout = await existingPaymentIntent(userId, checkoutSessionId);
+    if (!checkout) return null;
+    if (checkout.paymentSessionId && checkout.status === "created") return checkout;
+    if (["failed", "cancelled", "expired", "paid"].includes(checkout.status)) throw new ApiError("This checkout payment session is no longer active.", 409);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new ApiError("Payment session is already being prepared. Please retry shortly.", 409);
+}
+
 export async function createPaymentOrder(userId, payload) {
   const orderPayload = payload.order || {};
   const checkoutSessionId = payload.checkoutSessionId;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(checkoutSessionId || "")) throw new ApiError("Valid checkout session is required.", 400);
+  const existing = await existingPaymentIntent(userId, checkoutSessionId);
+  if (existing?.paymentSessionId && existing.status === "created") return paymentIntentResponse(existing);
+  if (existing?.status === "creating") return paymentIntentResponse(await waitForCreatedPaymentIntent(userId, checkoutSessionId));
+  if (existing) throw new ApiError("This checkout payment session is no longer active.", 409);
   const priced = await calculateAmount(orderPayload.products || [], userId, orderPayload.couponCode);
   const shippingQuote = await calculateShippingQuote({ items: priced.items, deliveryPincode: orderPayload.shippingAddress?.postalCode, paymentMethod: "cashfree", declaredValue: Math.max(0, priced.subtotal - priced.couponDiscount) });
   const amount = Number(calculateCheckoutTotals(priced.items, priced.couponDiscount, shippingQuote.customerShippingCharge).totalAmount.toFixed(2));
@@ -74,10 +97,29 @@ export async function createPaymentOrder(userId, payload) {
   if (phone.length !== 10) throw new ApiError("A valid customer phone is required for online payment.", 400);
   const orderId = `cf_${crypto.randomUUID()}`;
   const idempotencyKey = crypto.randomUUID();
-  const provider = await request("/orders", { method: "POST", headers: { "x-idempotency-key": idempotencyKey, "x-request-id": idempotencyKey }, body: JSON.stringify({ order_id: orderId, order_amount: amount, order_currency: CURRENCY, customer_details: { customer_id: String(user._id), customer_name: String(payload.customer?.name || user.name || "Customer").slice(0, 100), customer_email: String(payload.customer?.email || user.email || "").slice(0, 100), customer_phone: phone }, order_meta: { return_url: `${env.clientUrl}/checkout?payment_return=${encodeURIComponent(checkoutSessionId)}`, notify_url: `${env.backendPublicUrl}/api/payments/webhook` }, order_note: "Swavalambi Siddaganga Oil Mill order" }) });
-  if (provider.order_id !== orderId || Number(provider.order_amount) !== amount || provider.order_currency !== CURRENCY || !provider.payment_session_id) throw new ApiError("Payment provider returned an invalid order.", 502);
-  await PaymentCheckout.create({ user: userId, checkoutSessionId, amount, currency: CURRENCY, cashfreeOrderId: orderId, cashfreeCfOrderId: provider.cf_order_id, paymentSessionId: provider.payment_session_id, razorpayQrId: orderId, idempotencyKey, orderPayload: { ...orderPayload, _shippingQuote: shippingQuote }, expiresAt: provider.order_expiry_time ? new Date(provider.order_expiry_time) : undefined });
-  return { orderId, checkoutSessionId, paymentSessionId: provider.payment_session_id, environment: env.cashfree.environment === "production" ? "production" : "sandbox", expiresAt: provider.order_expiry_time };
+  let checkout;
+  try {
+    checkout = await PaymentCheckout.create({ user: userId, checkoutSessionId, status: "creating", amount, currency: CURRENCY, cashfreeOrderId: orderId, razorpayQrId: orderId, idempotencyKey, orderPayload: { ...orderPayload, _shippingQuote: shippingQuote } });
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+    const existing = await waitForCreatedPaymentIntent(userId, checkoutSessionId);
+    if (!existing) throw error;
+    return paymentIntentResponse(existing);
+  }
+
+  try {
+    const provider = await request("/orders", { method: "POST", headers: { "x-idempotency-key": idempotencyKey, "x-request-id": idempotencyKey }, body: JSON.stringify({ order_id: orderId, order_amount: amount, order_currency: CURRENCY, customer_details: { customer_id: String(user._id), customer_name: String(payload.customer?.name || user.name || "Customer").slice(0, 100), customer_email: String(payload.customer?.email || user.email || "").slice(0, 100), customer_phone: phone }, order_meta: { return_url: `${env.clientUrl}/checkout?payment_return=${encodeURIComponent(checkoutSessionId)}`, notify_url: `${env.backendPublicUrl}/api/payments/webhook` }, order_note: "Swavalambi Siddaganga Oil Mill order" }) });
+    if (provider.order_id !== orderId || Number(provider.order_amount) !== amount || provider.order_currency !== CURRENCY || !provider.payment_session_id) throw new ApiError("Payment provider returned an invalid order.", 502);
+    checkout.status = "created";
+    checkout.cashfreeCfOrderId = provider.cf_order_id;
+    checkout.paymentSessionId = provider.payment_session_id;
+    checkout.expiresAt = provider.order_expiry_time ? new Date(provider.order_expiry_time) : undefined;
+    await checkout.save();
+    return paymentIntentResponse(checkout);
+  } catch (error) {
+    await PaymentCheckout.updateOne({ _id: checkout._id, status: "creating" }, { status: "failed" }).catch(() => undefined);
+    throw error;
+  }
 }
 
 async function verifyProvider(checkout) {
@@ -108,7 +150,7 @@ async function finalize(checkout, verifiedPayment) {
   }
   try {
     const { _shippingQuote, ...orderPayload } = checkout.orderPayload;
-    const order = await createStoreOrder(checkout.user, { ...orderPayload, paymentMethod: "cashfree", paymentStatus: "paid", cashfreeOrderId: checkout.cashfreeOrderId, cashfreeCfOrderId: verified.order.cf_order_id, cashfreePaymentId: paymentId }, { trustedShippingQuote: _shippingQuote });
+    const order = await createStoreOrder(checkout.user, { ...orderPayload, checkoutSessionId: checkout.checkoutSessionId, paymentMethod: "cashfree", paymentStatus: "paid", cashfreeOrderId: checkout.cashfreeOrderId, cashfreeCfOrderId: verified.order.cf_order_id, cashfreePaymentId: paymentId }, { trustedShippingQuote: _shippingQuote });
     await PaymentCheckout.updateOne({ _id: claimed._id }, { status: "paid", cashfreePaymentId: paymentId, order: order._id });
     await Promise.allSettled([createAdminNotification({ category: "payments", type: "payment_successful", title: "Payment Successful", description: `Payment received for order ${order._id}.`, related: { kind: "Order", id: order._id, label: `Order ${order._id}`, path: "/admin/payments" } })]);
     return order;
@@ -146,6 +188,20 @@ export async function getPaymentCheckoutStatus(userId, cashfreeOrderId) {
     if (["failed", "cancelled", "expired"].includes(checkout.status)) return { status: checkout.status, checkoutSessionId: checkout.checkoutSessionId, expiresAt: checkout.expiresAt };
     return { status: "pending", checkoutSessionId: checkout.checkoutSessionId, expiresAt: checkout.expiresAt };
   }
+}
+
+export async function getCheckoutConfirmation(userId, checkoutSessionId) {
+  const checkout = await PaymentCheckout.findOne({ user: userId, checkoutSessionId });
+  if (checkout) {
+    if (checkout.status !== "paid" || !checkout.order || !checkout.cashfreePaymentId) throw new ApiError("Order confirmation is not available for this checkout.", 409);
+    const order = await Order.findOne({ _id: checkout.order, user: userId, checkoutSessionId, cashfreeOrderId: checkout.cashfreeOrderId, cashfreePaymentId: checkout.cashfreePaymentId, paymentStatus: "paid" });
+    if (!order) throw new ApiError("Order confirmation was not found.", 404);
+    return customerOrderView(order);
+  }
+
+  const codOrder = await Order.findOne({ user: userId, checkoutSessionId, paymentMethod: "cod" });
+  if (!codOrder) throw new ApiError("Order confirmation was not found.", 404);
+  return customerOrderView(codOrder);
 }
 
 export async function processCashfreeWebhook(rawBody, timestamp, signature) {

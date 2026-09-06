@@ -4,6 +4,7 @@ import { body, param } from "express-validator";
 export const orderIdValidator = [param("id").isMongoId().withMessage("Valid order id is required.")];
 
 export const createOrderValidator = [
+  body("checkoutSessionId").isUUID().withMessage("Valid checkout session is required."),
   body("products").isArray({ min: 1 }).withMessage("At least one product is required."),
   body("products.*.product").isMongoId().withMessage("Valid product id is required."),
   body("products.*.quantity").isInt({ min: 1 }).withMessage("Quantity must be at least 1."),

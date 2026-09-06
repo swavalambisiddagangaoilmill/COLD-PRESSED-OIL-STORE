@@ -26,8 +26,7 @@ test("same-device provider return resumes the existing authoritative checkout ve
 });
 
 test("confirmed order snapshot survives a safe success-page refresh", () => {
-  const checkout = fs.readFileSync(path.join(root, "src/components/features/cart/CheckoutForm.jsx"), "utf8");
   const success = fs.readFileSync(path.join(root, "src/pages/OrderSuccess.jsx"), "utf8");
-  assert.match(checkout, /writeConfirmedOrder\(checkoutSessionIdRef\.current/);
-  assert.match(success, /confirmedOrderForSession\(checkoutSessionId\)/);
+  assert.match(success, /getOrderConfirmation\(checkoutSessionId\)/);
+  assert.doesNotMatch(success, /sessionStorage|location\.state|paymentStatus\s*===\s*["']SUCCESS/);
 });

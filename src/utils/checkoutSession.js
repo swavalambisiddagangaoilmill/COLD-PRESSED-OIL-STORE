@@ -1,5 +1,4 @@
 export const PENDING_PAYMENT_KEY = "ss_cashfree_pending_payment";
-export const CONFIRMED_ORDER_KEY = "ss_confirmed_order";
 
 function read(key) {
   if (typeof window === "undefined") return null;
@@ -40,13 +39,3 @@ export function clearPendingPayment() {
 export function writePendingPayment(payment) {
   window.sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify(payment));
 }
-
-export function writeConfirmedOrder(checkoutSessionId, order) {
-  window.sessionStorage.setItem(CONFIRMED_ORDER_KEY, JSON.stringify({ checkoutSessionId, order }));
-}
-
-export function confirmedOrderForSession(checkoutSessionId) {
-  const completed = read(CONFIRMED_ORDER_KEY);
-  return checkoutSessionId && completed?.checkoutSessionId === checkoutSessionId ? completed.order : null;
-}
-

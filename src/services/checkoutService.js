@@ -30,3 +30,7 @@ export async function verifyPayment(payload) {
 export function getPaymentStatus(cashfreeOrderId, options = {}) {
   return apiRequest(API_ENDPOINTS.paymentStatus(cashfreeOrderId), options);
 }
+
+export function getOrderConfirmation(checkoutSessionId) {
+  return apiRequest(API_ENDPOINTS.orderConfirmation(checkoutSessionId));
+}

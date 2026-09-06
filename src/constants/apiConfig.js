@@ -39,6 +39,7 @@ export const API_ENDPOINTS = {
   paymentIntent: "/payments/intent",
   paymentVerify: "/payments/verify",
   paymentStatus: (cashfreeOrderId) => `/payments/${encodeURIComponent(cashfreeOrderId)}/status`,
+  orderConfirmation: (checkoutSessionId) => `/payments/checkout/${encodeURIComponent(checkoutSessionId)}/confirmation`,
   contact: "/contact",
   offers: "/content/offers",
   couponValidate: "/content/coupons/validate",

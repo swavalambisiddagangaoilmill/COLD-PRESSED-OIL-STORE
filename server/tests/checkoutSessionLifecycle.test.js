@@ -17,15 +17,11 @@ test.beforeEach(() => {
 test.afterEach(() => { delete global.window; });
 
 test("stale Order A state cannot resume or confirm during Checkout B", async () => {
-  const { confirmedOrderForSession, resumablePendingPayment, writeConfirmedOrder, writePendingPayment } = await import("../../src/utils/checkoutSession.js");
-  const orderA = { _id: "order-a" };
+  const { resumablePendingPayment, writePendingPayment } = await import("../../src/utils/checkoutSession.js");
   writePendingPayment({ checkoutSessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", cashfreeOrderId: "cf-a" });
-  writeConfirmedOrder("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", orderA);
 
   assert.equal(resumablePendingPayment(""), null);
   assert.equal(resumablePendingPayment("?payment_pending=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"), null);
-  assert.equal(confirmedOrderForSession("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"), null);
-  assert.deepEqual(confirmedOrderForSession("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"), orderA);
 });
 
 test("same-device return resumes only its exact pending checkout session", async () => {

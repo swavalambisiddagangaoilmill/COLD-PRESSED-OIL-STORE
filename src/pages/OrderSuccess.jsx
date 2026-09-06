@@ -1,16 +1,28 @@
 // Renders the dedicated order success confirmation page.
 import { CheckCircle, Download, ExternalLink, ShoppingBag } from "lucide-react";
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import Container from "../components/ui/Container.jsx";
 import { formatCurrency } from "../utils/formatCurrency.js";
 import { downloadInvoicePdf } from "../utils/invoicePdf.js";
-import { confirmedOrderForSession } from "../utils/checkoutSession.js";
+import { getOrderConfirmation } from "../services/checkoutService.js";
 
 export default function OrderSuccess() {
-  const { state, search } = useLocation();
+  const { search } = useLocation();
   const checkoutSessionId = new URLSearchParams(search).get("checkout") || "";
-  const order = state?.checkoutSessionId === checkoutSessionId ? state.order : confirmedOrderForSession(checkoutSessionId);
-  if (!order) return <Navigate to="/shop" replace />;
+  const [order, setOrder] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    if (!checkoutSessionId) { setError("Order confirmation link is invalid."); return undefined; }
+    getOrderConfirmation(checkoutSessionId)
+      .then((data) => { if (active) setOrder(data.order); })
+      .catch(() => { if (active) setError("This order confirmation could not be verified."); });
+    return () => { active = false; };
+  }, [checkoutSessionId]);
+
+  if (!order) return <section className="section-padding"><Container className="max-w-3xl"><div className="rounded-3xl bg-white p-10 text-center shadow-soft"><h1 className="font-serif text-4xl font-semibold">{error ? "Confirmation unavailable" : "Verifying your order…"}</h1><p className="mt-4 text-ink/60">{error || "Securely loading the confirmed order from our server."}</p>{error && <Link to="/account" className="mt-6 inline-flex rounded-full bg-leaf px-6 py-3 font-bold text-white">View your orders</Link>}</div></Container></section>;
 
   const orderId = order._id || order.id;
   const items = order.items || order.products || [];

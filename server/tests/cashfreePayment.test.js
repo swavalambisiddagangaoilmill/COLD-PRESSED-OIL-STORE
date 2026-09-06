@@ -8,12 +8,22 @@ import Product from "../models/Product.js";
 import User from "../models/User.js";
 import Offer from "../models/Offer.js";
 import StoreSettings from "../models/StoreSettings.js";
-import { createPaymentOrder, getPaymentCheckoutStatus, processCashfreeWebhook, verifyPaymentAndCreateOrder } from "../services/paymentService.js";
+import { createPaymentOrder, getCheckoutConfirmation, getPaymentCheckoutStatus, processCashfreeWebhook, verifyPaymentAndCreateOrder } from "../services/paymentService.js";
 import { resetShiprocketAuthForTests } from "../services/shiprocketService.js";
 
 const original = { fetch: global.fetch, productFind: Product.find, offerFind: Offer.find, settingsFind: StoreSettings.findOne, userFind: User.findById, userUpdate: User.updateOne, checkoutCreate: PaymentCheckout.create, checkoutFind: PaymentCheckout.findOne, checkoutUpdate: PaymentCheckout.updateOne, orderFind: Order.findOne, orderFindById: Order.findById, orderFindOneAndUpdate: Order.findOneAndUpdate, orderUpdate: Order.updateOne };
 const checkoutSessionId = "22222222-2222-4222-8222-222222222222";
 const checkout = { _id: "checkout-id", user: "user-id", checkoutSessionId, status: "created", amount: 650, currency: "INR", cashfreeOrderId: "cf_11111111-1111-4111-8111-111111111111", orderPayload: { products: [], shippingAddress: {} } };
+
+test("checkout idempotency indexes exclude legacy documents without a checkout session", () => {
+  for (const model of [PaymentCheckout, Order]) {
+    const index = model.schema.indexes().find(([keys]) => keys.user === 1 && keys.checkoutSessionId === 1);
+    assert.deepEqual(index, [
+      { user: 1, checkoutSessionId: 1 },
+      { unique: true, partialFilterExpression: { checkoutSessionId: { $type: "string" } }, background: true },
+    ]);
+  }
+});
 
 test.beforeEach(() => { resetShiprocketAuthForTests(); Offer.find = () => ({ lean: async () => [] }); StoreSettings.findOne = () => ({ select: () => ({ lean: async () => ({ shiprocketEnabled: true }) }) }); });
 test.afterEach(() => { resetShiprocketAuthForTests(); global.fetch = original.fetch; Product.find = original.productFind; Offer.find = original.offerFind; StoreSettings.findOne = original.settingsFind; User.findById = original.userFind; User.updateOne = original.userUpdate; PaymentCheckout.create = original.checkoutCreate; PaymentCheckout.findOne = original.checkoutFind; PaymentCheckout.updateOne = original.checkoutUpdate; Order.findOne = original.orderFind; Order.findById = original.orderFindById; Order.findOneAndUpdate = original.orderFindOneAndUpdate; Order.updateOne = original.orderUpdate; });
@@ -24,7 +34,8 @@ test("Cashfree session is created server-side and response exposes no secret", a
   Product.find = async () => [{ _id: { toString: () => "64b000000000000000000001" }, title: "Oil", stock: 10, price: 650, onlinePaymentEnabled: true, variants: [{ _id: "64b000000000000000000002", size: "1L", litres: 1, price: 650, shippingWeight: 1.1, dimensions: { length: 10, width: 11, height: 30 }, images: [] }] }];
   User.findById = async () => ({ _id: "user-id", name: "Customer", email: "customer@example.com", phone: "9876543210" });
   let stored, sent;
-  PaymentCheckout.create = async (value) => { stored = value; return value; };
+  PaymentCheckout.findOne = () => ({ select: async () => null });
+  PaymentCheckout.create = async (value) => { stored = { ...value, save: async function save() { return this; } }; return stored; };
   global.fetch = async (url, options) => {
     if (url.includes("shiprocket.in/v1/external/auth/login")) return { ok: true, text: async () => JSON.stringify({ token: "token" }) };
     if (url.includes("courier/serviceability")) return { ok: true, text: async () => JSON.stringify({ data: { available_courier_companies: [{ courier_company_id: 9, courier_name: "Fast", freight_charge: 98, estimated_delivery_days: 2 }] } }) };
@@ -43,6 +54,39 @@ test("Cashfree session is created server-side and response exposes no secret", a
   assert.equal(stored.checkoutSessionId, checkoutSessionId);
   assert.equal(result.checkoutSessionId, checkoutSessionId);
   assert.equal(sent.body.order_meta.return_url, `${env.clientUrl}/checkout?payment_return=${checkoutSessionId}`);
+});
+
+test("concurrent and repeated intent requests reuse one server-claimed Cashfree intent", async () => {
+  Object.assign(env.cashfree, { environment: "sandbox", clientId: "client-id", clientSecret: "client-secret", apiVersion: "2025-01-01" });
+  Object.assign(env.shiprocket, { enabled: true, email: "shiprocket@example.com", password: "secret", pickupLocation: "Primary", pickupPostcode: "572106" });
+  Product.find = async () => [{ _id: { toString: () => "64b000000000000000000001" }, title: "Oil", stock: 10, price: 650, onlinePaymentEnabled: true, variants: [{ _id: "64b000000000000000000002", size: "1L", litres: 1, price: 650, shippingWeight: 1, dimensions: { length: 10, width: 11, height: 30 }, images: [] }] }];
+  User.findById = async () => ({ _id: "user-id", name: "Customer", email: "customer@example.com", phone: "9876543210" });
+  let claimed;
+  let createCalls = 0;
+  let cashfreeCalls = 0;
+  PaymentCheckout.create = async (value) => {
+    createCalls += 1;
+    if (claimed) { const error = new Error("duplicate"); error.code = 11000; throw error; }
+    claimed = { ...value, save: async function save() { return this; } };
+    return claimed;
+  };
+  PaymentCheckout.findOne = () => ({ select: async () => claimed });
+  global.fetch = async (url, options) => {
+    if (url.includes("shiprocket.in/v1/external/auth/login")) return { ok: true, text: async () => JSON.stringify({ token: "token" }) };
+    if (url.includes("courier/serviceability")) return { ok: true, text: async () => JSON.stringify({ data: { available_courier_companies: [{ courier_company_id: 9, courier_name: "Fast", freight_charge: 98, estimated_delivery_days: 2 }] } }) };
+    cashfreeCalls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const body = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ order_id: body.order_id, order_amount: body.order_amount, order_currency: "INR", cf_order_id: "123", payment_session_id: "one-session" }) };
+  };
+  const payload = { checkoutSessionId, order: { products: [{ product: "64b000000000000000000001", variant: "64b000000000000000000002", quantity: 1 }], shippingAddress: { phone: "9876543210", postalCode: "560001" } }, customer: {} };
+  const [first, second] = await Promise.all([createPaymentOrder("user-id", payload), createPaymentOrder("user-id", payload)]);
+  const repeated = await createPaymentOrder("user-id", payload);
+  assert.equal(createCalls, 2);
+  assert.equal(cashfreeCalls, 1);
+  assert.equal(first.orderId, second.orderId);
+  assert.equal(second.orderId, repeated.orderId);
+  assert.equal(repeated.paymentSessionId, "one-session");
 });
 
 test("payment polling is owner-scoped and reports pending without trusting the browser", async () => {
@@ -74,6 +118,7 @@ test("Shiprocket failure blocks Cashfree order creation with a controlled error"
   Object.assign(env.cashfree, { environment: "production", clientId: "client-id", clientSecret: "client-secret", apiVersion: "2025-01-01" });
   Object.assign(env.shiprocket, { enabled: true, email: "shiprocket@example.com", password: "secret", pickupLocation: "Primary", pickupPostcode: "572106" });
   Product.find = async () => [{ _id: { toString: () => "64b000000000000000000001" }, title: "Oil", stock: 10, price: 650, onlinePaymentEnabled: true, variants: [{ _id: "64b000000000000000000002", size: "1L", litres: 1, price: 650, shippingWeight: 1, dimensions: { length: 10, width: 11, height: 30 }, images: [] }] }];
+  PaymentCheckout.findOne = () => ({ select: async () => null });
   let cashfreeCalled = false;
   global.fetch = async (url) => {
     if (url.includes("shiprocket.in/v1/external/auth/login")) return { ok: true, status: 200, text: async () => JSON.stringify({ token: "private-token" }) };
@@ -113,6 +158,25 @@ test("duplicate verified payment resolves to the existing order", async () => {
   assert.equal(cartCleanup[0]._id, "user-id");
   assert.match(JSON.stringify(cartCleanup[1]), /\$subtract/);
   assert.ok(existingOrder.cartCleanupCompletedAt instanceof Date);
+});
+
+test("confirmation requires matching customer, checkout, payment, and paid order", async () => {
+  const paidCheckout = { ...checkout, status: "paid", order: "order-id", cashfreePaymentId: "payment-1" };
+  PaymentCheckout.findOne = async (filter) => filter.user === "user-id" && filter.checkoutSessionId === checkoutSessionId ? paidCheckout : null;
+  let orderFilter;
+  Order.findOne = async (filter) => { orderFilter = filter; return filter.user === "user-id" && filter.checkoutSessionId === checkoutSessionId ? { _id: "order-id", user: "user-id", checkoutSessionId, cashfreeOrderId: checkout.cashfreeOrderId, cashfreePaymentId: "payment-1", paymentStatus: "paid", products: [] } : null; };
+  const order = await getCheckoutConfirmation("user-id", checkoutSessionId);
+  assert.equal(order._id, "order-id");
+  assert.equal(orderFilter.paymentStatus, "paid");
+  assert.equal(orderFilter.cashfreePaymentId, "payment-1");
+  await assert.rejects(() => getCheckoutConfirmation("other-user", checkoutSessionId), /not found/i);
+});
+
+test("client success claims and mismatched checkout/order pairs cannot produce confirmation", async () => {
+  PaymentCheckout.findOne = async ({ checkoutSessionId: requested }) => requested === checkoutSessionId ? { ...checkout, status: "created", cashfreePaymentId: undefined, order: undefined } : null;
+  Order.findOne = async () => null;
+  await assert.rejects(() => getCheckoutConfirmation("user-id", checkoutSessionId), /not available/i);
+  await assert.rejects(() => getCheckoutConfirmation("user-id", "33333333-3333-4333-8333-333333333333"), /not found/i);
 });
 
 test("Cashfree webhook rejects mismatched amount and accepts safe failed status", async () => {

@@ -6,7 +6,7 @@ const paymentCheckoutSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     provider: { type: String, default: "cashfree" },
     type: { type: String, enum: ["hosted_checkout"], default: "hosted_checkout" },
-    status: { type: String, enum: ["created", "processing", "paid", "expired", "failed", "cancelled"], default: "created", index: true },
+    status: { type: String, enum: ["creating", "created", "processing", "paid", "expired", "failed", "cancelled"], default: "creating", index: true },
     checkoutSessionId: { type: String, index: true },
     amount: { type: Number, required: true, min: 1 },
     currency: { type: String, default: "INR" },
@@ -21,6 +21,11 @@ const paymentCheckoutSchema = new mongoose.Schema(
     expiresAt: { type: Date, index: true },
   },
   { timestamps: true }
+);
+
+paymentCheckoutSchema.index(
+  { user: 1, checkoutSessionId: 1 },
+  { unique: true, partialFilterExpression: { checkoutSessionId: { $type: "string" } } }
 );
 
 export default mongoose.model("PaymentCheckout", paymentCheckoutSchema);

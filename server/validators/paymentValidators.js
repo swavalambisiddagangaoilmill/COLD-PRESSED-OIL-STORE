@@ -3,3 +3,4 @@ const orderPayload = [body("order.products").isArray({ min: 1 }).withMessage("At
 export const paymentIntentValidator = [body("checkoutSessionId").isUUID().withMessage("Valid checkout session is required."), ...orderPayload, body("customer.email").optional().isEmail().normalizeEmail(), body("customer.phone").optional().trim()];
 export const paymentVerifyValidator = [body("cashfreeOrderId").matches(/^cf_[0-9a-f-]{36}$/i).withMessage("Valid payment order id is required."), body().custom((value) => { if (Object.keys(value).some((key) => key !== "cashfreeOrderId")) throw new Error("Only the payment order id may be submitted for verification."); return true; })];
 export const paymentStatusValidator = [param("cashfreeOrderId").matches(/^cf_[0-9a-f-]{36}$/i).withMessage("Valid payment order id is required.")];
+export const checkoutConfirmationValidator = [param("checkoutSessionId").isUUID().withMessage("Valid checkout session is required.")];
