@@ -239,7 +239,27 @@ test("already-booked orders return without provider calls", async () => {
 test("Create Order identifiers support the official response and provider wrappers", () => {
   assert.deepEqual(extractCreatedShipmentIdentifiers({ order_id: 16161616, shipment_id: 15151515, status: "NEW", status_code: 1 }), { orderId: "16161616", shipmentId: "15151515", awbCode: "", courierName: "" });
   assert.deepEqual(extractCreatedShipmentIdentifiers({ response: { data: { order_id: 16161616, shipment_id: 15151515 } } }), { orderId: "16161616", shipmentId: "15151515", awbCode: "", courierName: "" });
+  assert.deepEqual(extractCreatedShipmentIdentifiers({ order_id: 16161616, data: { shipment_id: 15151515 } }), { orderId: "16161616", shipmentId: "15151515", awbCode: "", courierName: "" });
+  assert.deepEqual(extractCreatedShipmentIdentifiers([{ order_id: 16161616, shipments: { data: [{ id: 15151515 }] } }]), { orderId: "16161616", shipmentId: "15151515", awbCode: "", courierName: "" });
   assert.deepEqual(extractCreatedShipmentIdentifiers({ order_id: 16161616, status: "NEW" }), { orderId: "16161616", shipmentId: "", awbCode: "", courierName: "" });
+});
+
+test("Create Order is preceded by a persisted reconciliation marker", async () => {
+  Object.assign(env.shiprocket, { enabled: true, email: "shiprocket@example.com", password: "secret", pickupLocation: "Primary", pickupPostcode: "572106" });
+  const order = mockOrder();
+  Order.findById = () => queryFor(order);
+  Order.findOneAndUpdate = () => queryFor(order);
+  let markerPresentAtCreate = false;
+  globalThis.fetch = async (url) => {
+    const body = url.endsWith("/auth/login") ? { token: "token" }
+      : url.includes("serviceability") ? { data: { available_courier_companies: [{ courier_company_id: 42, rate: 50 }] } }
+        : url.endsWith("/orders/create/adhoc") ? (markerPresentAtCreate = order.shipmentCreationOutcomeUnknownAt instanceof Date, { order_id: 16161616, shipment_id: 15151515 })
+          : { response: { data: { awb_code: "AWB123" } } };
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+  };
+  await createReadyToShipShipment(order._id);
+  assert.equal(markerPresentAtCreate, true);
+  assert.equal(order.shipmentCreationOutcomeUnknownAt, undefined);
 });
 
 test("missing shipment id is reconciled from the persisted Shiprocket order before AWB assignment", async () => {

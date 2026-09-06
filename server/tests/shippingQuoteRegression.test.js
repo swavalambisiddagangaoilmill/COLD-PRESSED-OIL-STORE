@@ -31,10 +31,13 @@ test("multi-PIN quote matrix preserves authoritative weights, dimensions, and li
     { pin: "572104", weight: 5, rate: 115, paymentMethod: "prepaid" },
     { pin: "570001", weight: 5, rate: 140, paymentMethod: "prepaid" },
     { pin: "560001", weight: 5, rate: 150, paymentMethod: "cod" },
+    { pin: "560034", weight: 5, rate: 158, paymentMethod: "prepaid" },
+    { pin: "560066", weight: 15, rate: 438, paymentMethod: "prepaid" },
     { pin: "110001", weight: 15, rate: 601, paymentMethod: "prepaid" },
     { pin: "400001", weight: 15, rate: 555, paymentMethod: "prepaid" },
     { pin: "600001", weight: 5, rate: 220, paymentMethod: "prepaid" },
     { pin: "500001", weight: 5, rate: 205, paymentMethod: "cod" },
+    { pin: "700001", weight: 15, rate: 469, paymentMethod: "prepaid" },
   ];
   const requests = [];
   globalThis.fetch = async (url) => {

@@ -316,14 +316,19 @@ function responseStructure(value, depth = 0) {
 }
 
 export function extractCreatedShipmentIdentifiers(response) {
-  const candidates = [response, response?.data, response?.response, response?.response?.data].filter((value) => value && typeof value === "object");
+  const candidates = [response, response?.data, response?.response, response?.response?.data, ...(Array.isArray(response) ? response : []), ...(Array.isArray(response?.data) ? response.data : [])].filter((value) => value && typeof value === "object");
+  const identifiers = { orderId: "", shipmentId: "", awbCode: "", courierName: "" };
   for (const value of candidates) {
-    const shipment = Array.isArray(value.shipments) ? value.shipments[0] : value.shipment;
+    const shipment = Array.isArray(value.shipments) ? value.shipments[0] : Array.isArray(value.shipments?.data) ? value.shipments.data[0] : value.shipment;
     const orderId = value.order_id ?? value.shiprocket_order_id ?? value.id;
     const shipmentId = value.shipment_id ?? value.shipmentId ?? shipment?.shipment_id ?? shipment?.id;
-    if (orderId || shipmentId) return { orderId: orderId ? String(orderId) : "", shipmentId: shipmentId ? String(shipmentId) : "", awbCode: String(value.awb_code ?? value.awb ?? shipment?.awb_code ?? shipment?.awb ?? ""), courierName: String(value.courier_name ?? shipment?.courier_name ?? "") };
+    identifiers.orderId ||= orderId ? String(orderId) : "";
+    identifiers.shipmentId ||= shipmentId ? String(shipmentId) : "";
+    identifiers.awbCode ||= String(value.awb_code ?? value.awb ?? shipment?.awb_code ?? shipment?.awb ?? "");
+    identifiers.courierName ||= String(value.courier_name ?? shipment?.courier_name ?? "");
+    if (identifiers.orderId && identifiers.shipmentId) break;
   }
-  return { orderId: "", shipmentId: "", awbCode: "", courierName: "" };
+  return identifiers;
 }
 
 function listedOrders(response) {
@@ -506,15 +511,20 @@ export async function createReadyToShipShipment(orderId) {
     if (!order.shiprocketShipmentId) {
       let created;
       try {
+        // Persist the reconciliation marker before the non-idempotent provider call.
+        // A crash or timeout can therefore never cause a blind Create Order retry.
+        order.shipmentCreationOutcomeUnknownAt = new Date();
+        await order.save();
         created = await shiprocketRequest("/orders/create/adhoc", { method: "POST", body: buildOrderPayload(order, packageDetails) });
       } catch (createError) {
         const reconciled = await reconcileCreatedShipment(order).catch(() => null);
         if (!reconciled?.shipmentId) {
           if ((createError?.statusCode || 500) >= 500) {
-            order.shipmentCreationOutcomeUnknownAt = new Date();
             await order.save();
             throw new ApiError("Shiprocket order creation failed. Its outcome could not be confirmed; retry will reconcile before creating another order.", createError?.statusCode || 502);
           }
+          order.shipmentCreationOutcomeUnknownAt = undefined;
+          await order.save();
           throw new ApiError("Shiprocket order creation failed. No shipment was booked.", createError?.statusCode || 400);
         }
         created = reconciled;
