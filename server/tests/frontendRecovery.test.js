@@ -51,7 +51,9 @@ test("API recovery retries transient GET reads only and emits one global recover
   assert.match(client, /recoveryEvent\("start"/);
   assert.match(client, /recoveryEvent\("end"/);
   assert.match(app, /<GlobalRequestRecovery \/>/);
-  assert.match(app, /useBodyScrollLock\(recoveries\.size > 0\)/);
+  assert.match(app, /useBodyScrollLock\(active\)/);
+  assert.match(app, /content\.inert = true/);
+  assert.match(app, /id="application-content"/);
 });
 
 test("transient GET recovery executes three bounded attempts while a mutation executes once", async () => {
