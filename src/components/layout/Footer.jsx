@@ -22,7 +22,7 @@ export default function Footer() {
       links: [
         { label: "Home", href: "/" },
         { label: "Shop Oils", href: "/shop" },
-        { label: "Essential Oils", href: "/shop?q=Essential%20Oils&focus=search" },
+        { label: "Pure Oils", href: "/shop" },
         { label: "Contact", href: "/contact" },
       ],
     },

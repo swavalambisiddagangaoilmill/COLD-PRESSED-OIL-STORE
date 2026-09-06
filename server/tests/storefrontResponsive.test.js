@@ -18,6 +18,14 @@ test("related product carousel keeps container-aligned mobile edges", async () =
   assert.match(related, /sm:grid-cols-2/);
 });
 
+test("homepage featured oils use edible-oil copy and responsive grid spacing", async () => {
+  const featured = await source("../../src/components/features/home/FeaturedProducts.jsx");
+  assert.match(featured, /eyebrow="Pure oils"/);
+  assert.match(featured, /title="Wholesome oils for a healthier everyday"/);
+  assert.match(featured, /mt-9 grid grid-cols-2 gap-3\.5 sm:mt-12/);
+  assert.doesNotMatch(featured, /Essential oils|Aromatic essentials/);
+});
+
 test("mobile overlays share a reference-counted body scroll lock", async () => {
   const [hook, drawer, search] = await Promise.all([
     source("../../src/hooks/useBodyScrollLock.js"),
