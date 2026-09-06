@@ -18,8 +18,8 @@ export default function RelatedProducts({ current }) {
   return (
     <section className="section-padding">
       <SectionHeading eyebrow="You may also like" title="More oils from this family" />
-      <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-3 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-        {related.map((product) => <div key={product.id} className="w-[78vw] max-w-[320px] shrink-0 snap-start sm:w-auto sm:max-w-none"><ProductCard product={product} /></div>)}
+      <div className="flex snap-x scroll-px-0 gap-3.5 overflow-x-auto pb-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:overflow-visible md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+        {related.map((product) => <div key={product.id} className="w-[min(72vw,18rem)] shrink-0 snap-start sm:w-auto"><ProductCard product={product} /></div>)}
       </div>
     </section>
   );

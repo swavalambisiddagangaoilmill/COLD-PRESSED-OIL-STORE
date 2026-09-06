@@ -28,9 +28,8 @@ export function productSpecifications(product = {}, selectedVariant = null) {
   return {
     Volume: firstPresent(selectedVariant?.size, selectedVariant?.volume, product.volume, product.size, specificationValue(persisted, ["Volume", "Size"])) ?? NOT_SPECIFIED,
     Category: firstPresent(categoryName(product.category), specificationValue(persisted, ["Category"])) ?? NOT_SPECIFIED,
-    Method: firstPresent(product.processingMethod, product.processing, product.method, specificationValue(persisted, ["Method", "Processing", "Processing Method"])) ?? NOT_SPECIFIED,
-    Storage: firstPresent(product.storageInstructions, product.storage, specificationValue(persisted, ["Storage", "Storage Instructions"])) ?? NOT_SPECIFIED,
+    Method: "Cold Pressed",
+    Storage: "Dry and cool places",
     ...additional,
   };
 }
-

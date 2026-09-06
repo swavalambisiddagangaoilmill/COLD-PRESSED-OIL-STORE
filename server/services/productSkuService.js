@@ -2,7 +2,6 @@ import Category from "../models/Category.js";
 import Product from "../models/Product.js";
 import { ApiError } from "../utils/ApiError.js";
 import { sizeInLitres } from "../utils/shippingDefaults.js";
-import { isCanonicalProductCategory } from "../../shared/productCategories.js";
 
 function skuPart(value, fallback) {
   const clean = String(value || "")
@@ -72,8 +71,8 @@ function isSameCreateRequest(existing, payload) {
 }
 
 export async function generateProductSku(data) {
-  const category = await Category.findById(data.category).select("name slug").lean();
-  if (!category || !isCanonicalProductCategory(category.name, category.slug)) throw new ApiError("Select one of the 14 valid product categories.", 400, [{ field: "category", message: "Product category is not valid." }]);
+  const category = await Category.findById(data.category).select("name slug isActive").lean();
+  if (!category || category.isActive === false) throw new ApiError("Select an active product category.", 400, [{ field: "category", message: "Product category is not available." }]);
 
   const weight = Number(data.weight);
   const base = [

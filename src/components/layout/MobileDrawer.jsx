@@ -1,25 +1,20 @@
 // Renders the MobileDrawer layout element.
 import { AnimatePresence, motion } from "framer-motion";
 import { Heart, LogOut, Search, ShoppingBag, UserRound, X } from "lucide-react";
-import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { aboutMenuLinks } from "../../data/siteData.js";
 import { useCart } from "../../hooks/useCart.jsx";
 import Button from "../ui/Button.jsx";
 import AccordionMenu from "./AccordionMenu.jsx";
 import { orderedActiveNavbar } from "../../../shared/navbarConfig.js";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock.js";
 
 export default function MobileDrawer({ open, onClose, onWishlist, onLogout, accountPath = "/login", authenticated = false, isAdmin = false, navigation }) {
   const { items } = useCart();
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
   const managedItems = orderedActiveNavbar(navigation);
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = previousOverflow; };
-  }, [open]);
+  useBodyScrollLock(open);
 
   return (
     <AnimatePresence>

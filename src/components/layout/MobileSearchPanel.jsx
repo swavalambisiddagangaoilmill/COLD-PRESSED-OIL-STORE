@@ -5,6 +5,7 @@ import { getProducts } from "../../services/catalogService.js";
 import { formatCurrency } from "../../utils/formatCurrency.js";
 import SafeImage from "../common/SafeImage.jsx";
 import WishlistToggle from "../features/product/WishlistToggle.jsx";
+import useBodyScrollLock from "../../hooks/useBodyScrollLock.js";
 
 const trending = ["Groundnut", "Sesame", "Coconut", "Mustard"];
 
@@ -14,14 +15,14 @@ export default function MobileSearchPanel({ open, query, onQueryChange, onClose 
   const [sort, setSort] = useState("featured");
   const [pagination, setPagination] = useState(null);
   const [loading, setLoading] = useState(false);
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (!open) return undefined;
-    document.body.style.overflow = "hidden";
     getProducts({ limit: 4, sort: "featured" }).then((top) => {
       setTopProducts(top.products);
     }).catch(() => undefined);
-    return () => { document.body.style.overflow = ""; };
+    return undefined;
   }, [open]);
 
   useEffect(() => {

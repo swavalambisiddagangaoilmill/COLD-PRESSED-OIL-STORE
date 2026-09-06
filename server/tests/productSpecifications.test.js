@@ -11,13 +11,13 @@ test("specifications use the selected variant and persisted category", () => {
   assert.deepEqual(productSpecifications(product, product.variants[0]), {
     Volume: "500ml",
     Category: "Safflower Oil",
-    Method: "Not specified",
-    Storage: "Not specified",
+    Method: "Cold Pressed",
+    Storage: "Dry and cool places",
   });
   assert.equal(productSpecifications(product, product.variants[1]).Volume, "2L");
 });
 
-test("persisted processing, storage, and legacy specification fields remain compatible", () => {
+test("method and storage use the business-wide presentation values", () => {
   assert.deepEqual(productSpecifications({
     category: "Sesame/Gingelly Oil",
     size: "1L",
@@ -25,8 +25,8 @@ test("persisted processing, storage, and legacy specification fields remain comp
   }), {
     Volume: "1L",
     Category: "Sesame/Gingelly Oil",
-    Method: "Wood pressed",
-    Storage: "Keep away from sunlight",
+    Method: "Cold Pressed",
+    Storage: "Dry and cool places",
     Origin: "Karnataka",
   });
 });
@@ -35,7 +35,7 @@ test("missing persisted values use neutral fallbacks instead of invented product
   assert.deepEqual(productSpecifications({}), {
     Volume: "Not specified",
     Category: "Not specified",
-    Method: "Not specified",
-    Storage: "Not specified",
+    Method: "Cold Pressed",
+    Storage: "Dry and cool places",
   });
 });

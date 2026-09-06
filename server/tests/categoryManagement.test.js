@@ -38,25 +38,32 @@ test("an unchanged legacy category remains editable without restoring image supp
   } finally { mock.restoreAll(); }
 });
 
-test("a legacy category can be renamed to a canonical category", async () => {
+test("an existing category can be renamed to any valid category", async () => {
   const category = Category.hydrate({ _id: new mongoose.Types.ObjectId(), name: "Sesame/Gingelly Oil", slug: "sesame-gingelly-oil", description: "Legacy", isActive: true });
   category.save = async function saveForTest() { await this.validate(); return this; };
   mock.method(Category, "findById", async () => category);
+  mock.method(Category, "exists", async () => false);
   try {
-    const updated = await updateCategory(category._id, { name: "White Sesame Oil", description: "Renamed", isActive: true });
-    assert.equal(updated.name, "White Sesame Oil");
-    assert.equal(updated.slug, "white-sesame-oil");
+    const updated = await updateCategory(category._id, { name: "Roasted Walnut Oil", description: "Renamed", isActive: true });
+    assert.equal(updated.name, "Roasted Walnut Oil");
+    assert.equal(updated.slug, "roasted-walnut-oil");
   } finally { mock.restoreAll(); }
 });
 
-test("new category creation remains canonical and ignores obsolete fields", async () => {
+test("new arbitrary category creation derives its slug and ignores obsolete fields", async () => {
   let created;
+  mock.method(Category, "exists", async () => false);
   mock.method(Category, "create", async (payload) => { created = payload; return payload; });
   try {
-    await createCategory({ name: "Coconut Oil", description: "Fresh", isActive: false, image: "https://example.com/ignored.jpg", unexpected: true });
-    assert.deepEqual(created, { name: "Coconut Oil", slug: "coconut-oil", description: "Fresh", isActive: false });
-    assert.throws(() => createCategory({ name: "Invalid Oil" }), /14 canonical categories/);
+    await createCategory({ name: "Roasted Walnut Oil", description: "Fresh", isActive: false, image: "https://example.com/ignored.jpg", unexpected: true });
+    assert.deepEqual(created, { name: "Roasted Walnut Oil", slug: "roasted-walnut-oil", description: "Fresh", isActive: false });
   } finally { mock.restoreAll(); }
+});
+
+test("duplicate category names are rejected case-insensitively", async () => {
+  mock.method(Category, "exists", async () => true);
+  try { await assert.rejects(createCategory({ name: "coconut oil" }), /already exists/i); }
+  finally { mock.restoreAll(); }
 });
 
 test("safe category deletion removes only an unreferenced category", async () => {

@@ -2004,6 +2004,8 @@ function CategoryForm({ open, category, onClose, onSaved }) {
         <AdminInput
           label="Category Name"
           value={form.name || ""}
+          required
+          maxLength={120}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
         />
         <AdminTextarea

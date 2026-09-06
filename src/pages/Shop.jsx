@@ -92,8 +92,8 @@ export default function Shop() {
       <section className="section-padding">
         <Container>
           <SectionHeading eyebrow="Shop oils" title="Cold pressed staples for every kitchen" text="Filter by seed, compare flavor styles, and add your pantry favourites in a few calm clicks." />
-          <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_180px_180px] lg:gap-4">
-            <Input inputRef={searchInputRef} placeholder="Search oils" value={search} onChange={(event) => updateSearch(event.target.value)} aria-label="Search products" className="h-11 text-xs sm:h-[52px] sm:text-sm" />
+          <div className="mb-7 grid grid-cols-2 gap-3 sm:mb-8 lg:grid-cols-[minmax(0,1fr)_180px_180px] lg:gap-4">
+            <Input inputRef={searchInputRef} placeholder="Search oils" value={search} onChange={(event) => updateSearch(event.target.value)} aria-label="Search products" className="col-span-2 h-11 text-xs sm:h-[52px] sm:text-sm lg:col-span-1" />
             <select value={category} onChange={(event) => changeCategory(event.target.value)} className="h-11 min-w-0 rounded-xl border border-ink/10 bg-white px-3 text-sm font-semibold outline-none sm:h-[52px] sm:px-4">
               {categories.map((item) => <option key={item.id || item.name}>{item.name}</option>)}
             </select>
@@ -106,7 +106,7 @@ export default function Shop() {
           </div>
           {searchLoading && <p className="mb-5 rounded-2xl bg-linen p-4 text-sm font-semibold text-ink/60">Searching products...</p>}
           {invalidSearch && <p className="mb-5 rounded-2xl bg-linen p-4 text-sm font-semibold text-clay">Enter at least 2 characters to search.</p>}
-          <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 xl:gap-5">
             {visible.map((product) => <ProductCard key={product.id} product={product} />)}
           </div>
           {visible.length === 0 && !searchLoading && <p className="rounded-3xl bg-white p-10 text-center text-ink/60">No oils match your search.</p>}

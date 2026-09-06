@@ -18,7 +18,7 @@ import { slugify } from "../../utils/slugify.js";
 import { withOrderTotals } from "../../utils/orderTotals.js";
 import { createProductWithGeneratedSku, prepareProductVariants } from "../../services/productSkuService.js";
 import { sendOrderCancellationOnce, sendOrderConfirmationEmail } from "../../services/emailService.js";
-import { createCategory, deleteCategory, listAdminCategories, requireCanonicalCategory, updateCategory } from "../../services/categoryService.js";
+import { createCategory, deleteCategory, listAdminCategories, requireProductCategory, updateCategory } from "../../services/categoryService.js";
 import { priceProducts } from "../../services/offerPricingService.js";
 import mongoose from "mongoose";
 
@@ -153,7 +153,7 @@ export async function saveProduct(payload, id) {
   const allowed = ["title", "description", "benefits", "price", "discountPrice", "stock", "category", "images", "featured", "bestSeller", "newArrival", "codEnabled", "onlinePaymentEnabled", "returnEligible", "exchangeEligible", "isActive", "size", "variants"];
   const data = Object.fromEntries(Object.entries(payload).filter(([key]) => allowed.includes(key)));
   if (data.title) data.slug = slugify(data.title);
-  if (data.category) await requireCanonicalCategory(data.category);
+  if (data.category) await requireProductCategory(data.category);
   const current = id ? await Product.findById(id) : null;
   if (id && !current) throw new ApiError("Product not found.", 404);
   if (id && Array.isArray(data.variants)) data.variants = await prepareProductVariants(data.variants, data.title || current.title, current.variants || []);
@@ -193,7 +193,7 @@ export async function bulkPricePreview(payload) {
 }
 
 export async function bulkPriceApply(payload) {
-  if (payload.operation === "move_category") await requireCanonicalCategory(payload.category);
+  if (payload.operation === "move_category") await requireProductCategory(payload.category);
   const products = await Product.find(buildBulkFilter(payload.target || {}));
   await Promise.all(products.map((product) => {
     const value = Number(payload.value) || 0;
@@ -285,7 +285,7 @@ export async function saveOffer(payload, userId, id) {
   if (targetType === "CATEGORY" && !data.categories.length || targetType === "VARIANT" && !data.variants.length || targetType === "CUSTOM" && !data.categories.length && !data.products.length && !data.variants.length) throw new ApiError("Please select at least one target.", 400);
   const allIds = [...data.categories, ...data.products, ...data.variants.flatMap((item) => [item.product, item.variant])];
   if (allIds.some((value) => !mongoose.isValidObjectId(value))) throw new ApiError("One or more selected targets are invalid.", 400);
-  await Promise.all(data.categories.map(requireCanonicalCategory));
+  await Promise.all(data.categories.map(requireProductCategory));
   const selectedProducts = await Product.find({ _id: { $in: [...data.products, ...data.variants.map((item) => item.product)] } }).select("variants");
   const productMap = new Map(selectedProducts.map((product) => [String(product._id), product]));
   if (productMap.size !== new Set([...data.products, ...data.variants.map((item) => String(item.product))]).size) throw new ApiError("One or more selected products are invalid.", 400);

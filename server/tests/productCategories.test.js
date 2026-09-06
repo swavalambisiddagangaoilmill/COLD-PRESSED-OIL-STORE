@@ -1,45 +1,41 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { readFile } from "node:fs/promises";
+import test, { mock } from "node:test";
+import mongoose from "mongoose";
 import Category from "../models/Category.js";
-import { updateCategory } from "../services/categoryService.js";
-import { PRODUCT_CATEGORIES, PRODUCT_CATEGORY_SLUGS, isCanonicalProductCategory } from "../../shared/productCategories.js";
+import { createCategory, updateCategory } from "../services/categoryService.js";
 
-const expected = [
-  "Flax Seed Oil", "Safflower Oil", "Sunflower Oil", "Coconut Oil", "Castor Oil", "Badam Oil", "White Sesame Oil",
-  "Black Sesame Oil", "Niger Seed Oil", "Mustard Oil", "Groundnut Oil", "Neem Oil", "Herbal Oil", "Caranja Oil",
-];
-
-test("the category source contains the exact 14 canonical labels in order", () => {
-  assert.deepEqual(PRODUCT_CATEGORIES, expected);
-  assert.equal(PRODUCT_CATEGORY_SLUGS.length, 14);
-});
-
-test("canonical category names and matching slugs validate", async () => {
-  for (const category of PRODUCT_CATEGORY_SLUGS) {
-    await new Category(category).validate();
-    assert.equal(isCanonicalProductCategory(category.name, category.slug), true);
+test("category schema accepts database-driven names without a fixed enum", async () => {
+  for (const name of ["Coconut Oil", "Sesame/Gingelly Oil", "Roasted Walnut Oil", "Future Seed Oil"]) {
+    await new Category({ name, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, "-") }).validate();
   }
+  await assert.rejects(() => new Category({ name: "", slug: "empty" }).validate(), /required/i);
+  await assert.rejects(() => new Category({ name: "A".repeat(121), slug: "too-long" }).validate(), /maximum allowed length/i);
 });
 
-test("obsolete and mismatched categories are rejected", async () => {
-  await assert.rejects(() => new Category({ name: "Raw Material Crushing", slug: "raw-material-crushing" }).validate(), /14 canonical categories/);
-  await assert.rejects(() => new Category({ name: "Seeds Caster", slug: "seeds-caster" }).validate(), /14 canonical categories/);
-  await assert.rejects(() => new Category({ name: "Groundnut Oils", slug: "groundnut-oils" }).validate(), /14 canonical categories/);
-  await assert.rejects(() => new Category({ name: "Groundnut Oil", slug: "coconut-oil" }).validate(), /canonical/);
+test("live category validation contains no canonical-list restriction", async () => {
+  const sources = await Promise.all([
+    readFile(new URL("../models/Category.js", import.meta.url), "utf8"),
+    readFile(new URL("../services/categoryService.js", import.meta.url), "utf8"),
+    readFile(new URL("../validators/categoryValidators.js", import.meta.url), "utf8"),
+    readFile(new URL("../services/productSkuService.js", import.meta.url), "utf8"),
+  ]);
+  for (const source of sources) assert.doesNotMatch(source, /PRODUCT_CATEGORIES|isCanonicalProductCategory|14 canonical|one of the 14/);
 });
 
-test("canonical categories can update editable fields in document validation context", async (t) => {
-  const originalFindById = Category.findById;
-  t.after(() => { Category.findById = originalFindById; });
-  const category = new Category({ name: "Groundnut Oil", slug: "groundnut-oil", description: "Old", isActive: true });
+test("arbitrary categories can be created and edited with derived slugs", async () => {
+  const id = new mongoose.Types.ObjectId();
+  const category = Category.hydrate({ _id: id, name: "Future Seed Oil", slug: "future-seed-oil", isActive: true });
   category.save = async function saveForTest() { await this.validate(); return this; };
-  Category.findById = async () => category;
-
-  const updated = await updateCategory(category._id, { ...category.toObject(), description: "Updated", isActive: false, productCount: 4 });
-  assert.equal(updated.name, "Groundnut Oil");
-  assert.equal(updated.slug, "groundnut-oil");
-  assert.equal(updated.description, "Updated");
-  assert.equal(updated.image, undefined);
-  assert.equal(updated.isActive, false);
-  assert.equal(updated.productCount, undefined);
+  mock.method(Category, "exists", async () => false);
+  mock.method(Category, "create", async (value) => value);
+  mock.method(Category, "findById", async () => category);
+  try {
+    const created = await createCategory({ name: "Pecan Oil", description: "New" });
+    assert.equal(created.slug, "pecan-oil");
+    const updated = await updateCategory(id, { name: "Roasted Pecan Oil", isActive: false });
+    assert.equal(updated.name, "Roasted Pecan Oil");
+    assert.equal(updated.slug, "roasted-pecan-oil");
+    assert.equal(updated.isActive, false);
+  } finally { mock.restoreAll(); }
 });

@@ -1,6 +1,5 @@
 // Static site navigation and marketing content used across layout sections.
 import { Leaf, ShieldCheck, Sprout, Truck, Wheat, BadgeCheck } from "lucide-react";
-import { PRODUCT_CATEGORY_SLUGS } from "../../shared/productCategories.js";
 
 export const announcementMessages = [
   "100% Cold Pressed Oils",
@@ -9,12 +8,6 @@ export const announcementMessages = [
   "Farm Fresh",
   "Cold Pressed",
 ];
-
-export const oilMenuLinks = PRODUCT_CATEGORY_SLUGS.map(({ name, slug }) => ({ label: name, href: `/shop?category=${slug}` }));
-
-export const categoryMenuLinks = oilMenuLinks;
-
-export const essentialOilLinks = oilMenuLinks.filter(({ label }) => ["Castor Oil", "Neem Oil", "Caranja Oil", "Herbal Oil"].includes(label));
 
 export const aboutMenuLinks = [
   { label: "About", href: "/about" },
@@ -26,7 +19,7 @@ export const aboutMenuLinks = [
 export const megaMenus = {
   shop: {
     variant: "shop",
-    links: oilMenuLinks,
+    links: [],
     banner: {
       href: "/shop?q=Groundnut%20Oil&focus=search",
       image: "/shop-groundnut.png",
@@ -37,7 +30,7 @@ export const megaMenus = {
   },
   coldPressed: {
     variant: "compact",
-    links: oilMenuLinks,
+    links: [],
     banner: {
       href: "/shop?q=Coconut%20Oil&focus=search",
       image: "/cold-pressed-coconut.png",
@@ -49,7 +42,7 @@ export const megaMenus = {
   },
   essential: {
     variant: "compact",
-    links: essentialOilLinks,
+    links: [],
     banner: {
       href: "/shop?q=Neem%20Oil&focus=search",
       image: "/specialty-oils-neem.png",

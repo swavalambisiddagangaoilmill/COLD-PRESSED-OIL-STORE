@@ -5,7 +5,7 @@ import User from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
 import { slugify } from "../utils/slugify.js";
 import { createProductWithGeneratedSku, prepareProductVariants } from "./productSkuService.js";
-import { requireCanonicalCategory } from "./categoryService.js";
+import { requireProductCategory } from "./categoryService.js";
 import { activeOffers, priceProduct, priceProducts } from "./offerPricingService.js";
 
 function normalizeSearch(value = "") {
@@ -167,7 +167,7 @@ export async function updateProduct(id, payload) {
   delete updates.sku;
   delete updates.weight;
   delete updates.dimensions;
-  if (updates.category) await requireCanonicalCategory(updates.category);
+  if (updates.category) await requireProductCategory(updates.category);
   if (Array.isArray(updates.variants)) {
     const current = await Product.findById(id).select("title sku variants");
     if (!current) throw new ApiError("Product not found.", 404);
