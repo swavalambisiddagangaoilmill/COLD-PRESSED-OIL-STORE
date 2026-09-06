@@ -42,21 +42,21 @@ for (const [size, weight, dimensions] of [
   ["5L", 5, { length: 20, width: 15, height: 30 }],
   ["16.5L", 16.5, { length: 30, width: 25, height: 30 }],
 ]) {
-  test(`product creation generates and validates automatic values for ${size}`, async () => {
+  test(`product creation preserves explicit shipping values for ${size}`, async () => {
     installModelValidationMocks();
-    const product = await createProduct(payload(size));
+    const product = await createProduct(payload(size, [{ size, price: 200, mrp: 220, stock: 5, shippingWeight: weight, dimensions }]));
     assert.ok(product.sku);
-    assert.equal(product.weight, weight);
-    assert.deepEqual(product.dimensions.toObject(), dimensions);
+    assert.equal(product.variants[0].shippingWeight, weight);
+    assert.deepEqual(product.variants[0].dimensions.toObject(), dimensions);
   });
 }
 
 test("product creation validates several fully generated variants", async () => {
   installModelValidationMocks();
   const product = await createProduct(payload("1L", [
-    { size: "1L", price: 200, mrp: 220, stock: 5 },
-    { size: "5L", price: 900, mrp: 950, stock: 2 },
-    { size: "16.5L", price: 2800, mrp: 3000, stock: 1 },
+    { size: "1L", price: 200, mrp: 220, stock: 5, shippingWeight: 1, dimensions: { length: 10, width: 10, height: 30 } },
+    { size: "5L", price: 900, mrp: 950, stock: 2, shippingWeight: 5, dimensions: { length: 20, width: 15, height: 30 } },
+    { size: "16.5L", price: 2800, mrp: 3000, stock: 1, shippingWeight: 16.5, dimensions: { length: 30, width: 25, height: 30 } },
   ]));
   assert.equal(product.variants.length, 3);
   assert.equal(new Set(product.variants.map((variant) => variant.sku)).size, 3);

@@ -4,6 +4,18 @@ import { API_BASE_URL } from "../constants/apiConfig.js";
 const TOKEN_KEY = "ss_oil_mill_token";
 const REFRESH_KEY = "ss_oil_mill_refresh_token";
 const pendingReads = new Map();
+const READ_RETRY_DELAYS = [200, 600];
+let recoveryRequestId = 0;
+
+function transientReadFailure(error) {
+  return error?.isNetworkError || [408, 425, 500, 502, 503, 504].includes(Number(error?.status));
+}
+
+function recoveryEvent(phase, detail) {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(`ss-oil-mill-recovery-${phase}`, { detail }));
+}
+
+const wait = (delay) => new Promise((resolve) => window.setTimeout(resolve, delay));
 
 function notifyAuthChange() {
   window.dispatchEvent(new Event("ss-oil-mill-auth-change"));
@@ -72,7 +84,32 @@ export function apiRequest(endpoint, options = {}) {
   if (method !== "GET") return executeRequest(endpoint, options, token);
   const key = `${token || "guest"}:${endpoint}`;
   if (pendingReads.has(key)) return pendingReads.get(key);
-  const request = executeRequest(endpoint, options, token).finally(() => pendingReads.delete(key));
+  const requestId = ++recoveryRequestId;
+  const executeRead = async () => {
+    let recoveryStarted = false;
+    let recoveryResult = "exhausted";
+    try {
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          const result = await executeRequest(endpoint, options, token);
+          recoveryResult = "recovered";
+          return result;
+        } catch (error) {
+          if (error?.name === "AbortError" || !transientReadFailure(error) || attempt >= READ_RETRY_DELAYS.length) throw error;
+          if (!recoveryStarted) {
+            recoveryStarted = true;
+            recoveryEvent("start", { requestId, attempt: 1, maximum: READ_RETRY_DELAYS.length });
+          } else {
+            recoveryEvent("progress", { requestId, attempt: attempt + 1, maximum: READ_RETRY_DELAYS.length });
+          }
+          await wait(READ_RETRY_DELAYS[attempt]);
+        }
+      }
+    } finally {
+      if (recoveryStarted) recoveryEvent("end", { requestId, result: recoveryResult });
+    }
+  };
+  const request = executeRead().finally(() => pendingReads.delete(key));
   pendingReads.set(key, request);
   return request;
 }

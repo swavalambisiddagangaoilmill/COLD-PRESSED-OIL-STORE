@@ -4,9 +4,10 @@ import { Leaf, ShieldCheck, Sprout, Truck, Wheat, BadgeCheck } from "lucide-reac
 export const announcementMessages = [
   "100% Cold Pressed Oils",
   "Chemical Free",
-  "Free Shipping Above Rs. 999",
+  "Coconut are sourced directly from the Heart of Tiptur",
   "Farm Fresh",
   "Cold Pressed",
+  "Rich in Nutrients"
 ];
 
 export const aboutMenuLinks = [
@@ -116,5 +117,4 @@ export const brandValues = [
   { icon: Leaf, label: "Naturally settled" },
   { icon: ShieldCheck, label: "Purity checked" },
 ];
-
 

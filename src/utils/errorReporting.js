@@ -19,6 +19,10 @@ export function createSafeDiagnostic(error, context = {}) {
     stack: sanitize(error?.stack, 4000),
     componentStack: sanitize(context.componentStack, 3000),
     boundary: sanitize(context.boundary || "window", 80),
+    retryCount: Number.isFinite(Number(context.retryCount)) ? Number(context.retryCount) : 0,
+    recoveryResult: sanitize(context.recoveryResult, 80),
+    requestType: sanitize(context.requestType, 30),
+    httpStatus: Number.isFinite(Number(context.httpStatus)) ? Number(context.httpStatus) : 0,
     route: typeof window === "undefined" ? "" : sanitize(window.location.pathname, 300),
     timestamp: new Date().toISOString(),
   };
@@ -35,6 +39,20 @@ export function reportFrontendError(error, context = {}) {
     }
   } catch {
     // Error reporting must never become another application failure.
+  }
+}
+
+export function reportFrontendRecovery(context = {}) {
+  try {
+    const diagnostic = createSafeDiagnostic(new Error("Frontend recovery completed"), { ...context, boundary: "global-recovery", recoveryResult: "recovered" });
+    console.info("[FrontendRecovery]", diagnostic);
+    if (typeof sessionStorage !== "undefined") {
+      const existing = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "[]");
+      const reports = Array.isArray(existing) ? existing : [];
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify([...reports, diagnostic].slice(-MAX_REPORTS)));
+    }
+  } catch {
+    // Recovery reporting must never affect the recovered page.
   }
 }
 

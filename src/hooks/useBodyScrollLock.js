@@ -3,7 +3,7 @@ import { useEffect } from "react";
 let lockCount = 0;
 let previousOverflow = "";
 
-function lockBodyScroll() {
+export function lockBodyScroll() {
   if (lockCount === 0) {
     previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -11,7 +11,7 @@ function lockBodyScroll() {
   lockCount += 1;
 }
 
-function unlockBodyScroll() {
+export function unlockBodyScroll() {
   lockCount = Math.max(0, lockCount - 1);
   if (lockCount === 0) document.body.style.overflow = previousOverflow;
 }
