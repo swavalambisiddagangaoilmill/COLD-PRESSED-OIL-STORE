@@ -13,6 +13,7 @@ export async function calculateShippingQuote({ items, deliveryPincode, paymentMe
   try {
     courier = await getShippingRate({ deliveryPincode, weight: shipment.weight, dimensions: shipment.dimensions, paymentMethod, declaredValue });
   } catch (error) {
+    if (/no shiprocket courier is serviceable/i.test(error?.message || "")) throw new ApiError("Shipping is not available for this PIN code.", 400);
     throw new ApiError(SHIPPING_CALCULATION_FAILED, error?.statusCode === 429 ? 429 : 503);
   }
   return { shiprocketShippingCost: courier.shippingCost, customerShippingCharge: roundCustomerShipping(courier.shippingCost), courierId: courier.courierId, courierName: courier.courierName, estimatedDelivery: courier.estimatedDelivery, deliveryPincode: String(deliveryPincode), shipmentWeight: shipment.weight, shipmentDimensions: shipment.dimensions };

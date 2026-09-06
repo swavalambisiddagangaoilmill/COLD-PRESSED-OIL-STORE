@@ -4,7 +4,7 @@ import { CreditCard, Home, Truck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getAuthToken } from "../../../api/apiClient.js";
-import { createOrder, createPaymentIntent, getPaymentStatus, getShippingQuote } from "../../../services/checkoutService.js";
+import { createOrder, createPaymentIntent, getPaymentStatus, getPincodeLocation, getShippingQuote } from "../../../services/checkoutService.js";
 import { fetchAccountProfile } from "../../../services/accountService.js";
 import { useCart } from "../../../hooks/useCart.jsx";
 import { formatCurrency } from "../../../utils/formatCurrency.js";
@@ -71,6 +71,9 @@ export default function CheckoutForm() {
   const { showToast, showCritical } = useToast();
   const formRef = useRef(null);
   const submissionInFlightRef = useRef(false);
+  const shippingRequestRef = useRef(0);
+  const cityEditedRef = useRef(false);
+  const stateEditedRef = useRef(false);
   const pendingResumeRef = useRef(false);
   const componentActiveRef = useRef(true);
   const resumableAtMountRef = useRef(resumablePendingPayment(location.search));
@@ -81,6 +84,10 @@ export default function CheckoutForm() {
   const [processingStep, setProcessingStep] = useState("");
   const [error, setError] = useState("");
   const [pin, setPin] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const [pincodeMessage, setPincodeMessage] = useState("");
   const [shippingLoading, setShippingLoading] = useState(false);
   const [shippingError, setShippingError] = useState("");
 
@@ -111,13 +118,37 @@ export default function CheckoutForm() {
     if (!onlineAvailable && paymentMethod !== "cod") setPaymentMethod(codAvailable ? "cod" : "online");
   }, [codAvailable, onlineAvailable, paymentMethod]);
   useEffect(() => {
-    if (!/^\d{6}$/.test(pin) || !items.length || !getAuthToken()) { setShippingQuote(null); setShippingError(""); return undefined; }
-    let active = true;
+    if (!/^\d{6}$/.test(pin) || !items.length || !getAuthToken()) { setShippingQuote(null); setShippingLoading(false); setShippingError(""); return undefined; }
+    const controller = new AbortController();
+    const requestId = ++shippingRequestRef.current;
     setShippingLoading(true);
     setShippingError("");
-    const timer = window.setTimeout(() => getShippingQuote({ products: items.map((item) => ({ product: item._id || item.id, variant: item.variantId || undefined, quantity: item.quantity })), deliveryPincode: pin, paymentMethod: paymentMethod === "cod" ? "cod" : "cashfree", couponCode: appliedCoupon?.code }).then((data) => { if (active) { setShippingQuote(data.quote); setShippingError(""); } }).catch(() => { if (active) { setShippingQuote(null); setShippingError("Shipping charges could not be calculated. Please try again."); } }).finally(() => active && setShippingLoading(false)), 400);
-    return () => { active = false; window.clearTimeout(timer); };
+    const timer = window.setTimeout(() => getShippingQuote({ products: items.map((item) => ({ product: item._id || item.id, variant: item.variantId || undefined, quantity: item.quantity })), deliveryPincode: pin, paymentMethod: paymentMethod === "cod" ? "cod" : "cashfree", couponCode: appliedCoupon?.code }, { signal: controller.signal }).then((data) => { if (requestId === shippingRequestRef.current) { setShippingQuote(data.quote); setShippingError(""); } }).catch((quoteError) => { if (quoteError?.name !== "AbortError" && requestId === shippingRequestRef.current) { setShippingQuote(null); setShippingError(quoteError.message || "Shipping charges could not be calculated. Please try again."); } }).finally(() => requestId === shippingRequestRef.current && setShippingLoading(false)), 400);
+    return () => { controller.abort(); window.clearTimeout(timer); };
   }, [appliedCoupon?.code, items, paymentMethod, pin, setShippingQuote]);
+
+  useEffect(() => {
+    if (!/^\d{6}$/.test(pin) || !getAuthToken()) { setPincodeLoading(false); setPincodeMessage(""); return undefined; }
+    const controller = new AbortController();
+    setPincodeLoading(true);
+    setPincodeMessage("");
+    const timer = window.setTimeout(() => getPincodeLocation(pin, { signal: controller.signal }).then(({ location }) => {
+      if (!cityEditedRef.current && location?.city) setCity(location.city);
+      if (!stateEditedRef.current && location?.state) setState(location.state);
+      const localityCount = Array.isArray(location?.localities) ? location.localities.length : 0;
+      setPincodeMessage(localityCount > 1 ? `${localityCount} postal localities found. Confirm or edit City and State.` : "City and State suggested from PIN code. You can edit them.");
+    }).catch((lookupError) => {
+      if (lookupError?.name !== "AbortError") setPincodeMessage(lookupError.message || "PIN lookup unavailable. Enter City and State manually.");
+    }).finally(() => { if (!controller.signal.aborted) setPincodeLoading(false); }), 350);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [pin]);
+
+  const updatePin = (value) => {
+    cityEditedRef.current = false;
+    stateEditedRef.current = false;
+    setPincodeMessage("");
+    setPin(value.replace(/\D/g, "").slice(0, 6));
+  };
   const applyAddress = (address) => {
     const form = formRef.current;
     if (!form) return;
@@ -126,9 +157,10 @@ export default function CheckoutForm() {
     form.elements.lastName.value = lastParts.join(" ");
     form.elements.phone.value = address.phone || "";
     form.elements.street.value = address.street || "";
-    form.elements.city.value = address.city || "";
-    form.elements.state.value = address.state || "";
-    form.elements.pin.value = address.postalCode || "";
+    setCity(address.city || "");
+    setState(address.state || "");
+    cityEditedRef.current = true;
+    stateEditedRef.current = true;
     setPin(address.postalCode || "");
   };
 
@@ -292,12 +324,13 @@ export default function CheckoutForm() {
       <div className="mt-8">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold"><Home size={20} /> Shipping Address</h2>
         <div className="grid gap-5">
-          <Input label="Street address" name="street" required />
-          <div className="grid gap-5 sm:grid-cols-3">
-            <Input label="City" name="city" required />
-            <Input label="State" name="state" required />
-            <Input label="PIN code" name="pin" inputMode="numeric" maxLength="6" value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))} required />
+          <Input label="PIN code" name="pin" inputMode="numeric" autoComplete="postal-code" pattern="[0-9]{6}" maxLength="6" value={pin} onChange={(event) => updatePin(event.target.value)} required />
+          {(pincodeLoading || pincodeMessage) && <p className={`-mt-3 text-xs font-semibold ${pincodeMessage?.includes("unavailable") || pincodeMessage?.includes("No postal") ? "text-clay" : "text-ink/55"}`} aria-live="polite">{pincodeLoading ? "Looking up PIN code…" : pincodeMessage}</p>}
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Input label="City" name="city" autoComplete="address-level2" value={city} onChange={(event) => { cityEditedRef.current = true; setCity(event.target.value); }} required />
+            <Input label="State" name="state" autoComplete="address-level1" value={state} onChange={(event) => { stateEditedRef.current = true; setState(event.target.value); }} required />
           </div>
+          <Input label="Street address" name="street" autoComplete="street-address" required />
         </div>
       </div>
       <div className="mt-8">

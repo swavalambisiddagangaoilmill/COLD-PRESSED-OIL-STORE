@@ -6,8 +6,10 @@ import { createReadyToShipShipment, getShipmentTracking, syncShiprocketWebhook }
 import { writeAuditLog } from "../admin/utils/audit.js";
 import { getCheckoutShippingQuote } from "../services/paymentService.js";
 import { createInvoicePdfBuffer, invoiceNumberFor } from "../services/invoiceService.js";
+import { lookupIndianPincode } from "../services/pincodeService.js";
 
 export const getShippingQuoteHandler = asyncHandler(async (req, res) => sendSuccess(res, 200, "Shipping calculated successfully", { quote: await getCheckoutShippingQuote(req.user._id, req.body) }));
+export const getPincodeLookupHandler = asyncHandler(async (req, res) => sendSuccess(res, 200, "PIN code found", { location: await lookupIndianPincode(req.params.pincode) }));
 
 export const createOrderHandler = asyncHandler(async (req, res) => {
   const order = await createOrder(req.user._id, req.body);

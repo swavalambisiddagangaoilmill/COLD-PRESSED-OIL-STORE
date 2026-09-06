@@ -43,6 +43,7 @@ async function executeRequest(endpoint, options, token) {
   try {
     response = await fetch(`${API_BASE_URL}${endpoint}`, { credentials: "include", ...options, headers });
   } catch (error) {
+    if (error?.name === "AbortError") throw error;
     const networkError = new Error("Service is temporarily unavailable. Please try again shortly.");
     networkError.status = 0;
     networkError.code = "NETWORK_ERROR";

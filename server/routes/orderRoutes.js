@@ -1,14 +1,15 @@
 ﻿// Order route registration.
 import { Router } from "express";
-import { createOrderHandler, getAllOrdersHandler, getMyOrdersHandler, getOrderHandler, getOrderInvoiceHandler, getOrderTrackingHandler, getShippingQuoteHandler, updateOrderStatusHandler } from "../controllers/orderController.js";
+import { createOrderHandler, getAllOrdersHandler, getMyOrdersHandler, getOrderHandler, getOrderInvoiceHandler, getOrderTrackingHandler, getPincodeLookupHandler, getShippingQuoteHandler, updateOrderStatusHandler } from "../controllers/orderController.js";
 import { adminOnly } from "../middleware/admin.js";
 import { protect } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
-import { createOrderValidator, orderIdValidator, shippingQuoteValidator, updateOrderStatusValidator } from "../validators/orderValidators.js";
+import { createOrderValidator, orderIdValidator, pincodeLookupValidator, shippingQuoteValidator, updateOrderStatusValidator } from "../validators/orderValidators.js";
 
 const router = Router();
 
 router.post("/shipping-quote", protect, shippingQuoteValidator, validate, getShippingQuoteHandler);
+router.get("/pincode/:pincode", protect, pincodeLookupValidator, validate, getPincodeLookupHandler);
 router.post("/", protect, createOrderValidator, validate, createOrderHandler);
 router.get("/my", protect, getMyOrdersHandler);
 router.get("/", protect, adminOnly, getAllOrdersHandler);

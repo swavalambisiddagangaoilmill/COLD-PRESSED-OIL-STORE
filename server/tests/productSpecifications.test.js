@@ -12,7 +12,7 @@ test("specifications use the selected variant and persisted category", () => {
     Volume: "500ml",
     Category: "Safflower Oil",
     Method: "Cold Pressed",
-    Storage: "Dry and cool places",
+    Storage: "Dry and cool place",
   });
   assert.equal(productSpecifications(product, product.variants[1]).Volume, "2L");
 });
@@ -26,7 +26,7 @@ test("method and storage use the business-wide presentation values", () => {
     Volume: "1L",
     Category: "Sesame/Gingelly Oil",
     Method: "Cold Pressed",
-    Storage: "Dry and cool places",
+    Storage: "Dry and cool place",
     Origin: "Karnataka",
   });
 });
@@ -36,6 +36,6 @@ test("missing persisted values use neutral fallbacks instead of invented product
     Volume: "Not specified",
     Category: "Not specified",
     Method: "Cold Pressed",
-    Storage: "Dry and cool places",
+    Storage: "Dry and cool place",
   });
 });

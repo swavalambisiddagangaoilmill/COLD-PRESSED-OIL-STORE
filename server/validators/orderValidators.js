@@ -2,6 +2,7 @@
 import { body, param } from "express-validator";
 
 export const orderIdValidator = [param("id").isMongoId().withMessage("Valid order id is required.")];
+export const pincodeLookupValidator = [param("pincode").trim().matches(/^\d{6}$/).withMessage("Valid 6-digit PIN code is required.")];
 
 export const createOrderValidator = [
   body("checkoutSessionId").isUUID().withMessage("Valid checkout session is required."),

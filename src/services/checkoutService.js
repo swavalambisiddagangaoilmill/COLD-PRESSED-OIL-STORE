@@ -9,8 +9,12 @@ export async function createOrder(payload) {
   });
 }
 
-export function getShippingQuote(payload) {
-  return apiRequest(API_ENDPOINTS.shippingQuote, { method: "POST", body: JSON.stringify(payload) });
+export function getShippingQuote(payload, options = {}) {
+  return apiRequest(API_ENDPOINTS.shippingQuote, { method: "POST", body: JSON.stringify(payload), signal: options.signal });
+}
+
+export function getPincodeLocation(pincode, options = {}) {
+  return apiRequest(API_ENDPOINTS.pincodeLookup(pincode), { signal: options.signal });
 }
 
 export async function createPaymentIntent(payload) {

@@ -29,7 +29,7 @@ export function productSpecifications(product = {}, selectedVariant = null) {
     Volume: firstPresent(selectedVariant?.size, selectedVariant?.volume, product.volume, product.size, specificationValue(persisted, ["Volume", "Size"])) ?? NOT_SPECIFIED,
     Category: firstPresent(categoryName(product.category), specificationValue(persisted, ["Category"])) ?? NOT_SPECIFIED,
     Method: "Cold Pressed",
-    Storage: "Dry and cool places",
+    Storage: "Dry and cool place",
     ...additional,
   };
 }

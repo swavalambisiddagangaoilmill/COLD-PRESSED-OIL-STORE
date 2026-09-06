@@ -32,6 +32,7 @@ export const API_ENDPOINTS = {
   wishlistItem: (id) => `/wishlist/${id}`,
   orders: "/orders",
   shippingQuote: "/orders/shipping-quote",
+  pincodeLookup: (pincode) => `/orders/pincode/${encodeURIComponent(pincode)}`,
   myOrders: "/orders/my",
   order: (id) => `/orders/${id}`,
   orderTracking: (id) => `/orders/${id}/tracking`,
