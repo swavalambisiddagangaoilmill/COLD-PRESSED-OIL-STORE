@@ -1,9 +1,24 @@
 // Blocks interaction while the global boundary performs bounded, non-mutating recovery.
+import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+
 export default function RecoveryOverlay({ attempt, maximum }) {
-  return (
+  const overlayRef = useRef(null);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    overlayRef.current?.focus({ preventScroll: true });
+    return () => {
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected && !previousFocus.closest("[inert]")) previousFocus.focus({ preventScroll: true });
+    };
+  }, []);
+
+  const overlay = (
     <div
+      ref={overlayRef}
       className="fixed inset-0 z-[1000] grid cursor-wait place-items-center bg-ink/20 px-5 backdrop-blur-sm"
       role="status"
+      tabIndex={-1}
       aria-live="polite"
       aria-busy="true"
       aria-label={`Recovering the page, attempt ${attempt} of ${maximum}`}
@@ -14,4 +29,5 @@ export default function RecoveryOverlay({ attempt, maximum }) {
       </div>
     </div>
   );
+  return typeof document === "undefined" ? overlay : createPortal(overlay, document.body);
 }

@@ -45,7 +45,7 @@ test("API recovery retries transient GET reads only and emits one global recover
     source("../../src/App.jsx"),
   ]);
   assert.match(client, /READ_RETRY_DELAYS = \[200, 600\]/);
-  assert.match(client, /method !== "GET"\) return executeRequest/);
+  assert.match(client, /!\["GET", "HEAD"\]\.includes\(method\)/);
   assert.match(client, /error\?\.name === "AbortError"/);
   assert.doesNotMatch(client, /\[408, 425, 429/);
   assert.match(client, /recoveryEvent\("start"/);
@@ -54,6 +54,7 @@ test("API recovery retries transient GET reads only and emits one global recover
   assert.match(app, /useBodyScrollLock\(active\)/);
   assert.match(app, /content\.inert = true/);
   assert.match(app, /id="application-content"/);
+  assert.match(await source("../../src/components/features/feedback/RecoveryOverlay.jsx"), /createPortal\(overlay, document\.body\)/);
 });
 
 test("transient GET recovery executes three bounded attempts while a mutation executes once", async () => {
@@ -80,6 +81,15 @@ test("transient GET recovery executes three bounded attempts while a mutation ex
     globalThis.fetch = async () => { mutations += 1; throw new TypeError("temporary network failure"); };
     await assert.rejects(apiRequest("/no-retry", { method: "POST", body: "{}" }), /temporarily unavailable/);
     assert.equal(mutations, 1);
+
+    let heads = 0;
+    globalThis.fetch = async () => {
+      heads += 1;
+      if (heads < 2) throw new TypeError("temporary network failure");
+      return { ok: true, json: async () => ({}) };
+    };
+    await apiRequest("/head-recovery", { method: "HEAD" });
+    assert.equal(heads, 2);
   } finally {
     Object.assign(globalThis, original);
   }

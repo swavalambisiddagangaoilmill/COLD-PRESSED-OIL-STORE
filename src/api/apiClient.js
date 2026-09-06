@@ -81,8 +81,8 @@ async function executeRequest(endpoint, options, token) {
 export function apiRequest(endpoint, options = {}) {
   const token = getAuthToken();
   const method = (options.method || "GET").toUpperCase();
-  if (method !== "GET") return executeRequest(endpoint, options, token);
-  const key = `${token || "guest"}:${endpoint}`;
+  if (!["GET", "HEAD"].includes(method)) return executeRequest(endpoint, options, token);
+  const key = `${token || "guest"}:${method}:${endpoint}`;
   if (pendingReads.has(key)) return pendingReads.get(key);
   const requestId = ++recoveryRequestId;
   const executeRead = async () => {
