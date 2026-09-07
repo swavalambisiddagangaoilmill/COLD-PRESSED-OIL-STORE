@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import AdminSession from "../models/AdminSession.js";
+import AdminAuthOtp from "../models/AdminAuthOtp.js";
 import User from "../models/User.js";
 import { loginUser } from "../services/authService.js";
-import { hashValue } from "../services/authSecurityService.js";
+import crypto from "node:crypto";
+import { env } from "../config/env.js";
 
 test("complete admin password and email-code login creates one valid session", async () => {
-  const originals = { create: AdminSession.create, find: AdminSession.find, updateOne: AdminSession.updateOne, findOne: User.findOne, userFind: User.find };
+  const originals = { create: AdminSession.create, find: AdminSession.find, updateOne: AdminSession.updateOne, findOne: User.findOne, userFind: User.find, otpFindOne: AdminAuthOtp.findOne, otpFindOneAndUpdate: AdminAuthOtp.findOneAndUpdate };
   const code = "123456";
   const created = [];
   const updates = [];
@@ -19,7 +21,6 @@ test("complete admin password and email-code login creates one valid session", a
     trustedDevices: [],
     loginHistory: [],
     sessions: [],
-    otpRecords: [{ purpose: "new_device", codeHash: hashValue(code), expiresAt: new Date(Date.now() + 60_000), attempts: 0, maxAttempts: 5 }],
     comparePassword: async () => true,
     save: async () => admin,
     toJSON: () => ({ _id: admin._id, email: admin.email, role: admin.role, sessions: admin.sessions }),
@@ -33,6 +34,9 @@ test("complete admin password and email-code login creates one valid session", a
   });
   AdminSession.create = async (payload) => { created.push(payload); return { ...payload, deviceName: "Browser on Windows" }; };
   AdminSession.updateOne = async (...args) => { updates.push(args); return { acknowledged: true }; };
+  const codeHash = crypto.createHmac("sha256", env.jwtSecret).update(`${admin._id}:${code}`).digest("hex");
+  AdminAuthOtp.findOne = () => ({ select: async () => ({ _id: "otp-id", admin: admin._id, codeHash, expiresAt: new Date(Date.now() + 60_000), attempts: 0, maxAttempts: 5 }) });
+  AdminAuthOtp.findOneAndUpdate = async () => ({ _id: "otp-id", consumedAt: new Date() });
 
   const req = { ip: "127.0.0.1", body: {}, get: (name) => name === "user-agent" ? "Chrome Windows" : "" };
   try {
@@ -51,5 +55,7 @@ test("complete admin password and email-code login creates one valid session", a
     AdminSession.updateOne = originals.updateOne;
     User.findOne = originals.findOne;
     User.find = originals.userFind;
+    AdminAuthOtp.findOne = originals.otpFindOne;
+    AdminAuthOtp.findOneAndUpdate = originals.otpFindOneAndUpdate;
   }
 });

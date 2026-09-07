@@ -11,6 +11,7 @@ import { createAdminNotification } from "./adminNotificationService.js";
 import { sendCustomerAuthOtpEmail, sendNewDeviceEmail, sendPasswordResetEmail, sendVerificationEmail, sendWelcomeEmail } from "./emailService.js";
 import { verifyGoogleIdToken } from "./oauthService.js";
 import { verifyTurnstile } from "./turnstileService.js";
+import { createAdminLoginOtp, verifyAdminLoginOtp } from "./adminOtpService.js";
 import {
   assertLoginAllowed,
   createOtp,
@@ -38,7 +39,7 @@ function createSessionId() {
 }
 
 const customerOtpTtlMs = 5 * 60 * 1000;
-const customerOtpCooldownMs = 50 * 1000;
+const customerOtpCooldownMs = 60 * 1000;
 const customerOtpWindowMs = 60 * 60 * 1000;
 const customerOtpMaxRequests = 5;
 
@@ -54,8 +55,7 @@ export async function requestCustomerAuthOtp(payload, req) {
   const email = normalizeEmail(payload.email);
   const loginFlow = payload.flow === "login";
   const user = await User.findOne({ email }).select("name role isDisabled customerOtpWelcomeSentAt");
-  if (loginFlow && (!user || user.role !== "user")) throw new ApiError("Account not found. Create an account first.", 404, [{ code: "ACCOUNT_NOT_FOUND" }]);
-  if (loginFlow && user.isDisabled) throw new ApiError("This account is disabled.", 403);
+  if (loginFlow && (!user || user.role !== "user" || user.isDisabled)) return;
   if (!loginFlow && user?.role === "admin") return;
 
   const now = new Date();
@@ -67,11 +67,20 @@ export async function requestCustomerAuthOtp(payload, req) {
   const code = String(crypto.randomInt(100000, 1000000));
   const requestCount = withinWindow ? current.requestCount + 1 : 1;
   const requestWindowStartedAt = withinWindow ? current.requestWindowStartedAt : now;
-  await CustomerAuthOtp.findOneAndUpdate(
-    { email },
-    { $set: { name: payload.name?.trim() || undefined, flow: payload.flow, codeHash: customerOtpHash(email, code), expiresAt: new Date(now.getTime() + customerOtpTtlMs), attempts: 0, maxAttempts: 5, lastSentAt: now, requestWindowStartedAt, requestCount, consumedAt: null, requestIpHash: hashValue(req?.ip || "unknown") } },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
+  const filter = current
+    ? { _id: current._id, lastSentAt: current.lastSentAt, requestCount: current.requestCount }
+    : { email };
+  try {
+    const stored = await CustomerAuthOtp.findOneAndUpdate(
+      filter,
+      { $set: { name: payload.name?.trim() || undefined, flow: payload.flow, codeHash: customerOtpHash(email, code), expiresAt: new Date(now.getTime() + customerOtpTtlMs), attempts: 0, maxAttempts: 5, lastSentAt: now, requestWindowStartedAt, requestCount, consumedAt: null, requestIpHash: hashValue(req?.ip || "unknown") } },
+      { upsert: !current, new: true, setDefaultsOnInsert: true }
+    );
+    if (!stored) return;
+  } catch (error) {
+    if (error?.code === 11000) return;
+    throw error;
+  }
   const firstOtp = loginFlow && !user.customerOtpWelcomeSentAt
     ? Boolean((await User.updateOne({ _id: user._id, customerOtpWelcomeSentAt: null }, { $set: { customerOtpWelcomeSentAt: now } })).modifiedCount)
     : false;
@@ -172,6 +181,7 @@ export async function registerUser(payload, req) {
 export async function loginUser(email, password, req, options = {}) {
   const user = await User.findOne({ email }).select("+password +refreshToken +failedLoginAttempts +loginLockUntil +turnstileRequiredUntil +sessions.refreshTokenHash +otpRecords.codeHash +oauthProviders.providerId");
   if (!user) throw new ApiError("Invalid email or password.", 401);
+  if (options.adminMode && user.role !== "admin") throw new ApiError("Invalid email or password.", 401);
   if (user.role !== "admin") throw new ApiError("Customer password login is unavailable. Use the email verification code.", 400, [{ code: "CUSTOMER_OTP_REQUIRED" }]);
   assertLoginAllowed(user);
   if (loginNeedsTurnstile(user)) await verifyTurnstile(options.turnstileToken || req.body.turnstileToken, req);
@@ -188,13 +198,13 @@ export async function loginUser(email, password, req, options = {}) {
     // are cleared and every fresh login must complete the emailed OTP step.
     user.trustedDevices = [];
     if (!options.otpCode) {
-      await createOtp(user, "new_device");
+      await createAdminLoginOtp(user);
       pushLoginHistory(user, req, "admin_otp_required", { pendingOtp: true });
       await sendNewDeviceEmail(user, getDeviceDetails(req));
       await user.save({ validateBeforeSave: false });
       return { otpRequired: true, reason: "NEW_DEVICE", message: "Security code sent to your email." };
     }
-    verifyOtp(user, "new_device", options.otpCode);
+    await verifyAdminLoginOtp(user, options.otpCode);
   } else if (req && !isKnownDevice(user, req)) {
     if (!options.otpCode) {
       await createOtp(user, "new_device");

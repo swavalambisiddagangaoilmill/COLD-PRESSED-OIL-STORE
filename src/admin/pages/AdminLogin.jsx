@@ -37,8 +37,8 @@ export default function AdminLogin() {
     const form = new FormData(event.currentTarget);
     setLoading(true); setError(""); setMessage("");
     try {
-      const data = await login({ email: form.get("email"), password: form.get("password"), otpCode: form.get("otpCode") || undefined, turnstileToken, remember: false });
-      if (data.otpRequired) { setOtpRequired(true); setResendIn(50); setMessage(data.message || "Enter the security code sent to the admin email."); return; }
+      const data = await login({ email: form.get("email"), password: form.get("password"), otpCode: form.get("otpCode") || undefined, turnstileToken, remember: false, adminMode: true });
+      if (data.otpRequired) { setOtpRequired(true); setResendIn(60); setMessage(data.message || "Enter the security code sent to the admin email."); return; }
       if (data.user?.role !== "admin") throw new Error("Administrator access is required.");
       navigate(location.state?.from?.startsWith("/admin") ? location.state.from : "/admin", { replace: true });
     } catch (err) {
@@ -54,11 +54,11 @@ export default function AdminLogin() {
     const form = new FormData(formRef.current);
     setLoading(true); setError("");
     try {
-      const data = await login({ email: form.get("email"), password: form.get("password"), turnstileToken, remember: false });
+      const data = await login({ email: form.get("email"), password: form.get("password"), turnstileToken, remember: false, adminMode: true });
       if (!data.otpRequired) throw new Error("Unable to request a new security code.");
       const otpInput = formRef.current.elements.namedItem("otpCode");
       if (otpInput) otpInput.value = "";
-      setResendIn(50);
+      setResendIn(60);
       setMessage("A new security code has been requested.");
     } catch (err) {
       setError(err.message || "Unable to resend the security code.");

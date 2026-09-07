@@ -28,14 +28,14 @@ export default function Login() {
 
   const sendCode = async (event) => {
     event.preventDefault(); setLoading(true); setError(""); setMessage("");
-    try { await requestOtp({ email, flow: "login" }); setCodeSent(true); setResendIn(50); setMessage("If this email can receive a code, it has been sent."); }
+    try { await requestOtp({ email, flow: "login" }); setCodeSent(true); setResendIn(60); setMessage("If this email can receive a code, it has been sent."); }
     catch (err) { setError(err.message || "Unable to send the verification code."); }
     finally { setLoading(false); }
   };
   const resend = async () => {
     if (loading || resendIn > 0) return;
     setLoading(true); setError("");
-    try { await requestOtp({ email, flow: "login" }); setOtp(""); setResendIn(50); setMessage("A new verification code has been requested."); }
+    try { await requestOtp({ email, flow: "login" }); setOtp(""); setResendIn(60); setMessage("A new verification code has been requested."); }
     catch (err) { setError(err.message || "Unable to resend the verification code."); }
     finally { setLoading(false); }
   };

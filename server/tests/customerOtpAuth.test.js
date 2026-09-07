@@ -52,13 +52,13 @@ test("OTP request stores only a hash with a five-minute expiry", async () => {
   assert.equal(record.attempts, 0);
 });
 
-test("unknown login email is rejected before an OTP is generated or stored", async () => {
+test("unknown login email receives the same silent acceptance without generating or storing an OTP", async () => {
   User.findOne = () => query(null);
   let generated = false;
   let stored = false;
   crypto.randomInt = () => { generated = true; return 123456; };
   CustomerAuthOtp.findOneAndUpdate = async () => { stored = true; };
-  await assert.rejects(() => requestCustomerAuthOtp({ email: " Missing@Example.com ", flow: "login" }, req), /account not found/i);
+  await requestCustomerAuthOtp({ email: " Missing@Example.com ", flow: "login" }, req);
   assert.equal(generated, false);
   assert.equal(stored, false);
 });
@@ -84,6 +84,19 @@ test("resend cooldown does not issue a replacement code", async () => {
   CustomerAuthOtp.findOneAndUpdate = async () => { writes += 1; };
   await requestCustomerAuthOtp({ email: "customer@example.com", flow: "login" }, req);
   assert.equal(writes, 0);
+});
+
+test("concurrent customer resend stores and sends at most one replacement", async () => {
+  const current = { _id: "otp-id", lastSentAt: new Date(Date.now() - 61_000), requestWindowStartedAt: new Date(), requestCount: 1 };
+  User.findOne = () => query(customer({ customerOtpWelcomeSentAt: new Date() }));
+  CustomerAuthOtp.findOne = () => query(current);
+  let stored = 0;
+  CustomerAuthOtp.findOneAndUpdate = async () => { stored += 1; return stored === 1 ? { _id: "otp-id" } : null; };
+  await Promise.all([
+    requestCustomerAuthOtp({ email: "customer@example.com", flow: "login" }, req),
+    requestCustomerAuthOtp({ email: "customer@example.com", flow: "login" }, req),
+  ]);
+  assert.equal(stored, 2);
 });
 
 test("valid OTP is atomically consumed and reuses the existing customer identity", async () => {

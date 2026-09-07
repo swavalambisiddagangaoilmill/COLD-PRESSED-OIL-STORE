@@ -43,7 +43,7 @@ export const register = asyncHandler(async (req, res) => {
 export const login = asyncHandler(async (req, res) => {
   const adminProtection = await precheckAdminLogin(req);
   try {
-    const result = await loginUser(req.body.email, req.body.password, req, { remember: req.body.remember, turnstileToken: req.body.turnstileToken, otpCode: req.body.otpCode });
+    const result = await loginUser(req.body.email, req.body.password, req, { remember: req.body.remember, turnstileToken: req.body.turnstileToken, otpCode: req.body.otpCode, adminMode: req.body.adminMode === true });
     if (result.otpRequired) return sendSuccess(res, 202, result.message, result);
     const { user, token, refreshToken } = result;
     if (adminProtection.protected && user.role === "admin") await recordAdminLoginSuccess(req, adminProtection.record, user);

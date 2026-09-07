@@ -32,6 +32,9 @@ test("authentication and sensitive routes retain their dedicated protection", as
   assert.match(authRoutes, /const sensitiveLimiter = rateLimit/);
   assert.match(authRoutes, /customerOtpRequestLimiter/);
   assert.match(authRoutes, /customerOtpVerifyLimiter/);
+  assert.match(authRoutes, /standardHeaders: false/);
+  assert.match(authRoutes, /Cache-Control[^\n]+no-store/);
+  assert.match(authRoutes, /adminLoginIpLimiter, adminLoginAccountLimiter/);
   assert.match(authContext, /resolveStoredSession/);
   assert.doesNotMatch(authContext, /setInterval/);
 });
