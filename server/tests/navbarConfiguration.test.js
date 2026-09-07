@@ -46,3 +46,18 @@ test("desktop and mobile navbar consume stored configuration rather than product
   assert.match(desktop, /orderedActiveNavbar/); assert.match(mobile, /orderedActiveNavbar/);
   assert.match(routes, /requireAdminPermission\("navbar\.manage"\)/);
 });
+
+test("navbar never paints default managed items before authoritative configuration loads", async () => {
+  const [navbar, navigation] = await Promise.all([
+    readFile(new URL("../../src/components/layout/Navbar.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../../src/services/navigationService.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(navbar, /useState\(getCachedPublicNavbar\)/);
+  assert.match(navbar, /\{navbarConfig && <DesktopMenu navigation=\{navbarConfig\} \/>\}/);
+  assert.doesNotMatch(navbar, /useState\(DEFAULT_NAVBAR_CONFIG\)/);
+  assert.doesNotMatch(navbar, /catch\(\(\) => active && setNavbarConfig\(DEFAULT_NAVBAR_CONFIG\)\)/);
+  assert.match(navigation, /let cachedPublicNavbar = null/);
+  assert.match(navigation, /if \(!refresh && cachedPublicNavbar\) return cachedPublicNavbar/);
+  assert.match(navigation, /if \(!refresh && publicNavbarRequest\) return publicNavbarRequest/);
+});
