@@ -25,6 +25,10 @@ export function getAuthToken() {
   return localStorage.getItem(TOKEN_KEY);
 }
 
+export function getRefreshToken() {
+  return localStorage.getItem(REFRESH_KEY);
+}
+
 function getCookie(name) {
   return document.cookie.split("; ").find((row) => row.startsWith(`${name}=`))?.split("=")[1] || "";
 }

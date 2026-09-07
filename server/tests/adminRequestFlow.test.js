@@ -32,8 +32,8 @@ test("authentication and sensitive routes retain their dedicated protection", as
   assert.match(authRoutes, /const sensitiveLimiter = rateLimit/);
   assert.match(authRoutes, /customerOtpRequestLimiter/);
   assert.match(authRoutes, /customerOtpVerifyLimiter/);
-  assert.equal((authContext.match(/getProfile\(\)/g) || []).length, 1);
-  assert.doesNotMatch(authContext, /setInterval|\/refresh/);
+  assert.match(authContext, /resolveStoredSession/);
+  assert.doesNotMatch(authContext, /setInterval/);
 });
 
 test("admin reads and mutations remain separately rate limited", async () => {
