@@ -17,3 +17,13 @@ test("add button guards the mutation synchronously against rapid double clicks",
   assert.match(source, /inFlight\.current = true/);
   assert.match(source, /finally \{\s*inFlight\.current = false/);
 });
+
+test("product cards pass the selected variant through display and cart controls", async () => {
+  const source = await readFile(new URL("../../src/components/features/product/ProductCard.jsx", import.meta.url), "utf8");
+  assert.match(source, /find\(\(variant\) => variant\.isAvailable !== false\) \|\| activeVariants\[0\]/);
+  assert.match(source, /variantId: variantId\(variant\)/);
+  assert.match(source, /image: images\?\.\[0\]\?\.url \|\| images\?\.\[0\] \|\| product\.image/);
+  assert.match(source, /<VariantSelect[^>]+variants=\{activeVariants\}/);
+  assert.match(source, /<AddToCartButton product=\{selectedProduct\}/);
+  assert.doesNotMatch(source, /product\.reviews|product\.rating|<Star/);
+});
