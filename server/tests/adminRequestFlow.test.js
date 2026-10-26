@@ -18,9 +18,9 @@ test("admin traffic uses authenticated session buckets instead of the global IP 
   assert.ok(app.indexOf('app.get("/api/health"') < app.indexOf("app.use(publicApiLimiter)"));
   assert.match(limits, /req\.user\._id/);
   assert.match(limits, /req\.authSessionId/);
-  assert.match(limits, /api\\\/admin/);
   assert.match(limits, /req\.method === "OPTIONS"/);
   assert.match(adminRoutes, /router\.use\(protect, requireAdmin\);\s*router\.use\(adminReadLimiter, adminMutationLimiter\)/);
+  assert.match(limits, /auth\|admin/);
 });
 
 test("authentication and sensitive routes retain their dedicated protection", async () => {

@@ -9,7 +9,7 @@ export const publicApiLimiter = rateLimit({
   limit: 300,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => skipOptions(req) || /^\/api\/admin(?:-panel)?(?:\/|$)/.test(req.originalUrl),
+  skip: (req) => skipOptions(req) || /^\/api\/(?:auth|admin(?:-panel)?)(?:\/|$)/.test(req.originalUrl),
   message: response("Too many requests. Please wait a moment and try again."),
 });
 
